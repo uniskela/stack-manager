@@ -24,6 +24,8 @@ type TriggerDeploymentInput = {
   binding: DeploymentBinding;
   gitSha: string;
   stack: Stack;
+  /** Stable id for adapter dedupe (job id and/or forge delivery id). Required for retries. */
+  idempotencyKey: string;
   metadata?: Record<string, string>;
   timeoutMs: number;
 };
@@ -62,6 +64,7 @@ type TriggerDeploymentResult = {
 - method (`POST` default)
 - safe headers (no secret values in plain config; reference credential for auth headers)
 - authentication reference (`credentialId`)
+- credential-bearing requests require HTTPS; reject plaintext HTTP before sending auth headers
 - timeout
 - expected response (status class / optional body predicate)
 
@@ -77,6 +80,9 @@ Core stack model must not require schema changes to add these — only new adapt
 ## Security
 
 - Webhook URLs may contain sensitive tokens; treat as secrets when stored (encrypt) or store token in credential and URL without secret
+- Credential-bearing webhook calls must use HTTPS; reject `http://` before attaching auth headers or secret query tokens
+- Prefer sending `Idempotency-Key` / provider-equivalent header derived from `idempotencyKey` when the target supports it
+- After known acceptance, job recovery must not blind-retry (see [ADR 0002](../adr/0002-persisted-jobs.md))
 - Redact URLs in audit (strip query tokens, userinfo)
 - SSRF controls: block link-local/metadata ranges unless explicitly allowed for homelab RFC1918 (document allowlist policy)
 

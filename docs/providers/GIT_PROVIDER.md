@@ -60,7 +60,9 @@ One repository webhook → stack-manager:
 
 ## Credentials
 
-- PAT / deploy key material in `ProviderCredential`
+- PAT / deploy key material in `ProviderCredential` (clone/push), separate from `webhookCredentialId` on the repository connection
+- Webhook verification decrypts the webhook credential only long enough to compute the HMAC; never return it to clients
+- Use HTTPS for forge API requests and HTTPS or SSH for credential-bearing Git remotes; reject plaintext `http://` / `git://` protocols before sending credentials
 - Never log remote URLs with embedded tokens
 - Support read-only vs write scopes; UI should explain required scopes for commit/push vs webhook-only
 

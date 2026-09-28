@@ -56,10 +56,11 @@ dependencies:
 ### Evaluation order (proposed)
 
 1. Path maps to stack if under `rootPath/**` **or** matches any `dependencies` glob (repo-relative).
-2. If matched via dependency, treat as candidate even if outside root.
-3. Apply `exclude` — excluded paths do not count as deploy-relevant.
-4. Remaining paths must match at least one `include` (if include list non-empty). Empty include means “any non-excluded path under scope” — **prefer requiring explicit include for safety**; document default template that includes compose filenames.
-5. If zero deploy-relevant paths → skip deploy with explanation.
+2. Classify each mapped path as **root-scoped** or **dependency-scoped** (matched via `dependencies`, even outside root).
+3. Apply `exclude` to both classes — excluded paths do not count as deploy-relevant.
+4. **Include filter applies only to root-scoped paths.** Dependency-scoped paths that survive exclude are deploy-relevant even when they match no `include` pattern (this preserves shared-path redeploys such as `shared/proxy/**`).
+5. Root-scoped remaining paths must match at least one `include` (if include list non-empty). Empty include means “any non-excluded root-scoped path under scope” — **prefer requiring explicit include for safety**; document default template that includes compose filenames.
+6. If zero deploy-relevant paths → skip deploy with explanation.
 
 ### Explanations (required UX)
 

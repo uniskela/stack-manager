@@ -43,8 +43,8 @@ Top-level app instance context (single-tenant self-host MVP may have one workspa
 | gitProviderType | `github` \| `gitea` \| `forgejo` \| `gitlab` (extensible) |
 | remoteUrl | |
 | defaultBranch | |
-| credentialId | Optional; public clone may omit |
-| webhookSecretHash | For verifying forge webhooks |
+| credentialId | Optional clone/push credential; public clone may omit |
+| webhookCredentialId | Encrypted webhook-signing secret (`ProviderCredential`); **separate** from clone credential. GitProvider decrypts it only to compute HMAC verification — never return to clients |
 | localClonePath | Under data dir; never commit |
 | lastFetchedAt | |
 
@@ -144,13 +144,19 @@ Persisted background work (webhook processing, watch polling).
 
 | Field | Notes |
 | --- | --- |
-| id | |
+| id | Stable id; also used as deploy idempotency key material |
 | type | `git_webhook` \| `deployment_trigger` \| `deployment_watch` \| … |
 | payload | Redacted JSON |
 | status | `pending` \| `running` \| `succeeded` \| `failed` \| `dead` |
 | runAfter | |
 | attempts | |
 | lastError | Sanitised |
+| leaseOwner | Worker instance id holding the lease (nullable) |
+| leaseExpiresAt | When a `running` lease is considered stale and reclaimable |
+| heartbeatAt | Last successful heartbeat while `running` |
+| acceptanceRecordedAt | For `deployment_trigger`: set once provider acceptance is known so crash recovery does not blind-retry |
+
+Lease recovery rules are defined in [ADR 0002](../adr/0002-persisted-jobs.md).
 
 ### DeploymentEvent
 

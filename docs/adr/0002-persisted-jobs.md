@@ -24,10 +24,37 @@ Avoid Redis or extra infrastructure unless a measured requirement appears (multi
 
 ## Guarantees
 
-- At-least-once execution with idempotent handlers
-- `runAfter`, attempts, dead-letter status
-- Survive process restart
-- Single-instance MVP: in-process lease via `status=running` + heartbeat timestamp
+- At-least-once execution with **idempotent handlers**
+- `runAfter`, attempts, dead-letter (`dead`) status
+- Survive process restart via DB state
+- Single-instance MVP: lease fields on `Job` (`leaseOwner`, `leaseExpiresAt`, `heartbeatAt`) — see [DATA_MODEL.md](../domain/DATA_MODEL.md)
+
+## Lease and restart recovery
+
+Lease state is persisted on the `Job` row (not only in memory).
+
+1. Claim: atomically set `status=running`, `leaseOwner=<workerId>`, `leaseExpiresAt=now+leaseTtl`, `heartbeatAt=now` where status is `pending` (or reclaimable — below).
+2. Heartbeat: while working, refresh `heartbeatAt` and extend `leaseExpiresAt` on an interval (e.g. every 10s; TTL e.g. 60s).
+3. Complete: set `succeeded` / `failed` / `dead` and clear lease fields.
+4. Reclaim after crash: any worker (including after process restart) may requeue a job when `status=running` **and** `leaseExpiresAt < now`. Requeue means `status=pending`, clear lease fields, increment `attempts`, honour `runAfter` backoff.
+5. Stale `running` without expiry must not occur — claiming always sets `leaseExpiresAt`.
+
+Default lease TTL and heartbeat interval are implementation constants documented at coding time in PR #2/#5.
+
+## Idempotency for `deployment_trigger`
+
+Inbound forge webhook **delivery IDs** prevent duplicate job creation. That alone does **not** protect a `deployment_trigger` that already called the provider, recorded acceptance, then crashed before marking the job succeeded.
+
+Rules:
+
+1. `TriggerDeploymentInput.idempotencyKey` is **required** (stable `job.id`, optionally combined with forge delivery id).
+2. Before calling `DeploymentProvider.trigger`, persist an intent row / set job payload flag `triggerAttemptedAt`.
+3. After provider returns `accepted=true` (or equivalent), set `Job.acceptanceRecordedAt` **before** marking succeeded.
+4. On reclaim/retry:
+   - If `acceptanceRecordedAt` is set → **do not** call the provider again; continue to enqueue Deployment Watch / mark succeeded.
+   - If not set → retry `trigger` with the same `idempotencyKey`.
+5. Adapters SHOULD send the key to the remote when supported (e.g. `Idempotency-Key` header on generic webhooks). Portainer stack webhooks may ignore headers; acceptance recording still prevents blind double-fire after known acceptance.
+6. Providers that cannot dedupe must document that uncertain pre-acceptance crashes may double-trigger; keep lease TTL short and prefer recording acceptance promptly.
 
 ## When to revisit
 

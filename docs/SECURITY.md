@@ -32,6 +32,7 @@ Assume: operator places stack-manager on a trusted homelab network behind auth a
 | Credential theft from DB dump | AEAD encryption; master key separate from backup |
 | Credential leakage to browser | API contract omits secrets after save |
 | Token in logs | Structured logging redaction middleware; forbid logging Authorization headers / webhook URLs raw |
+| Cleartext credential transport | HTTPS required for credential-bearing webhooks and forge APIs; HTTPS/SSH for Git remotes; reject plaintext before sending secrets |
 | Audit leakage | Redaction policy; URL sanitisation |
 | Forge webhook forgery | HMAC/signature verify; ignore unsigned |
 | Webhook replay | Idempotency keys |
