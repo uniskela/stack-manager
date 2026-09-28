@@ -1,0 +1,219 @@
+# Domain / data model
+
+Logical model for stack-manager. Physical tables will use Drizzle migrations in PR #2+. Names are indicative.
+
+## Aggregate overview
+
+```text
+Workspace
+  └─ GitRepositoryConnection
+       └─ Stack[]
+            ├─ StackSource (root, compose file, docs globs)
+            ├─ DeploymentBinding[]
+            ├─ RuntimeBinding[]
+            ├─ SecretBinding[]?
+            └─ DeploymentPolicy (include/exclude/deps)
+
+ProviderCredential (encrypted)
+Job / JobAttempt
+DeploymentEvent
+DeploymentWatch
+AuditEvent
+User / Session
+```
+
+## Core entities
+
+### Workspace
+
+Top-level app instance context (single-tenant self-host MVP may have one workspace).
+
+| Field | Notes |
+| --- | --- |
+| id | UUID |
+| name | Display name |
+| createdAt | |
+
+### GitRepositoryConnection
+
+| Field | Notes |
+| --- | --- |
+| id | |
+| workspaceId | |
+| gitProviderType | `github` \| `gitea` \| `forgejo` \| `gitlab` (extensible) |
+| remoteUrl | |
+| defaultBranch | |
+| credentialId | Optional; public clone may omit |
+| webhookSecretHash | For verifying forge webhooks |
+| localClonePath | Under data dir; never commit |
+| lastFetchedAt | |
+
+### Stack
+
+Explicit unit of source + optional deploy/runtime/secret bindings.
+
+| Field | Notes |
+| --- | --- |
+| id | |
+| repositoryId | |
+| name | e.g. LiftLog |
+| slug | Stable key |
+| rootPath | Repo-relative directory |
+| composePath | Relative to root or repo |
+| docsPaths | Optional globs |
+| enabled | |
+
+**Invariant:** stack identity is this record, not a folder name heuristic.
+
+### DeploymentBinding
+
+| Field | Notes |
+| --- | --- |
+| id | |
+| stackId | |
+| providerType | e.g. `portainer-webhook`, `generic-webhook` |
+| credentialId | Optional (generic auth header ref) |
+| config | Provider-specific JSON (URL, method, timeout, metadata) |
+| enabled | |
+
+### RuntimeBinding
+
+| Field | Notes |
+| --- | --- |
+| id | |
+| stackId | |
+| providerType | e.g. `portainer-api` |
+| credentialId | Required for authenticated APIs |
+| config | Environment id, stack name/id, deep-link base, etc. |
+| enabled | |
+
+Independent from deployment bindings.
+
+### SecretBinding
+
+| Field | Notes |
+| --- | --- |
+| id | |
+| stackId | |
+| providerType | e.g. `infisical`, `vault` |
+| credentialId | |
+| config | project, environment, path |
+| enabled | |
+
+### DeploymentPolicy
+
+Stored on stack (or 1:1 child):
+
+```yaml
+include:
+  - docker-compose.yml
+  - compose.yaml
+  - config/**
+  - scripts/runtime/**
+exclude:
+  - README.md
+  - docs/**
+  - "*.md"
+dependencies:
+  - shared/proxy/**
+  - shared/env/**
+  - common/compose/**
+```
+
+Paths are repo-relative. Dependency paths may mark **multiple** stacks affected.
+
+### ProviderCredential
+
+| Field | Notes |
+| --- | --- |
+| id | |
+| workspaceId | |
+| kind | git / deployment / runtime / secret |
+| providerType | |
+| label | User-visible name |
+| secretCiphertext | Encrypted blob |
+| secretMeta | Non-secret fields only (host, username hint) |
+| lastTestedAt | |
+| lastTestStatus | |
+
+**Never** store plaintext. **Never** return ciphertext or plaintext to clients after create/update (return meta + masked status only).
+
+### Job
+
+Persisted background work (webhook processing, watch polling).
+
+| Field | Notes |
+| --- | --- |
+| id | |
+| type | `git_webhook` \| `deployment_trigger` \| `deployment_watch` \| … |
+| payload | Redacted JSON |
+| status | `pending` \| `running` \| `succeeded` \| `failed` \| `dead` |
+| runAfter | |
+| attempts | |
+| lastError | Sanitised |
+
+### DeploymentEvent
+
+| Field | Notes |
+| --- | --- |
+| id | |
+| stackId | |
+| source | `ui` \| `webhook_router` |
+| gitSha | |
+| decision | Routing explanation text/structure |
+| providerType | |
+| triggerStatus | HTTP acceptance etc. |
+| watchId | Optional |
+
+### DeploymentWatch
+
+| Field | Notes |
+| --- | --- |
+| id | |
+| stackId | |
+| deploymentEventId | |
+| preSnapshot | Runtime snapshot JSON |
+| timeline | Ordered events |
+| status | `running` \| `healthy` \| `failed` \| `timed_out` |
+| postSnapshot | |
+
+### AuditEvent
+
+| Field | Notes |
+| --- | --- |
+| id | |
+| actorUserId | |
+| action | |
+| entityType / entityId | |
+| meta | **Redacted** — no secrets, tokens, webhook URLs with embedded creds |
+
+### User / Session
+
+Minimal self-hosted auth for MVP (local user). SSO can be a later provider. Session secret via env.
+
+## Working tree / drafts
+
+PR #4 may introduce:
+
+- `DraftChange` or filesystem working copy per repository under data dir
+- Association with user + stack scope
+- Conflict state vs remote
+
+Exact persistence (DB vs git worktree) decided in PR #4 design spike; architecture requires isolation from the bare remote and encrypt-at-rest for any mirrored env files that might contain secrets (prefer never storing secret values).
+
+## Non-entities (explicitly out of core model)
+
+- Container, Image, Network, Volume as first-class managed resources
+- Host / Docker engine inventory
+- Mutable runtime config as source of truth
+
+## Mapping example
+
+LiftLog stack binds:
+
+- Source root `122-personal-apps/liftlog`
+- Deployment `portainer-webhook`
+- Runtime `portainer-api` / env CT122 / stack LiftLog
+- Secrets Infisical path `/122-liftlog`
+
+Folder name `liftlog` alone does **not** create these bindings.
