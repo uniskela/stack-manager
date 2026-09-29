@@ -25,11 +25,11 @@ apps/wiki/docker-compose.yml
 
 Configured scopes:
 
-| Stack | Scope |
-| --- | --- |
-| Wiki | `apps/wiki/**` |
-| Notes | `apps/notes/**` |
-| Photos | `media/photos/**` |
+| Stack | Scope | Dependencies |
+| --- | --- | --- |
+| Wiki | `apps/wiki/**` | `shared/proxy/**` |
+| Notes | `apps/notes/**` | `shared/proxy/**` |
+| Photos | `media/photos/**` | — |
 
 Result: only Wiki affected.
 
