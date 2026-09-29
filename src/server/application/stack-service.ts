@@ -184,21 +184,33 @@ export class StackService {
         result.existing++;
         continue;
       }
+      let name: string;
       try {
-        const name = validateStackName(s.name);
-        await this.#insert(
-          workspaceId,
-          repositoryId,
-          { name, rootPath: s.rootPath, composePath: s.composePath },
-          slugs,
-          { actorUserId, auto: actorUserId === null },
-        );
-        result.added++;
+        name = validateStackName(s.name);
       } catch (error) {
-        result.failed.push({
-          rootPath: s.rootPath,
-          message: error instanceof Error ? error.message : 'Could not add stack.',
-        });
+        result.failed.push({ rootPath: s.rootPath, message: (error as Error).message });
+        continue;
+      }
+      const input = { name, rootPath: s.rootPath, composePath: s.composePath };
+      const origin = { actorUserId, auto: actorUserId === null };
+      try {
+        await this.#insert(workspaceId, repositoryId, input, slugs, origin);
+        result.added++;
+      } catch {
+        // Another addAll (the post-fetch auto-add and the "Add all" button can overlap) may have registered
+        // this folder, or taken the slug, since the suggestions were read: re-read and settle it.
+        const current = await this.repo.listByRepository(workspaceId, repositoryId);
+        if (current.some((x) => x.rootPath === s.rootPath)) {
+          result.existing++;
+          continue;
+        }
+        current.forEach((x) => slugs.add(x.slug));
+        try {
+          await this.#insert(workspaceId, repositoryId, input, slugs, origin);
+          result.added++;
+        } catch {
+          result.failed.push({ rootPath: s.rootPath, message: 'Could not add this folder as a stack.' });
+        }
       }
     }
     return result;

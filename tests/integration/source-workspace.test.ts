@@ -221,6 +221,28 @@ describe('adding all stacks', () => {
     expect((await addAll()).json.result).toEqual({ added: 0, existing: 3, failed: [] });
   });
 
+  it('counts folders registered by a concurrent add-all as existing, not failed', async () => {
+    // Simulate another addAll winning the race: the moment this call inserts apps/blinko, a stack for the
+    // same folder has just been registered by someone else.
+    const stacks = h.container.repos.stacks;
+    const insert = stacks.insert.bind(stacks);
+    let raced = false;
+    stacks.insert = async (stack) => {
+      if (!raced && stack.rootPath === 'apps/blinko') {
+        raced = true;
+        await insert({ ...stack, id: `${stack.id}-other`, slug: `${stack.slug}-other` });
+      }
+      return insert(stack);
+    };
+    try {
+      const res = await addAll();
+      expect(res.json.result).toEqual({ added: 2, existing: 1, failed: [] });
+    } finally {
+      stacks.insert = insert;
+    }
+    expect((await suggestions()).every((s) => s.existingStackId)).toBe(true);
+  });
+
   it('adds new stacks after each fetch when auto-add is on, and only then', async () => {
     server.commitFiles(REPO, 'main', {
       'apps/memos/compose.yaml': 'services:\n  memos:\n    image: memos:1\n',
