@@ -40,33 +40,64 @@ function ipv6Groups(ip: string): number[] | null {
     : null;
 }
 
+/** Byte offsets of the four IPv4 octets for each RFC 6052 prefix length (octet 8, the `u` byte, is skipped). */
+const RFC6052_LAYOUTS: Record<48 | 56 | 64 | 96, readonly number[]> = {
+  48: [6, 7, 9, 10],
+  56: [7, 9, 10, 11],
+  64: [9, 10, 11, 12],
+  96: [12, 13, 14, 15],
+};
+
 /**
- * IPv4 address embedded in an IPv6 address that routes to IPv4 space: IPv4-mapped (::ffff:0:0/96),
- * IPv4-compatible (::/96, deprecated), IPv4-translated (::ffff:0:0:0/96) and NAT64 well-known /
- * local-use prefixes (64:ff9b::/96, 64:ff9b:1::/48 with the RFC 6052 /96 layout). Handles both the
- * dotted (::ffff:127.0.0.1) and hexadecimal (::ffff:7f00:1) spellings.
+ * Every IPv4 address an IPv6 address may embed, for the IPv4-embedding forms we recognise:
+ *
+ * - IPv4-mapped `::ffff:0:0/96`, IPv4-compatible `::/96` (deprecated), IPv4-translated `::ffff:0:0:0/96`;
+ * - NAT64 well-known prefix `64:ff9b::/96` (RFC 6052: only used with /96);
+ * - NAT64 local-use prefix `64:ff9b:1::/48` (RFC 8215). Operators may carve any RFC 6052 prefix length
+ *   from /48 to /96 out of it, and the address alone does not reveal which, so all layouts that fit
+ *   (/48, /56, /64, /96) are returned and callers must apply the most restrictive result. This fails
+ *   closed: an unusual local-use address may be over-restricted, never under-restricted.
+ *
+ * Both dotted (`::ffff:127.0.0.1`) and hexadecimal (`::ffff:7f00:1`) spellings are handled.
  */
-export function embeddedIpv4(address: string): string | null {
+export function embeddedIpv4Candidates(address: string): string[] {
   const g = ipv6Groups(address);
-  if (!g) return null;
+  if (!g) return [];
+  const bytes = g.flatMap((x) => [x >> 8, x & 0xff]);
+  const at = (layout: readonly number[]) => layout.map((i) => bytes[i]).join('.');
   const zero = (from: number, to: number) => g.slice(from, to).every((x) => x === 0);
+
   const mapped = zero(0, 5) && g[5] === 0xffff;
   const compatible = zero(0, 6) && (g[6] !== 0 || (g[7] ?? 0) > 1);
   const translated = zero(0, 4) && g[4] === 0xffff && g[5] === 0;
-  const nat64 = g[0] === 0x64 && g[1] === 0xff9b && (zero(2, 6) || g[2] === 1);
-  if (!mapped && !compatible && !translated && !nat64) return null;
-  const hi = g[6]!;
-  const lo = g[7]!;
-  return `${hi >> 8}.${hi & 0xff}.${lo >> 8}.${lo & 0xff}`;
+  const nat64WellKnown = g[0] === 0x64 && g[1] === 0xff9b && zero(2, 6);
+  if (mapped || compatible || translated || nat64WellKnown) return [at(RFC6052_LAYOUTS[96])];
+
+  const nat64LocalUse = g[0] === 0x64 && g[1] === 0xff9b && g[2] === 1;
+  if (nat64LocalUse) {
+    const candidates = [...new Set([48, 56, 64, 96].map((len) => at(RFC6052_LAYOUTS[len as 48])))];
+    // A layout whose bits are all zero is simply not in use (RFC 6052 zeroes the suffix), not an embedded
+    // 0.0.0.0 — unless every layout is zero, which does embed 0.0.0.0.
+    const nonZero = candidates.filter((c) => c !== '0.0.0.0');
+    return nonZero.length > 0 ? nonZero : ['0.0.0.0'];
+  }
+  return [];
 }
+
+/** Primary embedded IPv4 (the /48 layout for the NAT64 local-use prefix), or null. */
+export function embeddedIpv4(address: string): string | null {
+  return embeddedIpv4Candidates(address)[0] ?? null;
+}
+
+const SEVERITY: Record<AddressClass, number> = { public: 0, private: 1, forbidden: 2 };
 
 export function classifyAddress(address: string): AddressClass {
   const family = net.isIP(address);
   if (family === 4) return ipv4Class(address);
   if (family !== 6) return 'forbidden';
   const ip = address.toLowerCase();
-  const v4 = embeddedIpv4(ip);
-  if (v4) return ipv4Class(v4);
+  const embedded = embeddedIpv4Candidates(ip).map(ipv4Class);
+  if (embedded.length > 0) return embedded.reduce((worst, c) => (SEVERITY[c] > SEVERITY[worst] ? c : worst));
   if (ip === '::' || ip === '::1') return 'forbidden';
   if (/^fe[89ab]/.test(ip)) return 'forbidden'; // link-local
   if (/^ff/.test(ip)) return 'forbidden'; // multicast

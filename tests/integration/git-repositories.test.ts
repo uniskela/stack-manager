@@ -112,6 +112,7 @@ describe('repository connection test', () => {
       'file:///etc',
       'https://[::ffff:127.0.0.1]/acme/stacks.git',
       'https://[::ffff:a9fe:a9fe]/acme/stacks.git',
+      'https://[64:ff9b:1:7f00:1:100:8c52:7003]/acme/stacks.git',
     ]) {
       const res = await call(testRoute.POST, {
         method: 'POST',
