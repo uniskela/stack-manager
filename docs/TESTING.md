@@ -39,7 +39,11 @@ Protect product boundary, credential safety, routing correctness, and editor/wor
 - **Playwright UI tests** (`tests/e2e`, `pnpm build && pnpm test:e2e`) run against a throwaway production server
   (`scripts/e2e-server.sh`): first-run onboarding, navigation, validation, 404 and sign-in/out at desktop (1280 px)
   and mobile (Pixel 7) sizes. Every page is checked with axe for serious/critical WCAG 2.2 A/AA violations in both
-  light and dark colour schemes. CI runs them after the smoke test. Editor flows join in PR #3+.
+  light and dark colour schemes. CI runs them after the smoke test.
+- **Source workspace (PR #3):** integration tests against a real Git server cover discovery, stack CRUD, workspace
+  isolation, secret/symlink locking, path escapes, draft save/discard, size limits and upstream-change detection;
+  unit tests cover path rules and the Compose analyser. With `E2E_GIT_REMOTE` set (CI uses this repository), the
+  Playwright suite also opens the editor, saves a draft, reviews the diff and checks every stack tab with axe.
 
 ## CI
 

@@ -22,6 +22,18 @@
   --focus: #2f5bd3;
   --backdrop: rgb(0 0 0 / 0.35);
 
+  /* Syntax highlighting (editor) */
+  --syntax-key: #1f5fbf;
+  --syntax-string: #1f7a4d;
+  --syntax-number: #9a4dc4;
+  --syntax-keyword: #b3261e;
+  --syntax-comment: #5f6268;
+  --syntax-meta: #8a5a00;
+  --syntax-heading: #1c1d1f;
+  --syntax-link: #2f5bd3;
+  --diff-add: #e6f4ec;
+  --diff-remove: #fdecea;
+
   /* Space (4px grid) */
   --space-1: 0.25rem;
   --space-2: 0.5rem;
@@ -86,6 +98,16 @@
     --warn-soft: #362b12;
     --focus: #9db5ff;
     --backdrop: rgb(0 0 0 / 0.6);
+    --syntax-key: #8fb3ff;
+    --syntax-string: #7fd6a6;
+    --syntax-number: #d5a6ff;
+    --syntax-keyword: #ff9b8f;
+    --syntax-comment: #9b9ea5;
+    --syntax-meta: #f3c969;
+    --syntax-heading: #f2f2f4;
+    --syntax-link: #9db5ff;
+    --diff-add: #15301f;
+    --diff-remove: #3a1b1a;
     --shadow: none;
     --shadow-overlay: 0 10px 30px rgb(0 0 0 / 0.5);
   }

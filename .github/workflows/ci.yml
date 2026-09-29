@@ -44,6 +44,9 @@ jobs:
           for i in $(seq 1 30); do curl -sf http://127.0.0.1:3000/api/health && break; sleep 1; done
           BASE_URL=http://127.0.0.1:3000 scripts/smoke.sh || (cat "$RUNNER_TEMP/server.log"; exit 1)
       - name: UI tests (Playwright + axe, production build)
+        env:
+          # A public repository with a root Compose file for the source workspace tests (this repo itself).
+          E2E_GIT_REMOTE: ${{ github.server_url }}/${{ github.repository }}.git
         run: |
           pnpm exec playwright install --with-deps chromium
           pnpm test:e2e

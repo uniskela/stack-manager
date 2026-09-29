@@ -7,13 +7,17 @@ import type {
   JobRepository,
   Repositories,
   SessionRepository,
+  SourceDraftRepository,
+  StackRepository,
   UserRepository,
   WorkspaceRepository,
 } from '@/server/application/ports';
 import type { AuditEvent } from '@/server/domain/audit';
 import type { CredentialRecord } from '@/server/domain/credential';
+import type { SourceDraft } from '@/server/domain/draft';
 import type { GitRepositoryConnection } from '@/server/domain/git-repository';
 import type { Job } from '@/server/domain/job';
+import type { Stack } from '@/server/domain/stack';
 import type { User } from '@/server/domain/user';
 import {
   auditEvents,
@@ -21,6 +25,8 @@ import {
   jobs,
   providerCredentials,
   sessions,
+  sourceDrafts,
+  stacks,
   users,
   workspaces,
 } from '../schema';
@@ -474,6 +480,114 @@ class SqliteAuditRepository implements AuditRepository {
   }
 }
 
+class SqliteStackRepository implements StackRepository {
+  constructor(private readonly db: SqliteDb) {}
+
+  async insert(stack: Stack) {
+    this.db.insert(stacks).values(stack).run();
+  }
+
+  async findById(workspaceId: string, id: string) {
+    return (
+      this.db
+        .select()
+        .from(stacks)
+        .where(and(eq(stacks.id, id), eq(stacks.workspaceId, workspaceId)))
+        .get() ?? null
+    );
+  }
+
+  async list(workspaceId: string) {
+    return this.db
+      .select()
+      .from(stacks)
+      .where(eq(stacks.workspaceId, workspaceId))
+      .orderBy(asc(stacks.name))
+      .all();
+  }
+
+  async listByRepository(workspaceId: string, repositoryId: string) {
+    return this.db
+      .select()
+      .from(stacks)
+      .where(and(eq(stacks.workspaceId, workspaceId), eq(stacks.repositoryId, repositoryId)))
+      .orderBy(asc(stacks.rootPath))
+      .all();
+  }
+
+  async update(id: string, patch: Parameters<StackRepository['update']>[1]) {
+    this.db.update(stacks).set(patch).where(eq(stacks.id, id)).run();
+  }
+
+  async delete(id: string) {
+    this.db.delete(stacks).where(eq(stacks.id, id)).run();
+  }
+}
+
+class SqliteSourceDraftRepository implements SourceDraftRepository {
+  constructor(private readonly db: SqliteDb) {}
+
+  async find(repositoryId: string, path: string) {
+    return (
+      this.db
+        .select()
+        .from(sourceDrafts)
+        .where(and(eq(sourceDrafts.repositoryId, repositoryId), eq(sourceDrafts.path, path)))
+        .get() ?? null
+    );
+  }
+
+  async list(repositoryId: string, rootPath?: string) {
+    const rows = this.db
+      .select()
+      .from(sourceDrafts)
+      .where(eq(sourceDrafts.repositoryId, repositoryId))
+      .orderBy(asc(sourceDrafts.path))
+      .all();
+    // Prefix filtering in application code keeps the query portable (no LIKE escaping differences).
+    return rootPath ? rows.filter((r) => r.path === rootPath || r.path.startsWith(`${rootPath}/`)) : rows;
+  }
+
+  async upsert(draft: SourceDraft) {
+    return this.db.transaction((tx) => {
+      const existing = tx
+        .select()
+        .from(sourceDrafts)
+        .where(and(eq(sourceDrafts.repositoryId, draft.repositoryId), eq(sourceDrafts.path, draft.path)))
+        .get();
+      if (!existing) {
+        tx.insert(sourceDrafts).values(draft).run();
+        return draft;
+      }
+      const next: SourceDraft = {
+        ...existing,
+        content: draft.content,
+        baseBlobSha: draft.baseBlobSha,
+        updatedByUserId: draft.updatedByUserId,
+        updatedAt: draft.updatedAt,
+      };
+      tx.update(sourceDrafts)
+        .set({
+          content: next.content,
+          baseBlobSha: next.baseBlobSha,
+          updatedByUserId: next.updatedByUserId,
+          updatedAt: next.updatedAt,
+        })
+        .where(eq(sourceDrafts.id, existing.id))
+        .run();
+      return next;
+    });
+  }
+
+  async delete(repositoryId: string, path: string) {
+    const result = this.db
+      .delete(sourceDrafts)
+      .where(and(eq(sourceDrafts.repositoryId, repositoryId), eq(sourceDrafts.path, path)))
+      .run();
+    return result.changes > 0;
+  }
+}
+
 export function createSqliteRepositories(db: SqliteDb): Repositories {
   return {
     users: new SqliteUserRepository(db),
@@ -483,5 +597,7 @@ export function createSqliteRepositories(db: SqliteDb): Repositories {
     gitRepositories: new SqliteGitRepositoryConnectionRepository(db),
     jobs: new SqliteJobRepository(db),
     audit: new SqliteAuditRepository(db),
+    stacks: new SqliteStackRepository(db),
+    drafts: new SqliteSourceDraftRepository(db),
   };
 }

@@ -5,6 +5,7 @@ import { LocalTime } from '@/ui/local-time';
 import { PageHeader } from '@/ui/primitives/page-header';
 import { Section, SectionTitle } from '@/ui/primitives/section';
 import { StatusPill } from '@/ui/primitives/status-pill';
+import { TableWrap } from '@/ui/primitives/table-wrap';
 import { RenameWorkspaceForm } from '@/ui/workspace-form';
 
 export const metadata: Metadata = { title: 'Settings' };
@@ -66,7 +67,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ works
       {events.length === 0 ? (
         <p className="muted">No activity yet.</p>
       ) : (
-        <div className="table-wrap card flush">
+        <TableWrap labelledBy="ws-activity">
           <table className="simple" aria-labelledby="ws-activity">
             <thead>
               <tr>
@@ -87,7 +88,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ works
               ))}
             </tbody>
           </table>
-        </div>
+        </TableWrap>
       )}
     </>
   );

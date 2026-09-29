@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronsUpDown, FolderGit2, LogOut, Menu, Settings, X } from 'lucide-react';
+import { ChevronsUpDown, FolderGit2, Layers, LogOut, Menu, Settings, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
@@ -90,6 +90,7 @@ function SidebarContent({
       Icon: FolderGit2,
       active: pathname === base || pathname.startsWith(`${base}/repositories`),
     },
+    { href: `${base}/stacks`, label: 'Stacks', Icon: Layers, active: pathname.startsWith(`${base}/stacks`) },
     {
       href: `${base}/settings`,
       label: 'Settings',

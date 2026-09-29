@@ -42,7 +42,9 @@ Assume: operator places stack-manager on a trusted homelab network behind auth a
 | Supply chain | Lockfiles; minimal deps; container non-root where practical |
 | CSRF | SameSite sessions + origin checks on mutating routes |
 | XSS in log viewer | Treat logs as untrusted text; strict encoding |
-| Path traversal in git file APIs | Resolve under clone root; reject `..` |
+| Path traversal in git file APIs | Repo paths normalised and scoped to the stack folder; `..`, `.git` and control characters rejected; content read from Git objects (symlinks are listed, never followed) |
+| Secret files in repositories | `.env*` (except templates), keys/keystores and `secrets/` paths are shown as locked; contents are never returned to the browser or stored as drafts |
+| XSS via repository Markdown | Rendered without raw HTML; unsafe URLs dropped; relative links mapped to stack routes; only https images, no referrer |
 
 ## Explicit non-features (security-relevant)
 

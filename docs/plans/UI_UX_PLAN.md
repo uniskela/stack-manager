@@ -147,7 +147,7 @@ These follow the PR sequence and don't come earlier:
 
 - **Command palette** (`⌘K` / `Ctrl K`) for jumping to repositories and stacks and running actions (Fetch, Test). This is already listed in [UX.md](../UX.md); build it once stacks exist to navigate (PR #3).
 - **Keyboard shortcuts**: `g r` repositories, `g s` settings, `/` focus search, `?` shortcut sheet.
-- **Editor chrome** (PR #3): tabs, file tree, problems panel and bottom sheet on mobile, as in [UX.md](../UX.md). They should reuse the UI-1 primitives.
+- **Editor chrome** (PR #3): tabs, file tree, problems panel and bottom sheet on mobile, as in [UX.md](../UX.md). They should reuse the UI-1 primitives. **Done in PR #3** (on mobile the explorer is an overlay and problems start collapsed).
 - **Changes indicator** (PR #4): an uncommitted-changes badge in the sidebar and page header.
 
 ### Phase UI-5 — Professional finish (PR #8)

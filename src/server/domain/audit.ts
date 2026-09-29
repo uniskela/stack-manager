@@ -14,7 +14,12 @@ export type AuditAction =
   | 'repository.test'
   | 'repository.sync_requested'
   | 'repository.sync'
-  | 'repository.delete';
+  | 'repository.delete'
+  | 'stack.create'
+  | 'stack.update'
+  | 'stack.delete'
+  | 'draft.save'
+  | 'draft.discard';
 
 export interface AuditEvent {
   id: string;

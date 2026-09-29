@@ -8,6 +8,7 @@ import { PageHeader } from '@/ui/primitives/page-header';
 import { Section } from '@/ui/primitives/section';
 import { StatusPill } from '@/ui/primitives/status-pill';
 import { RemoveRepository, RepositoryActions } from '@/ui/repository-actions';
+import { StackDiscovery } from '@/ui/source/stack-discovery';
 import { orNotFound } from '../../../../_lib/session';
 
 export const metadata: Metadata = { title: 'Repository' };
@@ -18,9 +19,10 @@ export default async function RepositoryPage({
   params: Promise<{ workspaceId: string; repositoryId: string }>;
 }) {
   const { workspaceId, repositoryId } = await params;
-  const { repositories } = getContainer();
+  const { repositories, stacks } = getContainer();
   const repo = await orNotFound(repositories.get(workspaceId, repositoryId));
   const branches = await repositories.branches(workspaceId, repositoryId);
+  const suggestions = repo.headSha ? await stacks.suggest(workspaceId, repositoryId).catch(() => []) : [];
   const busy = repo.syncStatus === 'pending' || repo.syncStatus === 'syncing';
   const retrying = repo.sync?.status === 'pending' && repo.sync.attempts > 0;
 
@@ -67,6 +69,18 @@ export default async function RepositoryPage({
               : 'Public (no credential)'}
           </dd>
         </dl>
+      </Section>
+
+      <Section
+        id="repo-stacks"
+        title="Stacks"
+        description="Folders in this repository that contain a Compose file. Tick the ones to manage as stacks."
+      >
+        {repo.headSha ? (
+          <StackDiscovery workspaceId={workspaceId} repositoryId={repo.id} suggestions={suggestions} />
+        ) : (
+          <p className="muted">Stacks can be added after the first successful fetch.</p>
+        )}
       </Section>
 
       <Section id="repo-branches" title="Branches">

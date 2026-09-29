@@ -261,6 +261,25 @@ export class GitRepositoryService {
     return this.providers.get(conn.gitProviderType).listBranches(dir);
   }
 
+  /**
+   * The local clone and the commit last fetched for the default branch, for read-only source access.
+   * Null until the first successful sync.
+   */
+  async localSource(
+    workspaceId: string,
+    id: string,
+  ): Promise<{ connection: GitRepositoryConnection; cloneDir: string; commitSha: string } | null> {
+    const conn = await this.#find(workspaceId, id);
+    if (!conn.headSha) return null;
+    const cloneDir = this.#cloneDir(conn);
+    try {
+      await fs.access(path.join(cloneDir, '.git'));
+    } catch {
+      return null;
+    }
+    return { connection: conn, cloneDir, commitSha: conn.headSha };
+  }
+
   async requestSync(workspaceId: string, id: string, actorUserId: string): Promise<RepositoryView> {
     await this.#find(workspaceId, id);
     await this.#enqueueSync(id, actorUserId);

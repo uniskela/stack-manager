@@ -10,9 +10,9 @@ This app manages Git-backed **source/configuration** for Compose stacks. It is *
 
 ## Current phase
 
-**PR #2 — application foundation** (scaffold, auth, DB, encrypted credentials, workspace/repository model,
-Git connection, persisted jobs, audit, Docker). Next up: **PR #3 — source workspace**. Do not build features
-from later PRs ahead of their phase.
+**PR #3 — source workspace** (stacks, discovery, file tree, CodeMirror editor, drafts, validation, docs,
+environment inventory, change review). PR #2 (foundation) is done. Next up: **PR #4 — Git workflow** (turn drafts
+into commits, push, conflict protection). Do not build features from later PRs ahead of their phase.
 
 See [docs/plans/MVP_PLAN.md](docs/plans/MVP_PLAN.md) and the code layout in
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#code-layout-implemented-in-pr-2).
@@ -26,6 +26,10 @@ See [docs/plans/MVP_PLAN.md](docs/plans/MVP_PLAN.md) and the code layout in
 - Never return credential ciphertext/plaintext from APIs; decrypt only via `CredentialService.withPlaintext`.
 - Pass anything user- or provider-derived through the redacting logger/audit APIs; job payloads carry ids only.
 - Run `git` only through `GitCli` (argv arrays, hardened env, protocol allowlist).
+- Read repository content through `SourceTreeReader` (Git objects, never the working tree). Never return the
+  contents of secret-looking files (`isSecretPath` in `src/shared/source/paths.ts`) or accept drafts for them.
+- `src/shared` is pure code shared by server and browser (no Node, React or server imports; lint-enforced).
+- UI tests: `pnpm build && pnpm test:e2e` (set `E2E_GIT_REMOTE` to a public repo to include the editor tests).
 
 ## Tech direction (locked)
 

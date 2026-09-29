@@ -17,6 +17,9 @@ Current-state review and concrete improvement work: [plans/UI_UX_PLAN.md](plans/
 
 No primary nav items for Containers / Images / Networks / Volumes.
 
+Implemented in PR #3: **Editor** (explorer, tabs, problems, status bar), **Docs**, **Environment**, **Changes** and
+**Settings** tabs. Secrets and Deployments arrive with PR #6 and PR #5.
+
 ## Desktop
 
 - Multi-pane optional: file tree + editor + problems

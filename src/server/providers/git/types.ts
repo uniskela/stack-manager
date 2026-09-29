@@ -64,3 +64,26 @@ export class GitOperationError extends Error {
     this.name = 'GitOperationError';
   }
 }
+
+/** One entry of a commit's tree (`git ls-tree -r -l`). */
+export interface SourceTreeEntry {
+  /** Repo-relative POSIX path. */
+  path: string;
+  kind: 'file' | 'symlink' | 'submodule';
+  executable: boolean;
+  /** Blob (or commit, for submodules) object id. */
+  objectSha: string;
+  /** Bytes; 0 for submodules. */
+  size: number;
+}
+
+/**
+ * Read-only access to committed content of a local clone. Reads Git objects directly, never the
+ * working tree, so symlinks and checkout state on disk cannot influence what is served.
+ */
+export interface SourceTreeReader {
+  /** Full tree of a commit. Throws GitOperationError('invalid') if the commit is unknown or too large. */
+  listTree(cloneDir: string, commitSha: string): Promise<SourceTreeEntry[]>;
+  /** Blob contents decoded as UTF-8. */
+  readBlob(cloneDir: string, blobSha: string): Promise<string>;
+}
