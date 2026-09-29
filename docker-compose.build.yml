@@ -1,0 +1,7 @@
+# Local build override: runs an image built from this checkout instead of a published release.
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+# Kept separate so the release deployment can never silently fall back to an unscanned local build.
+services:
+  stack-manager:
+    image: stack-manager:local
+    build: .

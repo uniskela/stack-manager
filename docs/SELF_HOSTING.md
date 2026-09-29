@@ -19,9 +19,13 @@ CRITICAL vulnerabilities). While the repository is private the package is privat
 `docker login ghcr.io` with a token that has `read:packages` before pulling.
 
 ```sh
-cp .env.example .env   # fill in the two secrets
-STACK_MANAGER_VERSION=0.1.0 docker compose up -d   # or omit STACK_MANAGER_VERSION for latest
+cp .env.example .env   # fill in the two secrets and set STACK_MANAGER_VERSION (e.g. 0.1.0)
+docker compose up -d
 ```
+
+`docker-compose.yml` requires an explicit `STACK_MANAGER_VERSION`, so an upgrade (and its migrations) only happens
+when you change it. To run a build of your checkout instead, add the override:
+`docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build`.
 
 ## Configuration
 
@@ -96,7 +100,7 @@ once; afterwards `/setup` redirects to sign-in.
 
 ## Upgrades
 
-Change `STACK_MANAGER_VERSION` (or pull `latest`), then `docker compose up -d`. Migrations run automatically. Back up the data volume first
+Back up the data volume, change `STACK_MANAGER_VERSION`, then `docker compose up -d`. Migrations run automatically. Back up the data volume first
 (see [BACKUP_RESTORE.md](BACKUP_RESTORE.md)).
 
 ## Scaling notes

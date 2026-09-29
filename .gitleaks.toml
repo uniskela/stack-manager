@@ -5,6 +5,17 @@ title = "stack-manager"
 [extend]
 useDefault = true
 
+# The redaction tests need credential-shaped strings to prove they are scrubbed. Only these exact fake values in
+# that one file are exempt, so a real secret added there (or anywhere else) is still reported.
 [[allowlists]]
-description = "Fake credential-shaped strings used to prove the redactor scrubs them"
+description = "Fake credential fixtures in the redaction tests"
+condition = "AND"
 paths = ['''^tests/unit/redact\.test\.ts$''']
+regexes = [
+  '''^glpat-abcdefghij1234567890$''',
+  '''^ghp_abcdefghijklmnopqrstuv$''',
+  '''^github_pat_11ABCDEFG0123456789_abcdefghijklmnop$''',
+  '''^eyJhbGciOiJIUzI1NiJ9''',
+  '''^eC1hY2Nlc3MtdG9rZW46c2VjcmV0$''',
+  '''^s3cr3tvalue$''',
+]

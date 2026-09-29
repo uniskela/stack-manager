@@ -45,8 +45,8 @@ ENV NODE_ENV=production \
     PORT=3000 \
     HOSTNAME=0.0.0.0 \
     STACK_MANAGER_DATA_DIR=/data \
-    STACK_MANAGER_VERSION=${APP_VERSION} \
-    STACK_MANAGER_GIT_SHA=${GIT_SHA}
+    STACK_MANAGER_BUILD_VERSION=${APP_VERSION} \
+    STACK_MANAGER_BUILD_SHA=${GIT_SHA}
 
 WORKDIR /app
 # Application files stay root-owned (read-only for the service user); only /data is writable.

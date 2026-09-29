@@ -2,10 +2,9 @@
 # No Docker socket is mounted: stack-manager manages Git-backed source, not containers.
 services:
   stack-manager:
-    # Released images: ghcr.io/uniskela/stack-manager:<version> (pin a version; `latest` follows releases).
-    # `docker compose build` still builds from this checkout instead.
-    image: ghcr.io/uniskela/stack-manager:${STACK_MANAGER_VERSION:-latest}
-    build: .
+    # Released image, pinned to an explicit version so an upgrade (and its migrations) only happens on purpose.
+    # To run a local build of this checkout instead: docker compose -f docker-compose.yml -f docker-compose.build.yml up
+    image: ghcr.io/uniskela/stack-manager:${STACK_MANAGER_VERSION:?set STACK_MANAGER_VERSION in .env, e.g. 0.1.0}
     restart: unless-stopped
     ports:
       # Published on localhost only by default; put a reverse proxy in front or set STACK_MANAGER_BIND.

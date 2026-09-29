@@ -12,7 +12,7 @@ release tags after passing a security gate.
 | `container-security.yml` | PRs/pushes touching the image, weekly, manual | Trivy: Dockerfile misconfiguration, `pnpm-lock.yaml` vulnerabilities, full image inventory (artifact) and a gate on fixable HIGH/CRITICAL; checks the runtime ships no package managers |
 | `pr-title.yml` | PRs | Requires a Conventional Commit title (squash merges use the title as the commit message) |
 | `release-please.yml` | pushes to `main` | Opens/updates the release PR; when it is merged, tags `vX.Y.Z`, creates the GitHub Release and calls `publish-image.yml` |
-| `publish-image.yml` | called by Release Please, or manually for an existing tag | Builds the tag, smoke-tests the container, Trivy-gates it, pushes to GHCR with SBOM + provenance, then promotes `latest` |
+| `publish-image.yml` | called by Release Please, or manually for an existing tag | Builds the tag, smoke-tests the container, Trivy-gates it, pushes to GHCR with SBOM + provenance, then moves `X.Y`/`latest` if it is the newest release |
 
 All third-party actions are pinned to commit SHAs; Dependabot proposes weekly updates for npm packages
 (minor/patch), GitHub Actions and the Docker base image.
@@ -27,8 +27,12 @@ All third-party actions are pinned to commit SHAs; Dependabot proposes weekly up
 3. Merging the release PR creates the `vX.Y.Z` tag and GitHub Release, then publishes
    `ghcr.io/uniskela/stack-manager` with tags `vX.Y.Z`, `X.Y.Z`, `X.Y` and `sha-<commit>`. `latest` moves only after
    the image passed its smoke test and vulnerability gate.
-4. To republish an existing tag (for example after a transient registry failure), run **Publish container image**
-   manually with that tag.
+4. Version tags are **immutable**: a published release is never rebuilt or retargeted. Running **Publish container
+   image** manually for an existing tag only restores missing tags (byte-identical copies of the published digest)
+   and fails if tags of one release disagree.
+5. Moving tags follow Git tags: `latest` moves only to the highest `vX.Y.Z`, and `X.Y` only to the highest patch of
+   that line, so republishing an old release or runs finishing out of order never move them backwards. Promotions
+   share one concurrency group. The tag logic lives in `scripts/ci/release-image.sh`.
 
 ## One-time repository settings
 

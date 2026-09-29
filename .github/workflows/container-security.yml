@@ -9,6 +9,7 @@ on:
       - 'package.json'
       - 'pnpm-lock.yaml'
       - 'next.config.ts'
+      - 'docker-compose*.yml'
   push:
     branches: [main]
     paths:
@@ -18,6 +19,7 @@ on:
       - 'package.json'
       - 'pnpm-lock.yaml'
       - 'next.config.ts'
+      - 'docker-compose*.yml'
   schedule:
     # Re-scan weekly so newly disclosed vulnerabilities are caught even when nothing changed.
     - cron: '17 4 * * 1'
