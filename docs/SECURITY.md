@@ -67,8 +67,11 @@ Assume: operator places stack-manager on a trusted homelab network behind auth a
   another host). Tokens travel as an `http.extraHeader` via `GIT_CONFIG_*` environment variables — never in
   argv, remote URLs or `.git/config` — and are scrubbed from any git error output.
 - **Remote URL policy:** HTTPS only; embedded credentials, query strings and traversal segments are rejected.
-  Resolved addresses must not be loopback, link-local/metadata or multicast; private ranges require
-  `STACK_MANAGER_ALLOW_PRIVATE_NETWORKS=true`.
+  Resolved addresses must not be loopback, link-local/metadata or multicast — including IPv4 embedded in IPv6
+  (mapped, compatible, translated and NAT64 forms, dotted or hex); private ranges require
+  `STACK_MANAGER_ALLOW_PRIVATE_NETWORKS=true`. Known gap: the address is checked before `git` resolves the host
+  itself (DNS rebinding / TOCTOU); pinning the resolved address (`http.curloptResolve`) is a planned follow-up.
+  Mitigations today: HTTPS only, redirects not followed, private networks denied by default.
 - **Paths:** clone directories are derived from server-generated ids and resolved with containment checks
   (including symlinks) under `<data dir>/repos`.
 - **Headers:** `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`,

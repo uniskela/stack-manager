@@ -35,7 +35,7 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-Open `http://<host>:3000` and follow the setup: **admin account → workspace → repository**.
+Open `http://localhost:3000` (the port is published on localhost only; see `STACK_MANAGER_BIND`) and follow the setup: **admin account → workspace → repository**.
 Put stack-manager behind a TLS-terminating reverse proxy and set `STACK_MANAGER_PUBLIC_URL`.
 For plain-HTTP testing on localhost set `STACK_MANAGER_COOKIE_SECURE=false`.
 

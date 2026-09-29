@@ -15,6 +15,8 @@ It needs no database server, no Redis and **no Docker socket**.
 | `STACK_MANAGER_COOKIE_SECURE` | no | `true` in production | Set `false` only for plain-HTTP local testing |
 | `STACK_MANAGER_SETUP_TOKEN` | no | — | If set (≥ 16 chars), first-run admin setup requires it |
 | `STACK_MANAGER_ALLOW_PRIVATE_NETWORKS` | no | `false` | Allow Git remotes on RFC 1918 / CGNAT / IPv6 ULA addresses (homelab Gitea/Forgejo). Loopback, link-local and metadata addresses are always blocked |
+| `STACK_MANAGER_TRUSTED_PROXY_HOPS` | no | `0` | Trusted reverse proxies in front of the app. `0` ignores `X-Forwarded-For`/`X-Real-IP` (forgeable); with `N`, the client is the N-th `X-Forwarded-For` entry from the right. Only keys login/setup rate limits |
+| `STACK_MANAGER_BIND` / `STACK_MANAGER_PORT` | no | `127.0.0.1` / `3000` | Host interface and port published by `docker-compose.yml` |
 | `STACK_MANAGER_SESSION_TTL_HOURS` | no | `168` | Sliding session lifetime |
 | `STACK_MANAGER_LOG_LEVEL` | no | `info` | `debug` \| `info` \| `warn` \| `error` |
 | `STACK_MANAGER_WORKER_ENABLED` | no | `true` | Disable the in-process job worker (diagnostics only) |
@@ -60,7 +62,9 @@ starting the server.
 
 ## Reverse proxy and TLS
 
-Terminate TLS at a reverse proxy and forward to port 3000. Set `STACK_MANAGER_PUBLIC_URL` to the external origin
+`docker-compose.yml` publishes the port on `127.0.0.1` only. Terminate TLS at a reverse proxy on the same host
+and forward to it, or set `STACK_MANAGER_BIND` (e.g. `0.0.0.0`) if the proxy runs elsewhere. Behind a proxy that
+appends to `X-Forwarded-For`, set `STACK_MANAGER_TRUSTED_PROXY_HOPS=1` so rate limits apply per client. Set `STACK_MANAGER_PUBLIC_URL` to the external origin
 so the same-origin check on state-changing requests matches what browsers send. Session cookies are `Secure`,
 `HttpOnly`, `SameSite=Lax` and use the `__Host-` prefix when `STACK_MANAGER_COOKIE_SECURE=true`.
 

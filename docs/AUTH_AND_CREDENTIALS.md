@@ -44,13 +44,16 @@ Credentials must:
 
 - Passwords: Argon2id (`m=64 MiB, t=3, p=1`), minimum 12 characters, may not contain the username.
   Unknown usernames are verified against a dummy hash to blunt timing-based user enumeration.
-- Login and setup-token attempts are rate limited in memory (10 failures / 15 min per username and per client IP).
+- Login and setup-token attempts are rate limited in memory (10 failures / 15 min per username, and per client IP
+  when it is known). Forwarding headers are ignored unless `STACK_MANAGER_TRUSTED_PROXY_HOPS` is set; unknown
+  clients are never pooled into a shared bucket (setup-token attempts fall back to a global limit).
 - Sessions: 256-bit random token in the cookie; the database stores only `HMAC-SHA256(STACK_MANAGER_SESSION_SECRET, token)`,
   so a leaked database or backup cannot be replayed. Sliding expiry (`STACK_MANAGER_SESSION_TTL_HOURS`, default 7 days).
 - Cookie: `HttpOnly; SameSite=Lax; Path=/`, plus `Secure` and the `__Host-` name prefix when
   `STACK_MANAGER_COOKIE_SECURE=true` (default in production).
 - CSRF: state-changing API requests require an `Origin` (or `Referer`) matching `STACK_MANAGER_PUBLIC_URL`
-  (or the `Host` header), and request bodies must be `application/json`.
+  (or the `Host` header), and request bodies must be `application/json` and ≤ 64 KiB (enforced from
+  `Content-Length` and while streaming).
 - First-run setup is atomic and one-shot; optional `STACK_MANAGER_SETUP_TOKEN` gates it.
 - Every API route is wrapped by `defineRoute`, which is authenticated by default; only health, setup and
   login/logout are public (enforced by a test).
