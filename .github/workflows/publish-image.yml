@@ -1,0 +1,252 @@
+name: Publish container image
+
+on:
+  # Called by release-please.yml only after it creates an immutable vX.Y.Z release tag.
+  # Ordinary pushes to main never publish images.
+  workflow_call:
+    inputs:
+      tag:
+        description: Immutable release tag created by Release Please (vX.Y.Z).
+        required: true
+        type: string
+
+  # Manual recovery path for republishing an existing release tag.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing vX.Y.Z tag to republish
+        required: true
+        type: string
+
+concurrency:
+  group: ghcr-${{ inputs.tag }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  # Image: ghcr.io/<owner>/stack-manager
+  IMAGE: ghcr.io/${{ github.repository_owner }}/stack-manager
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-scan-push:
+    name: Build, scan and push ${{ inputs.tag }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
+    steps:
+      - name: Validate release tag
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Expected a vX.Y.Z tag, got: $TAG" >&2
+            exit 1
+          fi
+
+      - name: Checkout release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+          persist-credentials: false
+
+      - name: Resolve image tags
+        id: tags
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          FULL_SHA="$(git rev-parse HEAD)"
+          VERSION="${TAG#v}"
+          # Immutable tags only; moving tags (X.Y, latest) are handled by the promote job.
+          {
+            echo "git_sha=${FULL_SHA}"
+            echo "version=${VERSION}"
+            echo "immutable=${TAG} ${VERSION} sha-${FULL_SHA:0:7}"
+            echo "list<<EOF"
+            echo "${IMAGE}:${TAG}"
+            echo "${IMAGE}:${VERSION}"
+            echo "${IMAGE}:sha-${FULL_SHA:0:7}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Version tags are immutable: a published release is never rebuilt or retargeted. A republish only restores
+      # tags that are missing, pointing them at the digest that was already published.
+      - name: Check for an already published release image
+        id: existing
+        env:
+          IMMUTABLE: ${{ steps.tags.outputs.immutable }}
+        run: |
+          set -euo pipefail
+          source_digest=""
+          missing=""
+          for t in $IMMUTABLE; do
+            d="$(scripts/ci/release-image.sh digest "${IMAGE}:${t}")"
+            if [ -z "$d" ]; then
+              missing="${missing} ${t}"
+            elif [ -z "$source_digest" ]; then
+              source_digest="$d"
+            elif [ "$d" != "$source_digest" ]; then
+              echo "::error::${IMAGE}:${t} points to ${d}, but another tag of this release points to ${source_digest}." >&2
+              exit 1
+            fi
+          done
+          {
+            echo "digest=${source_digest}"
+            echo "missing=${missing# }"
+            if [ -n "$source_digest" ]; then echo "published=true"; else echo "published=false"; fi
+          } >> "$GITHUB_OUTPUT"
+          if [ -n "$source_digest" ]; then
+            echo "Release already published at ${source_digest}; missing tags:${missing:- none}"
+          fi
+
+      - name: Restore missing tags of the published release
+        if: steps.existing.outputs.published == 'true'
+        env:
+          DIGEST: ${{ steps.existing.outputs.digest }}
+          MISSING: ${{ steps.existing.outputs.missing }}
+        run: |
+          set -euo pipefail
+          for t in $MISSING; do
+            echo "Restoring ${IMAGE}:${t} → ${DIGEST}"
+            docker buildx imagetools create --prefer-index=false --tag "${IMAGE}:${t}" "${IMAGE}@${DIGEST}"
+          done
+
+      - name: Set up Docker Buildx
+        if: steps.existing.outputs.published == 'false'
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Extract labels
+        if: steps.existing.outputs.published == 'false'
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE }}
+          tags: type=raw,value=${{ inputs.tag }}
+          labels: |
+            org.opencontainers.image.revision=${{ steps.tags.outputs.git_sha }}
+            org.opencontainers.image.version=${{ steps.tags.outputs.version }}
+
+      # Release gate: build locally and scan before anything is pushed.
+      - name: Build image for scanning
+        if: steps.existing.outputs.published == 'false'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          push: false
+          tags: stack-manager-release:${{ steps.tags.outputs.version }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            APP_VERSION=${{ steps.tags.outputs.version }}
+            GIT_SHA=${{ steps.tags.outputs.git_sha }}
+          cache-from: type=gha,scope=release
+          cache-to: type=gha,mode=max,scope=release
+
+      - name: Smoke test (container starts, migrates and reports healthy)
+        if: steps.existing.outputs.published == 'false'
+        env:
+          IMAGE_REF: stack-manager-release:${{ steps.tags.outputs.version }}
+        run: |
+          set -euo pipefail
+          docker run -d --name sm --read-only --tmpfs /tmp --cap-drop ALL \
+            -e STACK_MANAGER_ENCRYPTION_KEY="$(openssl rand -base64 32)" \
+            -e STACK_MANAGER_SESSION_SECRET="$(openssl rand -base64 48)" \
+            -v sm-data:/data "$IMAGE_REF"
+          for _ in $(seq 1 30); do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' sm)" = healthy ] && break
+            sleep 2
+          done
+          docker inspect -f '{{.State.Health.Status}}' sm | grep -q healthy || (docker logs sm; exit 1)
+          # The runtime must not ship package managers.
+          docker run --rm --entrypoint sh "$IMAGE_REF" -c '! command -v npm && ! command -v npx && ! command -v corepack'
+          docker rm -f sm
+
+      - name: Gate on fixable high and critical vulnerabilities
+        if: steps.existing.outputs.published == 'false'
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: stack-manager-release:${{ steps.tags.outputs.version }}
+          scanners: vuln
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+          timeout: 10m
+
+      - name: Push (same build, from cache) with SBOM and provenance
+        if: steps.existing.outputs.published == 'false'
+        id: push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.tags.outputs.list }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            APP_VERSION=${{ steps.tags.outputs.version }}
+            GIT_SHA=${{ steps.tags.outputs.git_sha }}
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha,scope=release
+
+  # Moving tags follow the newest release only. Git tags decide what "newest" means, so a republished older
+  # release or runs finishing out of order can never move latest (or X.Y) backwards. One shared concurrency
+  # group serialises every promotion across releases.
+  promote:
+    name: Promote moving tags
+    needs: build-scan-push
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ghcr-moving-tags
+      cancel-in-progress: false
+    steps:
+      - name: Checkout release tag with all tags
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Move latest and X.Y if this is the newest release
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          VERSION="${TAG#v}"
+          MAJOR_MINOR="${VERSION%.*}"
+          newest="$(scripts/ci/release-image.sh highest v)"
+          newest_in_line="$(scripts/ci/release-image.sh highest "v${MAJOR_MINOR}.")"
+          if [ "$newest_in_line" = "$TAG" ]; then
+            echo "Promoting ${IMAGE}:${TAG} → ${IMAGE}:${MAJOR_MINOR}"
+            docker buildx imagetools create --prefer-index=false --tag "${IMAGE}:${MAJOR_MINOR}" "${IMAGE}:${TAG}"
+          else
+            echo "Not moving ${MAJOR_MINOR}: ${newest_in_line} is newer than ${TAG}."
+          fi
+          if [ "$newest" = "$TAG" ]; then
+            echo "Promoting ${IMAGE}:${TAG} → ${IMAGE}:latest"
+            docker buildx imagetools create --prefer-index=false --tag "${IMAGE}:latest" "${IMAGE}:${TAG}"
+          else
+            echo "Not moving latest: ${newest} is newer than ${TAG}."
+          fi

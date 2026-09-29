@@ -59,7 +59,11 @@ Assume: operator places stack-manager on a trusted homelab network behind auth a
 - [ ] Webhook signature tests
 - [x] SSRF unit tests (PR #2 — Git remote host policy; deploy webhook URLs in PR #5)
 - [ ] Log viewer XSS tests
-- [x] Dependency vulnerability scanning in CI (PR #2 — `pnpm audit --prod`)
+- [x] Dependency vulnerability scanning in CI (PR #2 — `pnpm audit --prod`; Trivy on `pnpm-lock.yaml`)
+- [x] Secret scanning of the full Git history on every PR, push and nightly (gitleaks, `.gitleaks.toml`)
+- [x] Container image scanning: Trivy gate on fixable HIGH/CRITICAL for PRs touching the image, weekly, and before
+      every release publish; Dockerfile misconfiguration scan; runtime image ships without npm/npx/corepack/yarn
+- [x] Pinned GitHub Actions (commit SHAs) with Dependabot updates; release images carry SBOM + provenance
 
 ## Controls implemented in PR #2
 

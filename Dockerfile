@@ -22,15 +22,31 @@ RUN pnpm build \
 # ---------- runtime ----------
 FROM node:24-bookworm-slim AS runtime
 # git: clone/fetch of repository connections. tini: PID 1 signal handling and zombie reaping.
+# Security updates are applied at build time, and package managers the runtime never uses (npm, npx, corepack,
+# yarn) are removed so their dependency trees cannot carry vulnerabilities into the image.
 RUN apt-get update \
+  && apt-get upgrade -y --no-install-recommends \
   && apt-get install -y --no-install-recommends git ca-certificates tini \
-  && rm -rf /var/lib/apt/lists/*
+  && rm -rf /var/lib/apt/lists/* \
+  && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn-* \
+    /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/bin/yarn /usr/local/bin/yarnpkg
+
+# Build metadata, set by the release workflow and recorded as OCI labels and environment variables.
+ARG APP_VERSION=dev
+ARG GIT_SHA=unknown
+LABEL org.opencontainers.image.title="stack-manager" \
+      org.opencontainers.image.description="Git-native source workspace for self-hosted Compose stacks" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.version="${APP_VERSION}" \
+      org.opencontainers.image.revision="${GIT_SHA}"
 
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     PORT=3000 \
     HOSTNAME=0.0.0.0 \
-    STACK_MANAGER_DATA_DIR=/data
+    STACK_MANAGER_DATA_DIR=/data \
+    STACK_MANAGER_BUILD_VERSION=${APP_VERSION} \
+    STACK_MANAGER_BUILD_SHA=${GIT_SHA}
 
 WORKDIR /app
 # Application files stay root-owned (read-only for the service user); only /data is writable.
