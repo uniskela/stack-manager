@@ -15,8 +15,7 @@ Every release publishes `ghcr.io/uniskela/stack-manager` (linux/amd64) with thes
 | `sha-abc1234` | The exact commit a release was built from |
 
 Images carry an SBOM and build provenance, and are scanned with Trivy before publication (no fixable HIGH or
-CRITICAL vulnerabilities). While the repository is private the package is private too: run
-`docker login ghcr.io` with a token that has `read:packages` before pulling.
+CRITICAL vulnerabilities). The image is public; no `docker login` is needed to pull it.
 
 ```sh
 cp .env.example .env   # fill in the two secrets and set STACK_MANAGER_VERSION (e.g. 0.1.0)

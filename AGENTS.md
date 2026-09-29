@@ -31,6 +31,9 @@ See [docs/plans/MVP_PLAN.md](docs/plans/MVP_PLAN.md) and the code layout in
 - Read repository content through `SourceTreeReader` (Git objects, never the working tree). Never return the
   contents of secret-looking files (`isSecretPath` in `src/shared/source/paths.ts`) or accept drafts for them.
 - `src/shared` is pure code shared by server and browser (no Node, React or server imports; lint-enforced).
+- User docs are published to uniskela.com from `docs/manifest.json` (see `.github/docs-sync.md`). When a feature
+  changes what users see, update `docs/getting-started.md`/`docs/installation.md`; list new user-facing pages in the
+  manifest.
 - UI tests: `pnpm build && pnpm test:e2e` (set `E2E_GIT_REMOTE`/`E2E_STACK_ROOT` to a public repo and stack folder to include the editor tests).
 
 ## Tech direction (locked)

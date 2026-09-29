@@ -42,7 +42,7 @@ All third-party actions are pinned to commit SHAs; Dependabot proposes weekly up
 - PRs opened with the default `GITHUB_TOKEN` do not trigger other workflows, so CI will not run on the release PR.
   If branch protection requires checks, add a fine-grained token (Contents + Pull requests: read/write) as the
   `RELEASE_PLEASE_TOKEN` secret; the workflow uses it automatically.
-- The GHCR package inherits the repository's visibility. While the repository is private, pulling needs
-  `docker login ghcr.io` with a `read:packages` token.
+- The first publish creates the GHCR package. Check that its visibility is **Public** (package settings on GitHub)
+  so the image can be pulled without `docker login`.
 - Images are linux/amd64. arm64 (e.g. Raspberry Pi) needs emulated or arm64 runners and can be added to
   `publish-image.yml` later.

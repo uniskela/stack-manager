@@ -1,6 +1,16 @@
 # Documentation index
 
-Architecture, planning and operations docs for **stack-manager**. Current phase: **PR #3 — source workspace** (see [plans/MVP_PLAN.md](plans/MVP_PLAN.md)).
+Architecture, planning and operations docs for **stack-manager**. User documentation starts at [index.md](index.md)
+and is published at [uniskela.com/docs/stack-manager](https://uniskela.com/docs/stack-manager/); the pages it publishes
+are listed in [manifest.json](manifest.json) (see [../.github/docs-sync.md](../.github/docs-sync.md)).
+
+## User guide
+
+| Doc | Summary |
+| --- | --- |
+| [index.md](index.md) | Overview: what stack-manager does and does not do |
+| [installation.md](installation.md) | Docker Compose install, image tags, upgrades |
+| [getting-started.md](getting-started.md) | First run, repositories, stacks, editor and drafts |
 
 ## Product and architecture
 
