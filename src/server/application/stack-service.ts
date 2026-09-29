@@ -195,6 +195,15 @@ export class StackService {
           composePath: 'Choose a file inside the stack folder.',
         });
       }
+      const source = await this.repositories.localSource(workspaceId, stack.repositoryId);
+      if (!source)
+        throw new ConflictError('Fetch the repository before changing the Compose file.', 'not_synced');
+      const entries = await this.reader.listTree(source.cloneDir, source.commitSha);
+      if (!entries.some((e) => e.kind === 'file' && e.path === composePath)) {
+        throw new ValidationError('Compose file not found.', {
+          composePath: 'Choose a file that exists at the fetched commit.',
+        });
+      }
     }
     await this.repo.update(id, { name, composePath, updatedAt: this.clock.now() });
     await this.audit.record({

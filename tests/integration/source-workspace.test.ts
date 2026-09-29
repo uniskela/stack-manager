@@ -144,6 +144,22 @@ describe('stack discovery', () => {
       body: { name: 'Lift Log' },
     });
     expect(patched.json.stack.name).toBe('Lift Log');
+    for (const composePath of ['apps/liftlog/nope.yaml', 'apps/liftlog/config', 'apps/blinko/compose.yaml']) {
+      const bad = await call(stackRoute.PATCH, {
+        method: 'PATCH',
+        cookie,
+        params: { workspaceId, stackId },
+        body: { composePath },
+      });
+      expect(bad.status, composePath).toBe(400);
+    }
+    const moved = await call(stackRoute.PATCH, {
+      method: 'PATCH',
+      cookie,
+      params: { workspaceId, stackId },
+      body: { composePath: 'apps/liftlog/config/app.json' },
+    });
+    expect(moved.json.stack.composePath).toBe('apps/liftlog/config/app.json');
 
     const other = (await call(workspaces.POST, { method: 'POST', body: { name: 'Other' }, cookie })).json
       .workspace.id;

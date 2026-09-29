@@ -28,7 +28,7 @@ export function resolveRepoLink(href: string, ctx: LinkContext): string | null {
 }
 
 /** Resolves `./` and `../` segments of a relative link against a directory, without leaving the repo. */
-function resolveRelative(dir: string, relative: string): string {
+export function resolveRelative(dir: string, relative: string): string {
   const out = dir ? dir.split('/') : [];
   for (const seg of relative.split('/')) {
     if (seg === '' || seg === '.') continue;

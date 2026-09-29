@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveRepoLink } from '@/shared/source/links';
+import { resolveRelative, resolveRepoLink } from '@/shared/source/links';
 import {
   isEnvTemplateName,
   isSecretPath,
@@ -111,5 +111,14 @@ describe('resolveRepoLink', () => {
     expect(resolveRepoLink('../../other/compose.yaml', ctx)).toBeNull();
     expect(resolveRepoLink('../../../../../etc/passwd', ctx)).toBeNull();
     expect(resolveRepoLink('../.git/config', ctx)).toBeNull();
+  });
+});
+
+describe('resolveRelative', () => {
+  it('resolves ./ and ../ against a directory and refuses to leave the repository', () => {
+    expect(resolveRelative('apps/lift', '../shared/app.env')).toBe('apps/shared/app.env');
+    expect(resolveRelative('apps/lift', './.env')).toBe('apps/lift/.env');
+    expect(resolveRelative('', 'a/./b')).toBe('a/b');
+    expect(() => resolveRelative('apps', '../../x')).toThrow();
   });
 });

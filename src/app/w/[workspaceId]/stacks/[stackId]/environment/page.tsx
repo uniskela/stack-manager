@@ -2,14 +2,8 @@ import { KeyRound, Variable } from 'lucide-react';
 import type { Metadata } from 'next';
 import { getContainer } from '@/server/container';
 import { analyzeCompose, parseEnvTemplate } from '@/shared/source/compose';
-import {
-  basename,
-  dirname,
-  isEnvTemplateName,
-  joinRepoPath,
-  normalizeRepoPath,
-  relativeTo,
-} from '@/shared/source/paths';
+import { resolveRelative } from '@/shared/source/links';
+import { basename, dirname, isEnvTemplateName, normalizeRepoPath, relativeTo } from '@/shared/source/paths';
 import { Alert } from '@/ui/primitives/alert';
 import { TableWrap } from '@/ui/primitives/table-wrap';
 import { EmptyState } from '@/ui/primitives/empty-state';
@@ -63,14 +57,17 @@ export default async function StackEnvironmentPage({
   const unused = [...documented.keys()].filter((n) => !variables.has(n));
   const secretFiles = tree.entries.filter((e) => e.locked === 'secret');
   const composeDir = dirname(stack.composePath);
+  // env_file may point outside the stack folder (e.g. ../shared/app.env), so look it up in the whole repository.
+  const repoTree = await source.tree(workspaceId, repo, '');
   const envFiles = analysis.envFiles.map((ref) => {
     let path: string | null = null;
     try {
-      path = normalizeRepoPath(joinRepoPath(composeDir, ref));
+      // Compose resolves env_file relative to the Compose file, and allows ../ segments.
+      path = normalizeRepoPath(resolveRelative(composeDir, ref));
     } catch {
       path = null;
     }
-    const entry = path ? tree.entries.find((e) => e.path === path) : undefined;
+    const entry = path ? repoTree.entries.find((e) => e.path === path) : undefined;
     return { ref, entry };
   });
   const hardcoded = analysis.problems.filter((pr) => pr.code === 'hardcoded-secret');
