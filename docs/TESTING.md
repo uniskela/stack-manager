@@ -36,7 +36,10 @@ Protect product boundary, credential safety, routing correctness, and editor/wor
   `defineRoute` and that only allowlisted routes are public.
 - `scripts/smoke.sh` drives a running instance over HTTP (setup, CSRF, auth, workspace, credential masking,
   optional public clone, logout); CI runs it against the production build and checks the Docker image boots healthy.
-- Playwright E2E remains planned for editor flows (PR #3+).
+- **Playwright UI tests** (`tests/e2e`, `pnpm build && pnpm test:e2e`) run against a throwaway production server
+  (`scripts/e2e-server.sh`): first-run onboarding, navigation, validation, 404 and sign-in/out at desktop (1280 px)
+  and mobile (Pixel 7) sizes. Every page is checked with axe for serious/critical WCAG 2.2 A/AA violations in both
+  light and dark colour schemes. CI runs them after the smoke test. Editor flows join in PR #3+.
 
 ## CI
 

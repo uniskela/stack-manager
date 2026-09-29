@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { api, ApiError } from './api';
 import { Field, FormError } from './form';
+import { Button } from './primitives/button';
 
 export function CreateWorkspaceForm() {
   const router = useRouter();
@@ -46,9 +47,9 @@ export function CreateWorkspaceForm() {
         spellCheck
       />
       <div className="actions">
-        <button className="btn primary" type="submit" disabled={busy || !name.trim()}>
+        <Button variant="primary" type="submit" disabled={!name.trim()} loading={busy}>
           {busy ? 'Creating…' : 'Continue'}
-        </button>
+        </Button>
       </div>
     </form>
   );
@@ -88,9 +89,9 @@ export function RenameWorkspaceForm({
     <form className="form" onSubmit={submit} noValidate>
       <Field label="Workspace name" name="name" value={name} onChange={setName} required spellCheck />
       <div className="actions">
-        <button className="btn" type="submit" disabled={busy || !name.trim() || name === initialName}>
+        <Button type="submit" disabled={!name.trim() || name === initialName} loading={busy}>
           Save name
-        </button>
+        </Button>
         {status ? (
           <span role="status" className={status.kind === 'ok' ? 'muted' : 'error-text'}>
             {status.text}

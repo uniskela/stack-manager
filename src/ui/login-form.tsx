@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { api, ApiError } from './api';
 import { Field, FormError } from './form';
+import { Button } from './primitives/button';
 
 export function LoginForm({ next }: { next: string }) {
   const router = useRouter();
@@ -49,9 +50,9 @@ export function LoginForm({ next }: { next: string }) {
         required
       />
       <div className="actions">
-        <button className="btn primary" type="submit" disabled={busy || !username || !password}>
+        <Button variant="primary" type="submit" disabled={!username || !password} loading={busy}>
           {busy ? 'Signing in…' : 'Sign in'}
-        </button>
+        </Button>
       </div>
     </form>
   );

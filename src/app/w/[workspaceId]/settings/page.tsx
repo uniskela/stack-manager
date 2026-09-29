@@ -2,7 +2,9 @@ import type { Metadata } from 'next';
 import { getContainer } from '@/server/container';
 import { CredentialActions } from '@/ui/credential-actions';
 import { LocalTime } from '@/ui/local-time';
-import { StatusPill } from '@/ui/status-pill';
+import { PageHeader } from '@/ui/primitives/page-header';
+import { Section, SectionTitle } from '@/ui/primitives/section';
+import { StatusPill } from '@/ui/primitives/status-pill';
 import { RenameWorkspaceForm } from '@/ui/workspace-form';
 
 export const metadata: Metadata = { title: 'Settings' };
@@ -20,36 +22,32 @@ export default async function SettingsPage({ params }: { params: Promise<{ works
 
   return (
     <>
-      <div className="page-head">
-        <h1>Settings</h1>
-      </div>
+      <PageHeader title="Settings" />
 
-      <section className="card" aria-labelledby="ws-general">
-        <h2 id="ws-general">Workspace</h2>
+      <Section id="ws-general" title="Workspace">
         <RenameWorkspaceForm workspaceId={workspace.id} initialName={workspace.name} />
-      </section>
+      </Section>
 
-      <div className="section-title">
-        <h2 id="ws-credentials">Provider credentials</h2>
-        <span className="muted" style={{ fontSize: '0.85rem' }}>
-          Encrypted at rest · never shown after saving
-        </span>
-      </div>
+      <SectionTitle
+        id="ws-credentials"
+        title="Provider credentials"
+        aside="Encrypted at rest · never shown after saving"
+      />
       {credentials.length === 0 ? (
         <p className="muted">No credentials yet. Tokens added while connecting a repository appear here.</p>
       ) : (
         <ul className="list" aria-labelledby="ws-credentials">
           {credentials.map((c) => (
-            <li key={c.id} className="list-row" style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}>
+            <li key={c.id} className="list-row wrap">
               <div className="grow">
                 <div className="title">{c.label}</div>
-                <div className="muted" style={{ fontSize: '0.88rem' }}>
+                <div className="list-row-sub">
                   {c.kind} · {c.providerType} · <span className="mono">{c.hint}</span>
                   {c.meta.username ? ` · user ${c.meta.username}` : ''} · updated{' '}
                   <LocalTime iso={c.updatedAt} />
                 </div>
                 {c.lastTestStatus ? (
-                  <div style={{ marginTop: '0.35rem' }}>
+                  <div className="list-row-sub">
                     <StatusPill status={c.lastTestStatus} /> <LocalTime iso={c.lastTestedAt} />
                   </div>
                 ) : null}
@@ -64,13 +62,11 @@ export default async function SettingsPage({ params }: { params: Promise<{ works
         </ul>
       )}
 
-      <div className="section-title">
-        <h2 id="ws-activity">Recent activity</h2>
-      </div>
+      <SectionTitle id="ws-activity" title="Recent activity" />
       {events.length === 0 ? (
         <p className="muted">No activity yet.</p>
       ) : (
-        <div className="table-wrap card" style={{ padding: 0 }}>
+        <div className="table-wrap card flush">
           <table className="simple" aria-labelledby="ws-activity">
             <thead>
               <tr>

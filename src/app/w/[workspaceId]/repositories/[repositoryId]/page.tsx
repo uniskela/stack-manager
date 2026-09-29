@@ -1,10 +1,13 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { getContainer } from '@/server/container';
 import { CredentialActions } from '@/ui/credential-actions';
 import { LocalTime } from '@/ui/local-time';
-import { RepositoryActions } from '@/ui/repository-actions';
-import { StatusPill } from '@/ui/status-pill';
+import { Alert } from '@/ui/primitives/alert';
+import { Breadcrumbs } from '@/ui/primitives/breadcrumbs';
+import { PageHeader } from '@/ui/primitives/page-header';
+import { Section } from '@/ui/primitives/section';
+import { StatusPill } from '@/ui/primitives/status-pill';
+import { RemoveRepository, RepositoryActions } from '@/ui/repository-actions';
 import { orNotFound } from '../../../../_lib/session';
 
 export const metadata: Metadata = { title: 'Repository' };
@@ -22,29 +25,28 @@ export default async function RepositoryPage({
   const retrying = repo.sync?.status === 'pending' && repo.sync.attempts > 0;
 
   return (
-    <>
-      <p style={{ marginBottom: '0.5rem' }}>
-        <Link href={`/w/${workspaceId}`}>← Repositories</Link>
-      </p>
-      <div className="page-head">
-        <div style={{ minWidth: 0 }}>
-          <h1 className="truncate">{repo.name}</h1>
-          <p className="muted mono truncate" style={{ marginBottom: 0 }}>
-            {repo.remoteUrl}
-          </p>
-        </div>
-        <StatusPill status={repo.syncStatus} />
-      </div>
+    <div className="stack">
+      <PageHeader
+        breadcrumbs={
+          <Breadcrumbs items={[{ label: 'Repositories', href: `/w/${workspaceId}` }, { label: repo.name }]} />
+        }
+        title={repo.name}
+        status={<StatusPill status={repo.syncStatus} />}
+        description={<div className="mono truncate">{repo.remoteUrl}</div>}
+      />
 
       {repo.syncStatus === 'error' && repo.lastSyncError ? (
-        <div className="alert error" role="alert" style={{ marginBottom: '1rem' }}>
+        <Alert tone="error" title="Sync failed" role="alert">
           {repo.lastSyncError}
           {retrying ? ' Retrying automatically.' : ''}
-        </div>
+        </Alert>
       ) : null}
 
-      <section className="card" aria-labelledby="repo-details">
-        <h2 id="repo-details">Source</h2>
+      <Section
+        id="repo-details"
+        title="Source"
+        footer={<RepositoryActions workspaceId={workspaceId} repositoryId={repo.id} busy={busy} />}
+      >
         <dl className="meta-grid">
           <dt>Provider</dt>
           <dd>{repo.providerName}</dd>
@@ -65,13 +67,9 @@ export default async function RepositoryPage({
               : 'Public (no credential)'}
           </dd>
         </dl>
-        <div style={{ marginTop: '1rem' }}>
-          <RepositoryActions workspaceId={workspaceId} repositoryId={repo.id} busy={busy} />
-        </div>
-      </section>
+      </Section>
 
-      <section className="card" aria-labelledby="repo-branches">
-        <h2 id="repo-branches">Branches</h2>
+      <Section id="repo-branches" title="Branches">
         {branches.length > 0 ? (
           <ul className="branch-list">
             {branches.map((b) => (
@@ -81,11 +79,10 @@ export default async function RepositoryPage({
         ) : (
           <p className="muted">Branches appear after the first successful fetch.</p>
         )}
-      </section>
+      </Section>
 
       {repo.credential ? (
-        <section className="card" aria-labelledby="repo-credential">
-          <h2 id="repo-credential">Credential</h2>
+        <Section id="repo-credential" title="Credential">
           <p className="muted">
             {repo.credential.label} · <span className="mono">{repo.credential.hint}</span>
             {repo.credential.lastTestStatus ? (
@@ -96,8 +93,16 @@ export default async function RepositoryPage({
             ) : null}
           </p>
           <CredentialActions workspaceId={workspaceId} credentialId={repo.credential.id} />
-        </section>
+        </Section>
       ) : null}
-    </>
+
+      <Section
+        id="repo-danger"
+        title="Danger zone"
+        description="Removes this connection and its local clone. The remote repository is not touched; saved credentials are kept."
+      >
+        <RemoveRepository workspaceId={workspaceId} repositoryId={repo.id} />
+      </Section>
+    </div>
   );
 }

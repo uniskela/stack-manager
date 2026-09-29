@@ -89,11 +89,20 @@ Each phase is sized as one reviewable PR (or folded into the phase PR noted), so
 
 ### Phase UI-1 — Foundation polish (small PR before or at the start of PR #3)
 
+> **Status: implemented** alongside this plan. Deviations from the original list below:
+>
+> - The account block (avatar, username, Sign out) sits in the **sidebar footer** rather than a top-bar menu, and
+>   breadcrumbs render at the top of each page. On desktop this removes the top bar entirely, which leaves more
+>   vertical space for the PR #3 editor. The sidebar isn't collapsible yet: with two items it doesn't need to be.
+> - `CopyButton` moved to UI-3, where the repository header first uses it.
+> - As part of adopting `ConfirmButton`, "Remove repository" moved into a **Danger zone** section (the UI-3 item,
+>   minus the type-the-name confirmation). The repository list also stacks its metadata under the name on mobile.
+
 Goal: fix the **H** findings and give PR #3 a design system to build on. No new product features.
 
 1. **Tokens and primitives** (5.1, 5.2)
    - Extend `:root` tokens: spacing scale (`--space-1…8`), type scale, z-index layers, motion durations.
-   - Add `src/ui/primitives/`: `Button` (variants `primary | secondary | danger | ghost`, sizes, `loading` state), `Alert`, `Card`/`Section`, `PageHeader` (title, description, status, actions), `EmptyState`, `CopyButton`, `ConfirmButton` (the inline two-step confirm used today, standardised), `Badge`/`StatusPill`.
+   - Add `src/ui/primitives/`: `Button` (variants `primary | secondary | danger | ghost`, sizes, `loading` state), `Alert`, `Card`/`Section`, `PageHeader` (title, description, status, actions), `EmptyState`, `ConfirmButton` (the inline two-step confirm used today, standardised), `Badge`/`StatusPill`.
    - Replace every inline `style={{}}` with a utility class or primitive. Add a lint rule (`react/forbid-dom-props` for `style`) to keep it that way.
    - Keep plain CSS (no Tailwind or UI-kit dependency); split `globals.css` into `tokens.css`, `base.css` and `components.css`.
 2. **App shell ready for PR #3** (1.1–1.6)
@@ -121,7 +130,8 @@ Exit: zero inline styles, sidebar shell live, axe clean, `pnpm check` and `pnpm 
 
 1. **Repository page** (3.1–3.5)
    - `PageHeader`: name + status badge together, then a meta line with a copyable remote, a forge-linked short SHA with copy, the default branch and "fetched 3 min ago".
-   - Actions: primary "Fetch now", secondary "Test connection". "Remove repository" moves to a **Danger zone** section at the bottom that requires typing the repository name.
+   - `CopyButton` primitive for the remote URL and SHA.
+   - Actions: primary "Fetch now", secondary "Test connection". The **Danger zone** (added in UI-1) gains a type-the-repository-name confirmation.
    - Branches: default branch pinned and marked, with filter and "show all (n)" past 20.
    - Sync error: `Alert` with a summary, timestamp, attempt count, a "Retry now" button and a collapsible raw detail.
    - This page becomes the host for PR #3's stack list, so reserve a "Stacks" section with an empty state now (no discovery logic yet).

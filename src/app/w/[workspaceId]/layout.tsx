@@ -1,6 +1,5 @@
 import { getContainer } from '@/server/container';
-import { Brand } from '@/ui/brand';
-import { WorkspaceNav } from '@/ui/nav';
+import { AppShell } from '@/ui/shell/app-shell';
 import { orNotFound, requireSession } from '../../_lib/session';
 
 export default async function WorkspaceLayout({
@@ -12,22 +11,22 @@ export default async function WorkspaceLayout({
 }) {
   const session = await requireSession();
   const { workspaceId } = await params;
-  const workspace = await orNotFound(getContainer().workspaces.get(workspaceId));
+  const { workspaces } = getContainer();
+  const [workspace, all] = await Promise.all([orNotFound(workspaces.get(workspaceId)), workspaces.list()]);
   return (
     <>
       <a className="skip-link" href="#main">
         Skip to content
       </a>
-      <header className="topbar">
-        <Brand href={`/w/${workspace.id}`} />
-        <span className="crumb" title={`Signed in as ${session.user.username}`}>
-          / {workspace.name}
-        </span>
-        <WorkspaceNav workspaceId={workspace.id} />
-      </header>
-      <main id="main" className="main">
-        {children}
-      </main>
+      <AppShell
+        workspace={{ id: workspace.id, name: workspace.name }}
+        workspaces={all.map(({ id, name }) => ({ id, name }))}
+        username={session.user.username}
+      >
+        <main id="main" className="main">
+          {children}
+        </main>
+      </AppShell>
     </>
   );
 }
