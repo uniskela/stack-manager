@@ -45,7 +45,7 @@ export function repoPathField(input: string, field: string, options?: { allowRoo
   }
 }
 
-/** Suggested display name for a stack directory: "apps/liftlog" → "liftlog", root → repository name. */
+/** Suggested display name for a stack directory: "apps/wiki" → "wiki", root → repository name. */
 export function stackNameFromRoot(rootPath: string, fallback: string): string {
   const last = rootPath.split('/').filter(Boolean).pop();
   return last ?? fallback;

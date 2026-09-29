@@ -31,7 +31,7 @@ Binding config example:
 
 - project
 - environment
-- path (e.g. `/122-liftlog`)
+- path (e.g. `/apps/wiki`)
 
 Use service token / machine identity stored encrypted.
 

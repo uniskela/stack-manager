@@ -162,7 +162,7 @@ export function StackDiscovery(props: {
             name="rootPath"
             value={manualPath}
             onChange={setManualPath}
-            placeholder="apps/liftlog"
+            placeholder="apps/wiki"
             hint="Relative to the repository root. Leave empty for the root itself. The folder must contain a Compose file."
             error={fields.rootPath ?? fields.composePath}
           />

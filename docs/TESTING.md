@@ -17,7 +17,7 @@ Protect product boundary, credential safety, routing correctness, and editor/wor
 ## Must-have test themes
 
 1. **Product boundary:** Runtime adapter module cannot call forbidden Portainer endpoints (allowlist test / static check)
-2. **Routing:** include/exclude/deps fixtures (LiftLog/Blinko/Immich example)
+2. **Routing:** include/exclude/deps fixtures (Wiki/Notes/Photos example)
 3. **Idempotency:** duplicate webhook delivery does not double deploy
 4. **Redaction:** logs/audit serializers strip secrets
 5. **Credentials API:** GET never returns secret material

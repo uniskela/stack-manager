@@ -20,18 +20,18 @@ Users should not need to wire every Portainer stack webhook directly to the Git 
 Changed:
 
 ```text
-122-personal-apps/liftlog/docker-compose.yml
+apps/wiki/docker-compose.yml
 ```
 
 Configured scopes:
 
-| Stack | Scope |
-| --- | --- |
-| LiftLog | `122-personal-apps/liftlog/**` |
-| Blinko | `122-personal-apps/blinko/**` |
-| Immich | `101-immich/immich/**` |
+| Stack | Scope | Dependencies |
+| --- | --- | --- |
+| Wiki | `apps/wiki/**` | `shared/proxy/**` |
+| Notes | `apps/notes/**` | `shared/proxy/**` |
+| Photos | `media/photos/**` | — |
 
-Result: only LiftLog affected.
+Result: only Wiki affected.
 
 ## Deployment relevance rules
 
@@ -64,9 +64,9 @@ dependencies:
 
 ### Explanations (required UX)
 
-- `LiftLog will redeploy because docker-compose.yml changed.`
+- `Wiki will redeploy because docker-compose.yml changed.`
 - `No deployment required. Only README.md changed.`
-- `LiftLog and Blinko will redeploy because shared/proxy/nginx.conf changed (dependency path).`
+- `Wiki and Notes will redeploy because shared/proxy/nginx.conf changed (dependency path).`
 
 ## Interactive vs webhook
 
