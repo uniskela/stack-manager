@@ -20,10 +20,15 @@ export const RepositoryTestSchema = z.object({
 export const RepositoryCreateSchema = RepositoryTestSchema.extend({
   name: z.string().max(200).optional(),
   defaultBranch: z.string().max(255).optional(),
+  autoAddStacks: z.boolean().optional(),
 });
 
 export const RepositoryPatchSchema = z
-  .object({ name: z.string().max(200).optional(), defaultBranch: z.string().max(255).optional() })
+  .object({
+    name: z.string().max(200).optional(),
+    defaultBranch: z.string().max(255).optional(),
+    autoAddStacks: z.boolean().optional(),
+  })
   .strict();
 
 export const StackCreateSchema = z

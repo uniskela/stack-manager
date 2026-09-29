@@ -74,10 +74,15 @@ export default async function RepositoryPage({
       <Section
         id="repo-stacks"
         title="Stacks"
-        description="Folders in this repository that contain a Compose file. Tick the ones to manage as stacks."
+        description="Folders in this repository that contain a Compose file. Each one can be managed as a stack."
       >
         {repo.headSha ? (
-          <StackDiscovery workspaceId={workspaceId} repositoryId={repo.id} suggestions={suggestions} />
+          <StackDiscovery
+            workspaceId={workspaceId}
+            repositoryId={repo.id}
+            suggestions={suggestions}
+            autoAddStacks={repo.autoAddStacks}
+          />
         ) : (
           <p className="muted">Stacks can be added after the first successful fetch.</p>
         )}

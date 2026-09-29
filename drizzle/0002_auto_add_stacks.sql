@@ -1,0 +1,1 @@
+ALTER TABLE `git_repository_connections` ADD `auto_add_stacks` integer DEFAULT true NOT NULL;

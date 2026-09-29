@@ -18,6 +18,8 @@ export interface GitRepositoryConnection {
   lastSyncError: string | null;
   headSha: string | null;
   lastFetchedAt: Date | null;
+  /** Register every Compose folder as a stack after each successful fetch (docs/STACK_DISCOVERY.md). */
+  autoAddStacks: boolean;
   createdAt: Date;
   updatedAt: Date;
 }

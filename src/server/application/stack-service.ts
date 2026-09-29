@@ -37,6 +37,15 @@ export interface StackSuggestion {
   existingStackId: string | null;
 }
 
+export interface AddAllResult {
+  /** Stacks registered by this call. */
+  added: number;
+  /** Compose folders that already had a stack. */
+  existing: number;
+  /** Folders that could not be registered, with the reason. */
+  failed: { rootPath: string; message: string }[];
+}
+
 /** Directories never suggested as stacks (dependencies, CI config, VCS metadata). */
 const IGNORED_SEGMENTS = new Set([
   'node_modules',
@@ -48,7 +57,7 @@ const IGNORED_SEGMENTS = new Set([
   'dist',
   'build',
 ]);
-const MAX_SUGGESTIONS = 200;
+const MAX_SUGGESTIONS = 2000;
 
 /**
  * Explicit stacks inside connected repositories (docs/STACK_DISCOVERY.md). Discovery only suggests;
@@ -151,32 +160,48 @@ export class StackService {
     }
     const name = validateStackName(input.name?.trim() || stackNameFromRoot(rootPath, source.connection.name));
     const slugs = new Set(siblings.map((s) => s.slug));
-    const base = stackSlug(name);
-    let slug = base;
-    for (let i = 2; slugs.has(slug); i++) slug = `${base}-${i}`;
-
-    const now = this.clock.now();
-    const stack: Stack = {
-      id: this.newId(),
-      workspaceId,
-      repositoryId,
-      name,
-      slug,
-      rootPath,
-      composePath,
-      createdAt: now,
-      updatedAt: now,
-    };
-    await this.repo.insert(stack);
-    await this.audit.record({
-      action: 'stack.create',
+    const id = await this.#insert(workspaceId, repositoryId, { name, rootPath, composePath }, slugs, {
       actorUserId,
-      workspaceId,
-      entityType: 'stack',
-      entityId: stack.id,
-      meta: { repositoryId, name, rootPath, composePath },
     });
-    return this.get(workspaceId, stack.id);
+    return this.get(workspaceId, id);
+  }
+
+  /**
+   * Registers every suggested Compose folder that is not a stack yet, in one call. Used by the
+   * "Add all" action and, with a null actor, after each fetch of a repository with auto-add enabled.
+   * Existing stacks are left as they are; folders that disappeared are never removed.
+   */
+  async addAll(workspaceId: string, repositoryId: string, actorUserId: string | null): Promise<AddAllResult> {
+    const source = await this.repositories.localSource(workspaceId, repositoryId);
+    if (!source) {
+      throw new ConflictError('Fetch the repository before adding stacks.', 'not_synced');
+    }
+    const suggestions = await this.suggest(workspaceId, repositoryId);
+    const slugs = new Set((await this.repo.listByRepository(workspaceId, repositoryId)).map((s) => s.slug));
+    const result: AddAllResult = { added: 0, existing: 0, failed: [] };
+    for (const s of suggestions) {
+      if (s.existingStackId) {
+        result.existing++;
+        continue;
+      }
+      try {
+        const name = validateStackName(s.name);
+        await this.#insert(
+          workspaceId,
+          repositoryId,
+          { name, rootPath: s.rootPath, composePath: s.composePath },
+          slugs,
+          { actorUserId, auto: actorUserId === null },
+        );
+        result.added++;
+      } catch (error) {
+        result.failed.push({
+          rootPath: s.rootPath,
+          message: error instanceof Error ? error.message : 'Could not add stack.',
+        });
+      }
+    }
+    return result;
   }
 
   async update(
@@ -229,6 +254,40 @@ export class StackService {
       entityId: id,
       meta: { name: stack.name, rootPath: stack.rootPath },
     });
+  }
+
+  /** Inserts a stack with a slug unique among `slugs` (which is updated) and records the audit event. */
+  async #insert(
+    workspaceId: string,
+    repositoryId: string,
+    input: { name: string; rootPath: string; composePath: string },
+    slugs: Set<string>,
+    origin: { actorUserId: string | null; auto?: boolean },
+  ): Promise<string> {
+    const base = stackSlug(input.name);
+    let slug = base;
+    for (let i = 2; slugs.has(slug); i++) slug = `${base}-${i}`;
+    slugs.add(slug);
+    const now = this.clock.now();
+    const stack: Stack = {
+      id: this.newId(),
+      workspaceId,
+      repositoryId,
+      ...input,
+      slug,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await this.repo.insert(stack);
+    await this.audit.record({
+      action: 'stack.create',
+      actorUserId: origin.actorUserId,
+      workspaceId,
+      entityType: 'stack',
+      entityId: stack.id,
+      meta: { repositoryId, ...input, ...(origin.auto ? { auto: true } : {}) },
+    });
+    return stack.id;
   }
 
   async #find(workspaceId: string, id: string): Promise<Stack> {

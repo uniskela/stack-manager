@@ -80,6 +80,7 @@ export interface GitRepositoryConnectionRepository {
         | 'lastSyncError'
         | 'headSha'
         | 'lastFetchedAt'
+        | 'autoAddStacks'
       >
     > & { updatedAt: Date },
   ): Promise<void>;

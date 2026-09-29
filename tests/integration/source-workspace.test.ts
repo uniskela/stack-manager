@@ -1,4 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import * as repoRoute from '@/app/api/workspaces/[workspaceId]/repositories/[repositoryId]/route';
+import * as addAllRoute from '@/app/api/workspaces/[workspaceId]/repositories/[repositoryId]/stacks/all/route';
 import * as repoStacksRoute from '@/app/api/workspaces/[workspaceId]/repositories/[repositoryId]/stacks/route';
 import * as syncRoute from '@/app/api/workspaces/[workspaceId]/repositories/[repositoryId]/sync/route';
 import * as reposRoute from '@/app/api/workspaces/[workspaceId]/repositories/route';
@@ -55,7 +57,8 @@ beforeEach(async () => {
     method: 'POST',
     cookie,
     params: { workspaceId },
-    body: { gitProviderType: 'gitea', remoteUrl: REMOTE, auth: { type: 'none' } },
+    // Most tests exercise picking stacks by hand; auto-add has its own tests below.
+    body: { gitProviderType: 'gitea', remoteUrl: REMOTE, auth: { type: 'none' }, autoAddStacks: false },
   });
   expect(res.status).toBe(201);
   repositoryId = res.json.repository.id;
@@ -185,6 +188,84 @@ describe('stack discovery', () => {
 
   it('requires authentication', async () => {
     expect((await call(stacksRoute.GET, { params: { workspaceId } })).status).toBe(401);
+  });
+});
+
+describe('adding all stacks', () => {
+  const suggestions = async () =>
+    (await call(repoStacksRoute.GET, { cookie, params: { workspaceId, repositoryId } })).json.suggestions as {
+      rootPath: string;
+      existingStackId: string | null;
+    }[];
+  const addAll = () =>
+    call(addAllRoute.POST, { method: 'POST', cookie, params: { workspaceId, repositoryId } });
+
+  it('registers every Compose folder that is not a stack yet, once', async () => {
+    const liftlogId = await liftlog();
+    const res = await addAll();
+    expect(res.status).toBe(200);
+    expect(res.json.result).toEqual({ added: 2, existing: 1, failed: [] });
+    const after = await suggestions();
+    expect(after.every((s) => s.existingStackId)).toBe(true);
+    expect(after.find((s) => s.rootPath === 'apps/liftlog')?.existingStackId).toBe(liftlogId);
+    const list = await call(stacksRoute.GET, { cookie, params: { workspaceId } });
+    expect(list.json.stacks.map((s: { slug: string }) => s.slug).sort()).toEqual([
+      'acme-homelab',
+      'blinko',
+      'liftlog',
+    ]);
+
+    expect((await addAll()).json.result).toEqual({ added: 0, existing: 3, failed: [] });
+  });
+
+  it('adds new stacks after each fetch when auto-add is on, and only then', async () => {
+    server.commitFiles(REPO, 'main', {
+      'apps/memos/compose.yaml': 'services:\n  memos:\n    image: memos:1\n',
+    });
+    await call(syncRoute.POST, { method: 'POST', cookie, params: { workspaceId, repositoryId } });
+    await drainJobs();
+    expect((await suggestions()).every((s) => s.existingStackId === null)).toBe(true);
+
+    const patched = await call(repoRoute.PATCH, {
+      method: 'PATCH',
+      cookie,
+      params: { workspaceId, repositoryId },
+      body: { autoAddStacks: true },
+    });
+    expect(patched.json.repository.autoAddStacks).toBe(true);
+    await call(syncRoute.POST, { method: 'POST', cookie, params: { workspaceId, repositoryId } });
+    await drainJobs();
+    const after = await suggestions();
+    expect(after.map((s) => s.rootPath)).toContain('apps/memos');
+    expect(after.every((s) => s.existingStackId)).toBe(true);
+
+    const audit = await h.container.repos.audit.list({ workspaceId, limit: 50 });
+    const auto = audit.filter((e) => e.action === 'stack.create' && e.actorUserId === null);
+    expect(auto).toHaveLength(4);
+    // Restore for other tests.
+    server.commitFiles(REPO, 'main', { 'apps/memos/compose.yaml': null });
+  });
+
+  it('is on by default for new connections', async () => {
+    server.createRepo('acme/second.git', ['main']);
+    const other = await call(reposRoute.POST, {
+      method: 'POST',
+      cookie,
+      params: { workspaceId },
+      body: {
+        gitProviderType: 'gitea',
+        remoteUrl: 'https://git.test/acme/second.git',
+        auth: { type: 'none' },
+      },
+    });
+    expect(other.json.repository.autoAddStacks).toBe(true);
+  });
+
+  it('returns 409 before the first fetch and requires authentication', async () => {
+    await h.container.repos.gitRepositories.update(repositoryId, { headSha: null, updatedAt: new Date() });
+    expect((await addAll()).status).toBe(409);
+    const anon = await call(addAllRoute.POST, { method: 'POST', params: { workspaceId, repositoryId } });
+    expect(anon.status).toBe(401);
   });
 });
 
