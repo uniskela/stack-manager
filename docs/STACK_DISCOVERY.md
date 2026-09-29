@@ -30,7 +30,7 @@ When connecting a repository:
 
 Each stack has:
 
-- `rootPath` — e.g. `122-personal-apps/liftlog`
+- `rootPath` — e.g. `apps/wiki`
 - Path policy globs for deploy relevance (see [DEPLOYMENT_ROUTING.md](DEPLOYMENT_ROUTING.md))
 - Optional docs globs under root
 

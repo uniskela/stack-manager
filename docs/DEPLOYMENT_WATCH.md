@@ -78,7 +78,7 @@ Changed configuration:
 docker-compose.yml lines 31-36
 
 Git:
-c72ca81 "update LiftLog image"
+c72ca81 "update Wiki image"
 
 Actions:
 - View Diff

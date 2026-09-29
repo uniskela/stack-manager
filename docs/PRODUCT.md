@@ -92,10 +92,10 @@ Users must be able to use the application with **no runtime integration at all**
 Example contextual runtime strip (never the primary editing chrome):
 
 ```text
-LiftLog
+Wiki
 ● Healthy
 1 container
-Running image: ghcr.io/example/liftlog:1.9.2
+Running image: ghcr.io/example/wiki:1.9.2
 Last runtime refresh: 12 sec ago
 ```
 
@@ -106,27 +106,27 @@ Suggested tabs:
 ## Example stack binding (explicit)
 
 ```text
-Stack: LiftLog
+Stack: Wiki
 
 Source:
-  repository: portainer-stacks
-  root: 122-personal-apps/liftlog
+  repository: compose-stacks
+  root: apps/wiki
   compose: docker-compose.yml
 
 Deployment:
   provider: portainer-webhook
-  target: LiftLog webhook
+  target: Wiki webhook
 
 Runtime:
   provider: portainer-api
-  environment: CT122
-  stack mapping: LiftLog
+  environment: docker-host
+  stack mapping: Wiki
 
 Secrets:
   provider: infisical
-  project: portainer-stacks
+  project: compose-stacks
   environment: prod
-  path: /122-liftlog
+  path: /apps/wiki
 ```
 
 None of these relationships are inferred solely from folder names.

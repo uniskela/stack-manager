@@ -56,7 +56,7 @@ Explicit unit of source + optional deploy/runtime/secret bindings.
 | --- | --- |
 | id | |
 | repositoryId | |
-| name | e.g. LiftLog |
+| name | e.g. Wiki |
 | slug | Stable key |
 | rootPath | Repo-relative directory |
 | composePath | Relative to root or repo |
@@ -237,11 +237,11 @@ straightforward. Additions beyond the logical model above:
 
 ## Mapping example
 
-LiftLog stack binds:
+Wiki stack binds:
 
-- Source root `122-personal-apps/liftlog`
+- Source root `apps/wiki`
 - Deployment `portainer-webhook`
-- Runtime `portainer-api` / env CT122 / stack LiftLog
-- Secrets Infisical path `/122-liftlog`
+- Runtime `portainer-api` / env docker-host / stack Wiki
+- Secrets Infisical path `/apps/wiki`
 
-Folder name `liftlog` alone does **not** create these bindings.
+Folder name `wiki` alone does **not** create these bindings.
