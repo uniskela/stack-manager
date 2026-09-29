@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { ValidationError } from '@/server/domain/errors';
-import { assertAllowedHost, classifyAddress } from '@/server/security/network-policy';
+import { assertAllowedHost, classifyAddress, embeddedIpv4 } from '@/server/security/network-policy';
 import { PathEscapeError, resolveRealWithin, resolveWithin } from '@/server/security/paths';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sm-paths-'));
@@ -47,7 +47,41 @@ describe('network policy', () => {
     ['fd00::1', 'private'],
     ['140.82.112.3', 'public'],
     ['2606:4700::1', 'public'],
+    // IPv4 embedded in IPv6: dotted and hexadecimal spellings, compatible/translated and NAT64 forms.
+    ['::ffff:7f00:1', 'forbidden'],
+    ['0:0:0:0:0:ffff:7f00:0001', 'forbidden'],
+    ['::ffff:a9fe:a9fe', 'forbidden'],
+    ['::ffff:169.254.169.254', 'forbidden'],
+    ['::ffff:0:7f00:1', 'forbidden'],
+    ['::7f00:1', 'forbidden'],
+    ['64:ff9b::7f00:1', 'forbidden'],
+    ['64:ff9b::a9fe:a9fe', 'forbidden'],
+    ['64:ff9b:1::7f00:1', 'forbidden'],
+    ['::ffff:c0a8:10a', 'private'],
+    ['::ffff:10.1.2.3', 'private'],
+    ['64:ff9b::a00:1', 'private'],
+    ['::ffff:8c52:7003', 'public'],
+    ['64:ff9b::8c52:7003', 'public'],
   ])('classifies %s as %s', (ip, cls) => expect(classifyAddress(ip)).toBe(cls));
+
+  it('extracts embedded IPv4 only from IPv4-embedding prefixes', () => {
+    expect(embeddedIpv4('::ffff:7f00:1')).toBe('127.0.0.1');
+    expect(embeddedIpv4('64:ff9b::c0a8:101')).toBe('192.168.1.1');
+    expect(embeddedIpv4('2606:4700::6810:84e5')).toBeNull();
+    expect(embeddedIpv4('::1')).toBeNull();
+  });
+
+  it('rejects mapped loopback/link-local hosts even when private networks are allowed', async () => {
+    for (const host of ['[::ffff:7f00:1]', '::ffff:127.0.0.1', '[::ffff:a9fe:a9fe]']) {
+      await expect(assertAllowedHost(host, { allowPrivateNetworks: true })).rejects.toThrow(ValidationError);
+    }
+    await expect(
+      assertAllowedHost('sneaky.example', {
+        allowPrivateNetworks: true,
+        resolver: async () => ['64:ff9b::7f00:1'],
+      }),
+    ).rejects.toThrow(ValidationError);
+  });
 
   it('blocks loopback/metadata always and private ranges unless allowed', async () => {
     const opts = (addrs: string[], allowPrivateNetworks = false) => ({

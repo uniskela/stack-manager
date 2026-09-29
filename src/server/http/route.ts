@@ -9,6 +9,7 @@ import {
   isAppError,
   ValidationError,
 } from '@/server/domain/errors';
+import { clientIpFrom } from './client-ip';
 import { parseCookies, sessionCookieName } from './cookies';
 import { isMutation, isSameOrigin } from './origin';
 
@@ -53,12 +54,37 @@ export function errorResponse(error: unknown, container?: Container): Response {
   return json({ error: { code: 'internal_error', message: 'Something went wrong.' } }, { status: 500 });
 }
 
-export function requestContextFrom(req: Request): RequestContext {
-  const forwarded = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
+export function requestContextFrom(req: Request, trustedProxyHops: number): RequestContext {
   return {
-    ip: forwarded || req.headers.get('x-real-ip') || null,
+    ip: clientIpFrom(req.headers, trustedProxyHops),
     userAgent: req.headers.get('user-agent'),
   };
+}
+
+const tooLarge = () => new AppError(413, 'payload_too_large', 'Request body too large.');
+
+/**
+ * Reads the body as UTF-8 while enforcing `limit`: a declared Content-Length over the cap is rejected
+ * before reading, and streaming stops as soon as the accumulated size exceeds it.
+ */
+export async function readBodyWithLimit(req: Request, limit: number): Promise<string> {
+  const declared = req.headers.get('content-length');
+  if (declared !== null && (!/^\d+$/.test(declared) || Number(declared) > limit)) throw tooLarge();
+  if (!req.body) return '';
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > limit) {
+      await reader.cancel().catch(() => undefined);
+      throw tooLarge();
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString('utf8');
 }
 
 /**
@@ -89,9 +115,7 @@ export function defineRoute<P = Record<string, string>, B = undefined, A extends
         if (!contentType.toLowerCase().startsWith('application/json')) {
           throw new AppError(415, 'unsupported_media_type', 'Expected application/json.');
         }
-        const text = await req.text();
-        if (Buffer.byteLength(text, 'utf8') > MAX_BODY_BYTES)
-          throw new AppError(413, 'payload_too_large', 'Request body too large.');
+        const text = await readBodyWithLimit(req, MAX_BODY_BYTES);
         let raw: unknown;
         try {
           raw = JSON.parse(text);
@@ -110,7 +134,7 @@ export function defineRoute<P = Record<string, string>, B = undefined, A extends
         body,
         container,
         session: session as RouteContext<P, B, A>['session'],
-        requestContext: requestContextFrom(req),
+        requestContext: requestContextFrom(req, config.trustedProxyHops),
         sessionToken,
       });
       return result instanceof Response ? result : json(result ?? { ok: true });

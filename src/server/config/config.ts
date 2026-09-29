@@ -18,6 +18,8 @@ export interface AppConfig {
   publicUrl: URL | null;
   setupToken: string | null;
   allowPrivateNetworks: boolean;
+  /** Number of trusted reverse proxies in front of the app; 0 = ignore X-Forwarded-For/X-Real-IP. */
+  trustedProxyHops: number;
   logLevel: LogLevel;
   workerEnabled: boolean;
 }
@@ -99,6 +101,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     STACK_MANAGER_COOKIE_SECURE: bool('STACK_MANAGER_COOKIE_SECURE').optional(),
     STACK_MANAGER_SETUP_TOKEN: z.string().optional(),
     STACK_MANAGER_ALLOW_PRIVATE_NETWORKS: bool('STACK_MANAGER_ALLOW_PRIVATE_NETWORKS').default(false),
+    STACK_MANAGER_TRUSTED_PROXY_HOPS: z.coerce.number().int().min(0).max(10).default(0),
     STACK_MANAGER_LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
     STACK_MANAGER_WORKER_ENABLED: bool('STACK_MANAGER_WORKER_ENABLED').default(true),
     STACK_MANAGER_SESSION_TTL_HOURS: z.coerce
@@ -134,6 +137,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     publicUrl,
     setupToken,
     allowPrivateNetworks: o.STACK_MANAGER_ALLOW_PRIVATE_NETWORKS,
+    trustedProxyHops: o.STACK_MANAGER_TRUSTED_PROXY_HOPS,
     logLevel: o.STACK_MANAGER_LOG_LEVEL,
     workerEnabled: o.STACK_MANAGER_WORKER_ENABLED,
   };

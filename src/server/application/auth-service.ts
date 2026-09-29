@@ -74,7 +74,8 @@ export class AuthService {
     if (!(await this.isSetupRequired()))
       throw new ConflictError('Setup has already been completed.', 'setup_complete');
     if (this.options.setupToken) {
-      const limiterKey = `setup:${ctx.ip ?? 'unknown'}`;
+      // Without a trustworthy client address, setup-token guessing is limited globally (pre-setup only).
+      const limiterKey = `setup:${ctx.ip ?? 'global'}`;
       if (this.#loginLimiter.isBlocked(limiterKey)) throw new RateLimitedError();
       if (!input.setupToken || !safeEqual(input.setupToken, this.options.setupToken)) {
         this.#loginLimiter.recordFailure(limiterKey);
@@ -116,7 +117,9 @@ export class AuthService {
   ): Promise<{ user: User; token: string; expiresAt: Date }> {
     const username = typeof input.username === 'string' ? input.username.trim().toLowerCase() : '';
     const password = typeof input.password === 'string' ? input.password : '';
-    const keys = [`user:${username}`, `ip:${ctx.ip ?? 'unknown'}`];
+    // Unknown client addresses are not pooled into one bucket (that would let anyone lock out everyone);
+    // the per-username bucket still applies.
+    const keys = [`user:${username}`, ...(ctx.ip ? [`ip:${ctx.ip}`] : [])];
     if (keys.some((k) => this.#loginLimiter.isBlocked(k))) throw new RateLimitedError();
 
     const record =

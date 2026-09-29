@@ -164,6 +164,49 @@ describe('sessions', () => {
     expect(limited.status).toBe(429);
   });
 
+  it('does not trust X-Forwarded-For by default and does not pool unknown clients', async () => {
+    await setupAdmin();
+    // Failures against other usernames from "unknown" clients must not lock out the admin.
+    for (let i = 0; i < 12; i++) {
+      await call(login.POST, {
+        method: 'POST',
+        body: { username: `ghost${i}`, password: 'wrong password!!' },
+      });
+    }
+    expect(
+      (await call(login.POST, { method: 'POST', body: { username: 'admin', password: PASSWORD } })).status,
+    ).toBe(200);
+    // Rotating a spoofed X-Forwarded-For does not escape the per-username limit.
+    for (let i = 0; i < 10; i++) {
+      await call(login.POST, {
+        method: 'POST',
+        body: { username: 'admin', password: `wrong-password-${i}` },
+        headers: { 'x-forwarded-for': `198.51.100.${i}` },
+      });
+    }
+    const limited = await call(login.POST, {
+      method: 'POST',
+      body: { username: 'admin', password: PASSWORD },
+      headers: { 'x-forwarded-for': '198.51.100.200' },
+    });
+    expect(limited.status).toBe(429);
+  });
+
+  it('uses the trusted proxy hop count to key rate limits by client address', async () => {
+    await h.cleanup();
+    h = await createHarness({ env: { STACK_MANAGER_TRUSTED_PROXY_HOPS: '1' } });
+    await setupAdmin();
+    const from = (ip: string, username: string) =>
+      call(login.POST, {
+        method: 'POST',
+        body: { username, password: 'wrong password!!' },
+        headers: { 'x-forwarded-for': `6.6.6.6, ${ip}` },
+      });
+    for (let i = 0; i < 10; i++) await from('203.0.113.5', `user${i}`);
+    expect((await from('203.0.113.5', 'another')).status).toBe(429);
+    expect((await from('203.0.113.6', 'another')).status).toBe(401);
+  });
+
   it('never logs or audits passwords or session tokens', async () => {
     const res = await call(setup.POST, { method: 'POST', body: { username: 'admin', password: PASSWORD } });
     const token = decodeURIComponent(cookieFrom(res).split('=')[1]!);
@@ -234,6 +277,34 @@ describe('request protection', () => {
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
     });
     expect(res.status).toBe(415);
+  });
+
+  it('rejects oversized bodies by Content-Length and while streaming', async () => {
+    const big = JSON.stringify({ username: 'admin', password: 'x'.repeat(70 * 1024) });
+    const declared = await call(setup.POST, {
+      method: 'POST',
+      body: big,
+      headers: { 'content-length': String(big.length) },
+    });
+    expect(declared.status).toBe(413);
+
+    let pulled = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled++;
+        controller.enqueue(new Uint8Array(16 * 1024).fill(0x61));
+        if (pulled > 1000) controller.close(); // never reached: the reader must stop at the cap
+      },
+    });
+    const req = new Request('http://stack.test/api/setup', {
+      method: 'POST',
+      headers: { host: 'stack.test', origin: 'http://stack.test', 'content-type': 'application/json' },
+      body: stream,
+      duplex: 'half',
+    } as RequestInit);
+    const res = await setup.POST(req, { params: Promise.resolve({}) });
+    expect(res.status).toBe(413);
+    expect(pulled).toBeLessThan(10);
   });
 
   it('health endpoint is public and minimal', async () => {
