@@ -1,6 +1,6 @@
 # Phased MVP implementation plan
 
-PR #1 (documentation) is merged. **PR #2 (application foundation) is the active phase.** Subsequent PRs implement the product. Boundaries may shift for strong technical reasons; avoid giant cross-cutting PRs.
+PR #1 (documentation) and PR #2 (application foundation) are merged. **PR #3 (source workspace) is the active phase.** Subsequent PRs implement the product. Boundaries may shift for strong technical reasons; avoid giant cross-cutting PRs.
 
 ## PR sequence
 
@@ -39,6 +39,20 @@ PR #1 (documentation) is merged. **PR #2 (application foundation) is the active 
 - [x] Dockerfile, docker-compose.yml, `.env.example`, healthcheck, non-root, migrations on start
 - [x] CI: format, lint, typecheck, tests, migration drift, build, smoke, Docker image
 - Deferred: SSH remotes, webhook credential/verification (PR #5), commit/push (PR #4), key re-encryption job
+
+## PR #3 exit criteria
+
+- [x] Explicit `Stack` records (root folder + primary Compose file); discovery suggests folders with a Compose file, operator confirms
+- [x] Read-only access to committed files from Git objects (`ls-tree` / `cat-file`), scoped to the stack folder
+- [x] Secret-looking files (`.env`, keys, `secrets/`) listed as locked; contents never returned; drafts refused
+- [x] VS Code-style editor on CodeMirror 6: explorer, tabs, problems panel, status bar, Ctrl/⌘+S, soft-wrap on mobile
+- [x] Drafts persisted in the database (`source_drafts`), outdated detection when the file changes upstream
+- [x] Live validation: YAML syntax, Compose structure, unknown services/networks/volumes, hard-coded secrets, unpinned images
+- [x] Environment inventory: `${VAR}` references, defaults/required, `.env.example` coverage, env_file references
+- [x] Docs tab: Markdown reading view (Notion-style) with Edit and Split live-preview modes
+- [x] Changes tab: unified diff of drafts against their base, discard
+- [x] Unit, integration and Playwright + axe tests (desktop/mobile, light/dark)
+- Deferred to PR #4: commit/push of drafts, conflict resolution, stack-scoped history. Deferred: `docker compose config` validation (needs a Docker binary), docs globs per stack, command palette
 
 ## Dependency graph
 

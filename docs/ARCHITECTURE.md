@@ -125,9 +125,11 @@ src/
   app/                      # Next.js App Router: pages (server components) + thin API route handlers
     api/…/route.ts          # every handler wrapped by defineRoute (auth default-deny, origin check, zod)
     styles/                 # tokens.css → base.css → components.css → shell.css (no inline styles; lint-enforced)
+  shared/source/            # pure path rules, secret-file policy, Compose/YAML analysis (server + browser)
   ui/                       # UI components; may not import src/server/*
     primitives/             # Button, Alert, Section, PageHeader, Breadcrumbs, EmptyState, ConfirmButton, StatusPill
     shell/                  # signed-in app shell: sidebar (wide) / top bar + drawer (narrow)
+    source/                 # stack editor (CodeMirror 6), file tree, docs, changes, discovery
   server/
     config/                 # env parsing and validation
     domain/                 # entities, validation, errors — no framework/persistence imports

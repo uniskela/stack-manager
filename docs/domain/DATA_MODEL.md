@@ -217,13 +217,17 @@ straightforward. Additions beyond the logical model above:
 
 ## Working tree / drafts
 
-PR #4 may introduce:
+**Decided in PR #3:** edits are stored as database drafts, not in a Git working tree.
 
-- `DraftChange` or filesystem working copy per repository under data dir
-- Association with user + stack scope
-- Conflict state vs remote
+| Entity | Fields | Notes |
+| --- | --- | --- |
+| Stack (`stacks`) | `repositoryId`, `name`, `slug`, `rootPath`, `composePath` | Unique per repository by `rootPath` and `slug`; `rootPath = ''` is the repository root |
+| SourceDraft (`source_drafts`) | `repositoryId`, `path`, `content`, `baseBlobSha`, `baseCommitSha`, created/updated by | One draft per repository path (stacks may overlap); `baseBlobSha = null` for a new file |
 
-Exact persistence (DB vs git worktree) decided in PR #4 design spike; architecture requires isolation from the bare remote and encrypt-at-rest for any mirrored env files that might contain secrets (prefer never storing secret values).
+- Committed content is read from Git objects of the fetched `origin/<branch>` commit, never from the working tree.
+- A draft is **outdated** when the committed blob at its path no longer matches `baseBlobSha`.
+- Secret-looking paths (`.env`, keys, `secrets/`) are never accepted as drafts, so no secret values are stored.
+- PR #4 turns drafts into commits (and deletes them once pushed), with conflict handling for outdated drafts.
 
 ## Non-entities (explicitly out of core model)
 

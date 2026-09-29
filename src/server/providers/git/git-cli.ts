@@ -19,6 +19,8 @@ export interface GitRunOptions {
   auth?: GitHttpAuth | null;
   timeoutMs?: number;
   signal?: AbortSignal;
+  /** Cap on collected stdout+stderr (default 4 MiB). Output beyond it is dropped and `truncated` is set. */
+  maxOutputBytes?: number;
 }
 
 const MAX_OUTPUT = 4 * 1024 * 1024;
@@ -59,7 +61,7 @@ export class GitCli {
   async run(
     args: readonly string[],
     options: GitRunOptions = {},
-  ): Promise<{ stdout: string; stderr: string }> {
+  ): Promise<{ stdout: string; stderr: string; truncated: boolean }> {
     const secrets: string[] = [];
     const config: Array<readonly [string, string]> = [
       ['core.hooksPath', '/dev/null'],
@@ -101,6 +103,7 @@ export class GitCli {
     });
 
     const timeoutMs = options.timeoutMs ?? this.#defaultTimeoutMs;
+    const maxOutput = options.maxOutputBytes ?? MAX_OUTPUT;
 
     return new Promise((resolve, reject) => {
       const child = spawn(this.#binary, [...args], {
@@ -115,9 +118,11 @@ export class GitCli {
       const out: Buffer[] = [];
       const err: Buffer[] = [];
       let size = 0;
+      let truncated = false;
       const collect = (sink: Buffer[]) => (chunk: Buffer) => {
         size += chunk.length;
-        if (size <= MAX_OUTPUT) sink.push(chunk);
+        if (size <= maxOutput) sink.push(chunk);
+        else truncated = true;
       };
       child.stdout.on('data', collect(out));
       child.stderr.on('data', collect(err));
@@ -135,7 +140,7 @@ export class GitCli {
       child.on('close', (code, signal) => {
         const stdout = Buffer.concat(out).toString('utf8');
         const stderr = scrubString(Buffer.concat(err).toString('utf8'), { secrets });
-        if (code === 0) return resolve({ stdout, stderr });
+        if (code === 0) return resolve({ stdout, stderr, truncated });
         if (signal === 'SIGKILL') {
           return reject(
             new GitOperationError(

@@ -1,7 +1,9 @@
 import type { AuditEvent } from '@/server/domain/audit';
 import type { CredentialRecord, CredentialTestStatus } from '@/server/domain/credential';
+import type { SourceDraft } from '@/server/domain/draft';
 import type { GitRepositoryConnection } from '@/server/domain/git-repository';
 import type { Job } from '@/server/domain/job';
+import type { Stack } from '@/server/domain/stack';
 import type { Session, User, UserWithPasswordHash } from '@/server/domain/user';
 import type { Workspace } from '@/server/domain/workspace';
 
@@ -129,6 +131,27 @@ export interface AuditRepository {
   list(filter: { workspaceId?: string; limit: number }): Promise<AuditEvent[]>;
 }
 
+export interface StackRepository {
+  insert(stack: Stack): Promise<void>;
+  findById(workspaceId: string, id: string): Promise<Stack | null>;
+  list(workspaceId: string): Promise<Stack[]>;
+  listByRepository(workspaceId: string, repositoryId: string): Promise<Stack[]>;
+  update(
+    id: string,
+    patch: Partial<Pick<Stack, 'name' | 'composePath'>> & { updatedAt: Date },
+  ): Promise<void>;
+  delete(id: string): Promise<void>;
+}
+
+export interface SourceDraftRepository {
+  find(repositoryId: string, path: string): Promise<SourceDraft | null>;
+  /** Drafts of a repository, optionally only those at or under `rootPath`. */
+  list(repositoryId: string, rootPath?: string): Promise<SourceDraft[]>;
+  /** Inserts or replaces the draft for (repositoryId, path). Keeps the original id/createdAt/base commit. */
+  upsert(draft: SourceDraft): Promise<SourceDraft>;
+  delete(repositoryId: string, path: string): Promise<boolean>;
+}
+
 export interface Repositories {
   users: UserRepository;
   sessions: SessionRepository;
@@ -137,4 +160,6 @@ export interface Repositories {
   gitRepositories: GitRepositoryConnectionRepository;
   jobs: JobRepository;
   audit: AuditRepository;
+  stacks: StackRepository;
+  drafts: SourceDraftRepository;
 }

@@ -8,6 +8,8 @@ import { CredentialService } from '@/server/application/credential-service';
 import { GitRepositoryService, REPOSITORY_SYNC_JOB } from '@/server/application/git-repository-service';
 import { JobQueue } from '@/server/application/job-queue';
 import type { Repositories } from '@/server/application/ports';
+import { SourceService } from '@/server/application/source-service';
+import { StackService } from '@/server/application/stack-service';
 import { WorkspaceService } from '@/server/application/workspace-service';
 import { loadConfig, type AppConfig } from '@/server/config/config';
 import { systemClock, type Clock } from '@/server/domain/clock';
@@ -22,6 +24,7 @@ import {
 import { createSqliteRepositories } from '@/server/persistence/sqlite/repositories';
 import { GitCli } from '@/server/providers/git/git-cli';
 import { createDefaultGitProviderRegistry, type GitProviderRegistry } from '@/server/providers/git/registry';
+import { GitSourceReader } from '@/server/providers/git/source-reader';
 import type { Resolver } from '@/server/security/network-policy';
 import { SecretBox } from '@/server/security/secret-box';
 
@@ -40,6 +43,8 @@ export interface Container {
   credentials: CredentialService;
   gitProviders: GitProviderRegistry;
   repositories: GitRepositoryService;
+  stacks: StackService;
+  source: SourceService;
   jobs: JobQueue;
   worker: JobWorker;
   ping(): boolean;
@@ -112,6 +117,10 @@ export function createContainer(config: AppConfig, overrides: ContainerOverrides
       },
     );
 
+    const reader = new GitSourceReader(git);
+    const stacks = new StackService(repos.stacks, repositories, reader, audit, clock, newId);
+    const source = new SourceService(repositories, reader, repos.drafts, audit, clock, newId);
+
     const handlers = new Map<string, JobHandler>([
       [
         REPOSITORY_SYNC_JOB,
@@ -142,6 +151,8 @@ export function createContainer(config: AppConfig, overrides: ContainerOverrides
       credentials,
       gitProviders,
       repositories,
+      stacks,
+      source,
       jobs,
       worker,
       ping: () => pingSqlite(handle.db),

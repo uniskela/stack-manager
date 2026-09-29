@@ -17,6 +17,12 @@ export interface GitServer {
   requestUrls: string[];
   createRepo(name: string, branches?: string[]): void;
   commit(name: string, branch: string, file: string, content: string): string;
+  /** Commits several files at once; `{ symlink }` creates a symlink and `null` deletes the path. */
+  commitFiles(
+    name: string,
+    branch: string,
+    files: Record<string, string | { symlink: string } | null>,
+  ): string;
   close(): Promise<void>;
 }
 
@@ -115,6 +121,22 @@ export async function startGitServer(
       fs.writeFileSync(path.join(wt, file), content);
       execFileSync('git', ['add', '.'], { cwd: wt, env: gitEnv });
       execFileSync('git', ['commit', '-q', '-m', `update ${file}`], { cwd: wt, env: gitEnv });
+      execFileSync('git', ['push', '-q', 'origin', `${branch}:${branch}`], { cwd: wt, env: gitEnv });
+      return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: wt, env: gitEnv }).toString().trim();
+    },
+    commitFiles(name, branch, files) {
+      const wt = work(name);
+      execFileSync('git', ['checkout', '-q', '-B', branch], { cwd: wt, env: gitEnv });
+      for (const [file, content] of Object.entries(files)) {
+        const target = path.join(wt, file);
+        fs.rmSync(target, { force: true, recursive: true });
+        if (content === null) continue;
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        if (typeof content === 'string') fs.writeFileSync(target, content);
+        else fs.symlinkSync(content.symlink, target);
+      }
+      execFileSync('git', ['add', '-A'], { cwd: wt, env: gitEnv });
+      execFileSync('git', ['commit', '-q', '-m', 'update files'], { cwd: wt, env: gitEnv });
       execFileSync('git', ['push', '-q', 'origin', `${branch}:${branch}`], { cwd: wt, env: gitEnv });
       return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: wt, env: gitEnv }).toString().trim();
     },

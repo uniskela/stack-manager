@@ -17,8 +17,9 @@ test.describe('signed in', () => {
 
   test('workspace home: empty state, navigation and accessibility', async ({ page }) => {
     await page.goto('/');
+    // Empty workspace, or the repository list when the source workspace tests connected a sample repo.
     await expect(
-      page.getByRole('heading', { level: 1, name: 'Connect your Compose repository' }),
+      page.getByRole('heading', { level: 1, name: /^(Connect your Compose repository|Repositories)$/ }),
     ).toBeVisible();
     await expect(page.getByRole('link', { name: 'stack-manager home' }).first()).toBeVisible();
     await expectAccessible(page);

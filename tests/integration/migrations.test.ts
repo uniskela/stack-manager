@@ -13,7 +13,7 @@ const tmpDb = () => {
 afterEach(() => dirs.splice(0).forEach((d) => fs.rmSync(d, { recursive: true, force: true })));
 
 describe('migrations', () => {
-  it('create the foundation schema from an empty database and are idempotent', () => {
+  it('create the schema from an empty database and are idempotent', () => {
     const file = tmpDb();
     const handle = openSqlite(file);
     runMigrations(handle.db);
@@ -31,6 +31,8 @@ describe('migrations', () => {
       'jobs',
       'provider_credentials',
       'sessions',
+      'source_drafts',
+      'stacks',
       'users',
       'workspaces',
     ]);

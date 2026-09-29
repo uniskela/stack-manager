@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm';
 import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 /**
- * Physical schema for the PR #2 foundation entities (docs/domain/DATA_MODEL.md).
+ * Physical schema for the PR #2 foundation entities and the PR #3 source workspace (docs/domain/DATA_MODEL.md).
  *
  * Portability rules (keep a PostgreSQL port practical):
  * - ids are application-generated UUID strings, never autoincrement integers;
@@ -163,4 +163,55 @@ export const auditEvents = sqliteTable(
     index('audit_created_idx').on(t.createdAt),
     index('audit_workspace_idx').on(t.workspaceId, t.createdAt),
   ],
+);
+
+/** PR #3: explicit stacks inside a connected repository (docs/STACK_DISCOVERY.md). */
+export const stacks = sqliteTable(
+  'stacks',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    repositoryId: text('repository_id')
+      .notNull()
+      .references(() => gitRepositoryConnections.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    slug: text('slug').notNull(),
+    /** Repo-relative directory; '' is the repository root. */
+    rootPath: text('root_path').notNull(),
+    /** Repo-relative path of the primary Compose file. */
+    composePath: text('compose_path').notNull(),
+    createdAt: ts('created_at').notNull(),
+    updatedAt: ts('updated_at').notNull(),
+  },
+  (t) => [
+    index('stacks_workspace_idx').on(t.workspaceId),
+    uniqueIndex('stacks_repo_root_uq').on(t.repositoryId, t.rootPath),
+    uniqueIndex('stacks_repo_slug_uq').on(t.repositoryId, t.slug),
+  ],
+);
+
+/** PR #3: pending edits to repository files. PR #4 turns them into commits. */
+export const sourceDrafts = sqliteTable(
+  'source_drafts',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    repositoryId: text('repository_id')
+      .notNull()
+      .references(() => gitRepositoryConnections.id, { onDelete: 'cascade' }),
+    path: text('path').notNull(),
+    content: text('content').notNull(),
+    /** Null for a new file. */
+    baseBlobSha: text('base_blob_sha'),
+    baseCommitSha: text('base_commit_sha').notNull(),
+    createdByUserId: text('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    updatedByUserId: text('updated_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: ts('created_at').notNull(),
+    updatedAt: ts('updated_at').notNull(),
+  },
+  (t) => [uniqueIndex('source_drafts_repo_path_uq').on(t.repositoryId, t.path)],
 );

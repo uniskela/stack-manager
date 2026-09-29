@@ -44,6 +44,10 @@ jobs:
           for i in $(seq 1 30); do curl -sf http://127.0.0.1:3000/api/health && break; sleep 1; done
           BASE_URL=http://127.0.0.1:3000 scripts/smoke.sh || (cat "$RUNNER_TEMP/server.log"; exit 1)
       - name: UI tests (Playwright + axe, production build)
+        env:
+          # Public, credential-free sample repository for the source workspace (editor) tests.
+          E2E_GIT_REMOTE: https://github.com/docker/awesome-compose.git
+          E2E_STACK_ROOT: nginx-golang
         run: |
           pnpm exec playwright install --with-deps chromium
           pnpm test:e2e

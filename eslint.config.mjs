@@ -12,7 +12,16 @@ const inlineStyle = 'Use a class from src/app/styles (backed by the design token
 export default defineConfig([
   ...nextVitals,
   ...nextTs,
-  globalIgnores(['.next/**', 'out/**', 'build/**', 'coverage/**', 'data/**', 'next-env.d.ts']),
+  globalIgnores([
+    '.next/**',
+    'playwright-report/**',
+    'test-results/**',
+    'out/**',
+    'build/**',
+    'coverage/**',
+    'data/**',
+    'next-env.d.ts',
+  ]),
   {
     rules: {
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
@@ -65,6 +74,17 @@ export default defineConfig([
     rules: {
       'react/forbid-dom-props': ['error', { forbid: [{ propName: 'style', message: inlineStyle }] }],
       'react/forbid-component-props': ['error', { forbid: [{ propName: 'style', message: inlineStyle }] }],
+    },
+  },
+  {
+    files: ['src/shared/**'],
+    rules: {
+      'no-restricted-imports': layerRule([
+        {
+          group: ['@/server/*', '@/ui/*', '@/app/*', 'next/*', 'react', 'node:*'],
+          message: 'src/shared is pure code used by both the server and the browser.',
+        },
+      ]),
     },
   },
   {

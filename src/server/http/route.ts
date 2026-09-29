@@ -29,6 +29,8 @@ export interface RouteOptions<B, A extends AuthMode> {
   /** Default-deny: every route must choose. Only setup, login and health are public. */
   auth: A;
   body?: ZodType<B>;
+  /** Request body cap in bytes (default 64 KiB). Raise only for routes that carry file content. */
+  maxBodyBytes?: number;
 }
 
 type NextSegment = { params: Promise<Record<string, string | string[]>> };
@@ -115,7 +117,7 @@ export function defineRoute<P = Record<string, string>, B = undefined, A extends
         if (!contentType.toLowerCase().startsWith('application/json')) {
           throw new AppError(415, 'unsupported_media_type', 'Expected application/json.');
         }
-        const text = await readBodyWithLimit(req, MAX_BODY_BYTES);
+        const text = await readBodyWithLimit(req, options.maxBodyBytes ?? MAX_BODY_BYTES);
         let raw: unknown;
         try {
           raw = JSON.parse(text);

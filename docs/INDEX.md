@@ -1,6 +1,6 @@
 # Documentation index
 
-Architecture, planning and operations docs for **stack-manager**. Current phase: **PR #2 — application foundation** (see [plans/MVP_PLAN.md](plans/MVP_PLAN.md)).
+Architecture, planning and operations docs for **stack-manager**. Current phase: **PR #3 — source workspace** (see [plans/MVP_PLAN.md](plans/MVP_PLAN.md)).
 
 ## Product and architecture
 
