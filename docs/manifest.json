@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "pages": [
+    {
+      "source": "README.md",
+      "slug": "readme",
+      "kind": "readme"
+    },
+    {
+      "source": "docs/index.md",
+      "slug": "index",
+      "title": "Overview",
+      "group": "Start here",
+      "kind": "doc"
+    },
+    {
+      "source": "docs/installation.md",
+      "slug": "installation",
+      "title": "Installation",
+      "group": "Start here",
+      "kind": "doc"
+    },
+    {
+      "source": "docs/getting-started.md",
+      "slug": "getting-started",
+      "title": "Getting started",
+      "group": "Start here",
+      "kind": "doc"
+    },
+    {
+      "source": "docs/SELF_HOSTING.md",
+      "slug": "self-hosting",
+      "title": "Self-hosting reference",
+      "group": "Deploy & operate",
+      "kind": "doc"
+    },
+    {
+      "source": "docs/BACKUP_RESTORE.md",
+      "slug": "backup-restore",
+      "title": "Backup and restore",
+      "group": "Deploy & operate",
+      "kind": "doc"
+    },
+    {
+      "source": "docs/AUTH_AND_CREDENTIALS.md",
+      "slug": "auth-and-credentials",
+      "title": "Authentication and credentials",
+      "group": "Deploy & operate",
+      "kind": "doc"
+    },
+    {
+      "source": "docs/SECURITY.md",
+      "slug": "security",
+      "title": "Security",
+      "group": "Deploy & operate",
+      "kind": "doc"
+    },
+    {
+      "source": "docs/PRODUCT.md",
+      "slug": "product",
+      "title": "Product scope",
+      "group": "Project",
+      "kind": "doc"
+    },
+    {
+      "source": "docs/STACK_DISCOVERY.md",
+      "slug": "stack-discovery",
+      "title": "Stack discovery",
+      "group": "Project",
+      "kind": "doc"
+    },
+    {
+      "source": "docs/ARCHITECTURE.md",
+      "slug": "architecture",
+      "title": "Architecture",
+      "group": "Project",
+      "kind": "doc"
+    },
+    {
+      "source": "docs/RELEASING.md",
+      "slug": "releasing",
+      "title": "Releases and CI",
+      "group": "Project",
+      "kind": "doc"
+    },
+    {
+      "source": "docs/TESTING.md",
+      "slug": "testing",
+      "title": "Testing",
+      "group": "Project",
+      "kind": "doc"
+    },
+    {
+      "source": "docs/plans/MVP_PLAN.md",
+      "slug": "plans/mvp-plan",
+      "title": "Roadmap",
+      "group": "Project",
+      "kind": "doc"
+    }
+  ]
+}

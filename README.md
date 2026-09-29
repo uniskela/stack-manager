@@ -10,37 +10,43 @@ It is **not** a Portainer / Komodo / Arcane / Docker UI replacement. Those syste
 
 ## Status
 
-**PR #2 — application foundation.** A runnable, self-hosted foundation: first-run admin setup, sessions,
-workspaces, encrypted provider credentials, Git repository connections (GitHub / Gitea / Forgejo over HTTPS)
-with background clone/fetch, a persisted job queue, and a redacted audit trail.
+Early development (0.x). Available today: first-run setup, workspaces, encrypted credentials, Git repository
+connections (GitHub / Gitea / Forgejo over HTTPS), stacks, a VS Code-style editor with drafts and Compose validation,
+stack docs, an environment inventory and change review. Committing drafts to Git and deploying only the affected
+stacks come next; see the [roadmap](docs/plans/MVP_PLAN.md).
 
-Stack scopes, editors and the Git commit workflow arrive in later PRs — see
-[docs/plans/MVP_PLAN.md](docs/plans/MVP_PLAN.md).
+**Documentation:** [uniskela.com/docs/stack-manager](https://uniskela.com/docs/stack-manager/) (source in
+[docs/](docs/index.md)).
 
 | Document | Purpose |
 | --- | --- |
-| [docs/PRODUCT.md](docs/PRODUCT.md) | Product definition, goals, non-goals |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System architecture and code layout |
-| [docs/SELF_HOSTING.md](docs/SELF_HOSTING.md) | Configuration, data directory, Docker, upgrades |
-| [docs/plans/MVP_PLAN.md](docs/plans/MVP_PLAN.md) | Phased PR implementation sequence |
-| [docs/INDEX.md](docs/INDEX.md) | Full documentation index |
+| [Installation](docs/installation.md) | Run the published container image with Docker Compose |
+| [Getting started](docs/getting-started.md) | First run, connecting a repository, stacks and the editor |
+| [Self-hosting reference](docs/SELF_HOSTING.md) | Configuration, data directory, reverse proxy, upgrades |
+| [Product](docs/PRODUCT.md) / [Architecture](docs/ARCHITECTURE.md) | What it is (and is not), and how it is built |
+| [Docs index](docs/INDEX.md) | Every design, planning and operations document |
 
 ## Quick start (Docker Compose)
 
 ```bash
+git clone https://github.com/uniskela/stack-manager.git && cd stack-manager
 cp .env.example .env
-# Fill in the two required secrets:
+# Set the version and the two required secrets:
+#   STACK_MANAGER_VERSION=0.1.0
 #   STACK_MANAGER_ENCRYPTION_KEY=$(openssl rand -base64 32)
 #   STACK_MANAGER_SESSION_SECRET=$(openssl rand -base64 48)
-docker compose up -d --build
+docker compose up -d
 ```
+
+This pulls `ghcr.io/uniskela/stack-manager`. To build your checkout instead, run
+`docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build`.
 
 Open `http://localhost:3000` (the port is published on localhost only; see `STACK_MANAGER_BIND`) and follow the setup: **admin account → workspace → repository**.
 Put stack-manager behind a TLS-terminating reverse proxy and set `STACK_MANAGER_PUBLIC_URL`.
 For plain-HTTP testing on localhost set `STACK_MANAGER_COOKIE_SECURE=false`.
 
 The container runs as a non-root user with a read-only root filesystem; all state lives in the `/data`
-volume. No Docker socket is mounted. See [docs/SELF_HOSTING.md](docs/SELF_HOSTING.md).
+volume. No Docker socket is mounted. See [docs/installation.md](docs/installation.md).
 
 ## Development
 
@@ -67,8 +73,8 @@ pnpm dev               # http://localhost:3000 (set STACK_MANAGER_COOKIE_SECURE=
 - Self-hosted **Next.js (App Router) + TypeScript** modular monolith, long-running Node (not serverless)
 - **Drizzle ORM** + **SQLite** behind repository ports (PostgreSQL-ready)
 - Persisted job table with an in-process, lease-based worker (no Redis)
-- Capability-based **Git / Deployment / Runtime / Secret** providers (Git implemented in PR #2)
-- **CodeMirror 6** preferred for editors (PR #3)
+- Capability-based **Git / Deployment / Runtime / Secret** providers (Git implemented)
+- **CodeMirror 6** editor
 
 ## License
 
