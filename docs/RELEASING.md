@@ -29,7 +29,8 @@ All third-party actions are pinned to commit SHAs; Dependabot proposes weekly up
    the image passed its smoke test and vulnerability gate.
 4. Version tags are **immutable**: a published release is never rebuilt or retargeted. Running **Publish container
    image** manually for an existing tag only restores missing tags (byte-identical copies of the published digest)
-   and fails if tags of one release disagree.
+   and fails if tags of one release disagree. Only a registry "not found" counts as a missing tag; any other lookup
+   error (auth, rate limit, network) fails the run instead of rebuilding.
 5. Moving tags follow Git tags: `latest` moves only to the highest `vX.Y.Z`, and `X.Y` only to the highest patch of
    that line, so republishing an old release or runs finishing out of order never move them backwards. Promotions
    share one concurrency group. The tag logic lives in `scripts/ci/release-image.sh`.
