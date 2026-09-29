@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # ---------- dependencies ----------
-FROM node:24-bookworm-slim AS deps
+FROM node:26-bookworm-slim AS deps
 WORKDIR /app
 # Toolchain is only a fallback for native modules without a prebuilt binary; it never reaches the runtime image.
 RUN apt-get update \
@@ -20,7 +20,7 @@ RUN pnpm build \
   && rm -rf .next/standalone/src .next/standalone/tests .next/standalone/docs
 
 # ---------- runtime ----------
-FROM node:24-bookworm-slim AS runtime
+FROM node:26-bookworm-slim AS runtime
 # git: clone/fetch of repository connections. tini: PID 1 signal handling and zombie reaping.
 # Security updates are applied at build time, and package managers the runtime never uses (npm, npx, corepack,
 # yarn) are removed so their dependency trees cannot carry vulnerabilities into the image.
