@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { getContainer } from '@/server/container';
-import { joinRepoPath, normalizeRepoPath } from '@/shared/source/paths';
 import { StackEditor } from '@/ui/source/stack-editor';
+import { resolveRequested } from '../../../../_lib/source';
 
 export const metadata: Metadata = { title: 'Editor' };
 
@@ -18,16 +18,10 @@ export default async function StackEditorPage({
   const tree = await source.tree(workspaceId, stack.repository.id, stack.rootPath);
 
   // ?file= is relative to the stack folder; fall back to the Compose file.
-  const requested = (await searchParams).file;
-  let path = stack.composePath;
-  if (typeof requested === 'string' && requested) {
-    try {
-      const candidate = normalizeRepoPath(joinRepoPath(stack.rootPath, normalizeRepoPath(requested)));
-      if (tree.entries.some((e) => e.path === candidate)) path = candidate;
-    } catch {
-      /* ignore a malformed ?file= and open the Compose file */
-    }
-  }
+  const path =
+    resolveRequested(stack.rootPath, (await searchParams).file, (p) =>
+      tree.entries.some((e) => e.path === p),
+    ) ?? stack.composePath;
   const initialFile = await source
     .readFile(workspaceId, stack.repository.id, stack.rootPath, path)
     .catch(() => null);
@@ -35,7 +29,7 @@ export default async function StackEditorPage({
   return (
     <StackEditor
       workspaceId={workspaceId}
-      stackId={stackId}
+      apiBase={`/api/workspaces/${workspaceId}/stacks/${stackId}`}
       rootPath={stack.rootPath}
       composePath={stack.composePath}
       branch={stack.repository.defaultBranch}

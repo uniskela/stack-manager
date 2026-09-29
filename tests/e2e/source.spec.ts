@@ -96,3 +96,25 @@ test('repository page pages through Compose folders and adds them all', async ({
   await expect(addAll).toBeHidden();
   await expect(folders.getByRole('checkbox')).toHaveCount(0);
 });
+
+test('repository Files, Docs and Changes tabs cover files outside stacks', async ({ page }) => {
+  const base = `/w/${sample().workspaceId}/repositories/${sample().repositoryId}`;
+  const tabs = page.getByRole('navigation', { name: 'Repository' });
+
+  await page.goto(`${base}/files`);
+  await expect(tabs.getByRole('link', { name: /Files/ })).toHaveAttribute('aria-current', 'page');
+  await expect(page.locator('.cm-editor')).toBeVisible();
+  // The landing file is the root README.
+  await expect(page.locator('.cm-content')).toContainText(/\S/);
+  await expect(page).toHaveURL(/file=README\.md/);
+  await expectAccessible(page);
+
+  await tabs.getByRole('link', { name: /Docs/ }).click();
+  await expect(tabs.getByRole('link', { name: /Docs/ })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByRole('navigation', { name: 'Documentation pages' })).toBeVisible();
+  await expectAccessible(page);
+
+  await tabs.getByRole('link', { name: /Changes/ }).click();
+  await expect(tabs.getByRole('link', { name: /Changes/ })).toHaveAttribute('aria-current', 'page');
+  await expectAccessible(page);
+});

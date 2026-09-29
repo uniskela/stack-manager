@@ -1,5 +1,8 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import * as repoRoute from '@/app/api/workspaces/[workspaceId]/repositories/[repositoryId]/route';
+import * as repoDraftsRoute from '@/app/api/workspaces/[workspaceId]/repositories/[repositoryId]/source/drafts/route';
+import * as repoFilesRoute from '@/app/api/workspaces/[workspaceId]/repositories/[repositoryId]/source/files/route';
+import * as repoTreeRoute from '@/app/api/workspaces/[workspaceId]/repositories/[repositoryId]/source/tree/route';
 import * as addAllRoute from '@/app/api/workspaces/[workspaceId]/repositories/[repositoryId]/stacks/all/route';
 import * as repoStacksRoute from '@/app/api/workspaces/[workspaceId]/repositories/[repositoryId]/stacks/route';
 import * as syncRoute from '@/app/api/workspaces/[workspaceId]/repositories/[repositoryId]/sync/route';
@@ -266,6 +269,102 @@ describe('adding all stacks', () => {
     expect((await addAll()).status).toBe(409);
     const anon = await call(addAllRoute.POST, { method: 'POST', params: { workspaceId, repositoryId } });
     expect(anon.status).toBe(401);
+  });
+});
+
+describe('repository-wide files', () => {
+  const ROOT_FILES = {
+    'README.md': '# Homelab\n\nSee [setup](docs/setup.md).\n',
+    'docs/setup.md': '# Setup\n',
+    '.env.example': 'TZ=\n',
+    '.env': 'TZ=Europe/Tallinn\nTOKEN=hunter2\n',
+  };
+  const refetch = async () => {
+    await call(syncRoute.POST, { method: 'POST', cookie, params: { workspaceId, repositoryId } });
+    await drainJobs();
+  };
+  const readRepoFile = (path: string, ws = workspaceId) =>
+    call(repoFilesRoute.GET, {
+      cookie,
+      params: { workspaceId: ws, repositoryId },
+      path: `/x?path=${encodeURIComponent(path)}`,
+    });
+  const saveRepoDraft = (body: Record<string, unknown>) =>
+    call(repoDraftsRoute.PUT, { method: 'PUT', cookie, params: { workspaceId, repositoryId }, body });
+
+  beforeEach(async () => {
+    server.commitFiles(REPO, 'main', ROOT_FILES);
+    await refetch();
+  });
+  afterEach(() => {
+    server.commitFiles(REPO, 'main', Object.fromEntries(Object.keys(ROOT_FILES).map((k) => [k, null])));
+  });
+
+  it('lists files outside any stack, with secret files locked', async () => {
+    const res = await call(repoTreeRoute.GET, { cookie, params: { workspaceId, repositoryId } });
+    expect(res.status).toBe(200);
+    const locked = Object.fromEntries(
+      res.json.entries.map((e: { path: string; locked: string | null }) => [e.path, e.locked]),
+    );
+    expect(locked).toMatchObject({
+      'README.md': null,
+      'docs/setup.md': null,
+      '.env.example': null,
+      '.env': 'secret',
+      'apps/liftlog/compose.yaml': null,
+      'apps/liftlog/.env': 'secret',
+    });
+  });
+
+  it('reads and drafts root docs and .env templates, never secret files', async () => {
+    const readme = await readRepoFile('README.md');
+    expect(readme.status).toBe(200);
+    expect(readme.json.file).toMatchObject({ path: 'README.md', editable: true });
+    expect(readme.json.file.content).toContain('# Homelab');
+
+    const env = (await readRepoFile('.env.example')).json.file;
+    const saved = await saveRepoDraft({
+      path: '.env.example',
+      content: 'TZ=\nPUID=\n',
+      baseBlobSha: env.blobSha,
+    });
+    expect(saved.status).toBe(200);
+    expect(saved.json.file.draft.content).toBe('TZ=\nPUID=\n');
+
+    const secret = await readRepoFile('.env');
+    expect(secret.json.file?.content ?? null).toBeNull();
+    expect(secret.json.file?.locked).toBe('secret');
+    expect((await saveRepoDraft({ path: '.env', content: 'TOKEN=x\n', baseBlobSha: null })).status).toBe(400);
+    expect((await saveRepoDraft({ path: '../escape.md', content: 'x', baseBlobSha: null })).status).toBe(400);
+
+    const changes = await call(repoDraftsRoute.GET, { cookie, params: { workspaceId, repositoryId } });
+    expect(changes.json.changes.map((c: { path: string }) => c.path)).toEqual(['.env.example']);
+    const discarded = await call(repoDraftsRoute.DELETE, {
+      method: 'DELETE',
+      cookie,
+      params: { workspaceId, repositoryId },
+      path: '/x?path=.env.example',
+    });
+    expect(discarded.status).toBe(200);
+  });
+
+  it('includes drafts made inside stacks and hides the repository from other workspaces', async () => {
+    const stackId = await liftlog();
+    const base = (await readFile(stackId, 'apps/liftlog/README.md')).json.file;
+    await saveDraft(stackId, {
+      path: 'apps/liftlog/README.md',
+      content: '# LiftLog\n',
+      baseBlobSha: base.blobSha,
+    });
+    const changes = await call(repoDraftsRoute.GET, { cookie, params: { workspaceId, repositoryId } });
+    expect(changes.json.changes.map((c: { path: string }) => c.path)).toEqual(['apps/liftlog/README.md']);
+
+    const other = (await call(workspaces.POST, { method: 'POST', body: { name: 'Other' }, cookie })).json
+      .workspace.id;
+    expect((await readRepoFile('README.md', other)).status).toBe(404);
+    expect(
+      (await call(repoTreeRoute.GET, { cookie, params: { workspaceId: other, repositoryId } })).status,
+    ).toBe(404);
   });
 });
 

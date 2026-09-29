@@ -3,8 +3,6 @@ import { getContainer } from '@/server/container';
 import { CredentialActions } from '@/ui/credential-actions';
 import { LocalTime } from '@/ui/local-time';
 import { Alert } from '@/ui/primitives/alert';
-import { Breadcrumbs } from '@/ui/primitives/breadcrumbs';
-import { PageHeader } from '@/ui/primitives/page-header';
 import { Section } from '@/ui/primitives/section';
 import { StatusPill } from '@/ui/primitives/status-pill';
 import { RemoveRepository, RepositoryActions } from '@/ui/repository-actions';
@@ -12,6 +10,8 @@ import { StackDiscovery } from '@/ui/source/stack-discovery';
 import { orNotFound } from '../../../../_lib/session';
 
 export const metadata: Metadata = { title: 'Repository' };
+
+/** Overview tab: sync state, stacks, branches and credential. The header lives in the layout. */
 
 export default async function RepositoryPage({
   params,
@@ -28,15 +28,6 @@ export default async function RepositoryPage({
 
   return (
     <div className="stack">
-      <PageHeader
-        breadcrumbs={
-          <Breadcrumbs items={[{ label: 'Repositories', href: `/w/${workspaceId}` }, { label: repo.name }]} />
-        }
-        title={repo.name}
-        status={<StatusPill status={repo.syncStatus} />}
-        description={<div className="mono truncate">{repo.remoteUrl}</div>}
-      />
-
       {repo.syncStatus === 'error' && repo.lastSyncError ? (
         <Alert tone="error" title="Sync failed" role="alert">
           {repo.lastSyncError}
