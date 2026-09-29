@@ -1,8 +1,10 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { getContainer } from '@/server/container';
 import { ConnectRepositoryForm } from '@/ui/connect-repository-form';
 import { Steps } from '@/ui/form';
+import { Breadcrumbs } from '@/ui/primitives/breadcrumbs';
+import { ButtonLink } from '@/ui/primitives/button';
+import { PageHeader } from '@/ui/primitives/page-header';
 
 export const metadata: Metadata = { title: 'Connect repository' };
 
@@ -29,19 +31,26 @@ export default async function NewRepositoryPage({
     .map(({ id, label, hint, providerType }) => ({ id, label, hint, providerType }));
 
   return (
-    <div style={{ maxWidth: 640 }}>
+    <div className="narrow">
       {onboarding ? <Steps current={3} /> : null}
-      <div className="page-head">
-        <div>
-          <h1>Connect a repository</h1>
-          <p className="muted">The Git repository that holds your Compose stacks, docs and configuration.</p>
-        </div>
-        {onboarding ? (
-          <Link className="btn small" href={`/w/${workspaceId}`}>
-            Skip for now
-          </Link>
-        ) : null}
-      </div>
+      <PageHeader
+        breadcrumbs={
+          onboarding ? undefined : (
+            <Breadcrumbs
+              items={[{ label: 'Repositories', href: `/w/${workspaceId}` }, { label: 'Connect' }]}
+            />
+          )
+        }
+        title="Connect a repository"
+        description="The Git repository that holds your Compose stacks, docs and configuration."
+        actions={
+          onboarding ? (
+            <ButtonLink size="sm" href={`/w/${workspaceId}`}>
+              Skip for now
+            </ButtonLink>
+          ) : undefined
+        }
+      />
       <div className="card">
         <ConnectRepositoryForm workspaceId={workspaceId} providers={providers} credentials={credentials} />
       </div>

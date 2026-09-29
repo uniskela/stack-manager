@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useId, useState } from 'react';
 import { api, ApiError } from './api';
 import { Field, FormError } from './form';
+import { Button } from './primitives/button';
 
 interface ProviderOption {
   type: string;
@@ -258,9 +259,9 @@ export function ConnectRepositoryForm(props: {
       ) : null}
 
       <div className="actions">
-        <button className="btn" type="button" onClick={runTest} disabled={!canSubmit}>
+        <Button onClick={runTest} disabled={!canSubmit} loading={busy === 'test'}>
           {busy === 'test' ? 'Testing…' : 'Test connection'}
-        </button>
+        </Button>
         <span role="status" aria-live="polite">
           {test?.ok ? (
             <span className="pill ok">
@@ -298,11 +299,11 @@ export function ConnectRepositoryForm(props: {
       />
 
       <div className="actions">
-        <button className="btn primary" type="submit" disabled={!canSubmit}>
+        <Button variant="primary" type="submit" disabled={!canSubmit} loading={busy === 'save'}>
           {busy === 'save' ? 'Connecting…' : 'Connect repository'}
-        </button>
+        </Button>
       </div>
-      <p className="muted" style={{ fontSize: '0.85rem' }}>
+      <p className="fine-print">
         Connecting tests access, stores any token encrypted at rest, and clones the repository into the
         server’s data directory in the background.
       </p>

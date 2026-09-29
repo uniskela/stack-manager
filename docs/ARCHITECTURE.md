@@ -124,7 +124,10 @@ src/
   instrumentation.ts        # server start: config (fail closed) → data dir → migrations → job worker
   app/                      # Next.js App Router: pages (server components) + thin API route handlers
     api/…/route.ts          # every handler wrapped by defineRoute (auth default-deny, origin check, zod)
-  ui/                       # client components (forms, nav); may not import src/server/*
+    styles/                 # tokens.css → base.css → components.css → shell.css (no inline styles; lint-enforced)
+  ui/                       # UI components; may not import src/server/*
+    primitives/             # Button, Alert, Section, PageHeader, Breadcrumbs, EmptyState, ConfirmButton, StatusPill
+    shell/                  # signed-in app shell: sidebar (wide) / top bar + drawer (narrow)
   server/
     config/                 # env parsing and validation
     domain/                 # entities, validation, errors — no framework/persistence imports
@@ -137,7 +140,7 @@ src/
     http/                   # route wrapper, cookies, origin checks, request schemas
     container.ts            # composition root (the only place services are constructed)
 drizzle/                    # generated SQL migrations (applied at startup)
-tests/                      # Vitest unit + integration tests
+tests/                      # Vitest unit + integration tests; tests/e2e = Playwright + axe UI tests
 ```
 
 Layer boundaries are enforced with ESLint `no-restricted-imports` (domain cannot import persistence, providers,

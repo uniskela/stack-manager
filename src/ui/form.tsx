@@ -1,6 +1,7 @@
 'use client';
 
 import { useId } from 'react';
+import { Alert } from './primitives/alert';
 
 export function Field(props: {
   label: string;
@@ -59,9 +60,9 @@ export function Field(props: {
 export function FormError({ message }: { message: string | null }) {
   if (!message) return null;
   return (
-    <div className="alert error" role="alert">
+    <Alert tone="error" role="alert">
       {message}
-    </div>
+    </Alert>
   );
 }
 

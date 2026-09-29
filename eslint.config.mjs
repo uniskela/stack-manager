@@ -7,6 +7,7 @@ import nextTs from 'eslint-config-next/typescript';
  * The domain layer stays free of persistence, provider, framework and UI imports.
  */
 const layerRule = (patterns) => ['error', { patterns }];
+const inlineStyle = 'Use a class from src/app/styles (backed by the design tokens) instead of inline styles.';
 
 export default defineConfig([
   ...nextVitals,
@@ -56,6 +57,14 @@ export default defineConfig([
           message: 'Application services depend on ports, not on Drizzle/SQLite or the web layer.',
         },
       ]),
+    },
+  },
+  {
+    // Styling goes through the design tokens and classes in src/app/styles (docs/plans/UI_UX_PLAN.md).
+    files: ['src/**/*.tsx'],
+    rules: {
+      'react/forbid-dom-props': ['error', { forbid: [{ propName: 'style', message: inlineStyle }] }],
+      'react/forbid-component-props': ['error', { forbid: [{ propName: 'style', message: inlineStyle }] }],
     },
   },
   {

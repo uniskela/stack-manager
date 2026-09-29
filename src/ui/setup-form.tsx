@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { api, ApiError } from './api';
 import { Field, FormError } from './form';
+import { Button } from './primitives/button';
 
 export function SetupForm({ setupTokenRequired }: { setupTokenRequired: boolean }) {
   const router = useRouter();
@@ -87,9 +88,9 @@ export function SetupForm({ setupTokenRequired }: { setupTokenRequired: boolean 
         required
       />
       <div className="actions">
-        <button className="btn primary" type="submit" disabled={busy}>
+        <Button variant="primary" type="submit" loading={busy}>
           {busy ? 'Creating account…' : 'Create admin account'}
-        </button>
+        </Button>
       </div>
     </form>
   );
