@@ -197,6 +197,24 @@ Lease recovery rules are defined in [ADR 0002](../adr/0002-persisted-jobs.md).
 
 Minimal self-hosted auth for MVP (local user). SSO can be a later provider. Session secret via env.
 
+## Physical schema notes (PR #2)
+
+Implemented in `src/server/persistence/schema.ts` with migrations in `drizzle/`. Ids are UUID strings, timestamps
+are integer epoch milliseconds set by the application clock and JSON is stored as text, keeping a PostgreSQL port
+straightforward. Additions beyond the logical model above:
+
+| Entity | Added fields | Why |
+| --- | --- | --- |
+| User | `role` (`admin`), `lastLoginAt`, `disabledAt` | Extensible local auth |
+| Session | `id` = HMAC digest of the cookie token, `expiresAt`, `lastSeenAt`, `userAgent` | Tokens never stored raw |
+| Workspace | `slug`, `updatedAt` | Stable addressing |
+| GitRepositoryConnection | `name`, `syncStatus`, `lastSyncError`, `headSha`; `localClonePath` is relative to the data dir | Sync state for the UI; data dir can move |
+| ProviderCredential | `secretCiphertext`, `secretNonce`, `secretKeyVersion`, `secretHint`, `lastTestMessage`, `createdByUserId` | AEAD storage and masked display |
+| Job | `maxAttempts`, `dedupeKey`, `finishedAt`, `createdAt`/`updatedAt` | Retry policy, idempotent enqueue |
+| AuditEvent | `createdAt`, `workspaceId`, `outcome` | Filtering and failure tracking |
+
+`JobAttempt` is not a separate table yet; `attempts` and `lastError` on `Job` cover PR #2 needs.
+
 ## Working tree / drafts
 
 PR #4 may introduce:

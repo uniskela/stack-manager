@@ -10,26 +10,65 @@ It is **not** a Portainer / Komodo / Arcane / Docker UI replacement. Those syste
 
 ## Status
 
-**PR #1 — product architecture and implementation plan (docs only).**  
-No production application code is scaffolded in this phase.
+**PR #2 — application foundation.** A runnable, self-hosted foundation: first-run admin setup, sessions,
+workspaces, encrypted provider credentials, Git repository connections (GitHub / Gitea / Forgejo over HTTPS)
+with background clone/fetch, a persisted job queue, and a redacted audit trail.
 
-Start here:
+Stack scopes, editors and the Git commit workflow arrive in later PRs — see
+[docs/plans/MVP_PLAN.md](docs/plans/MVP_PLAN.md).
 
 | Document | Purpose |
 | --- | --- |
 | [docs/PRODUCT.md](docs/PRODUCT.md) | Product definition, goals, non-goals |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System architecture overview |
-| [docs/PRIOR_ART.md](docs/PRIOR_ART.md) | Competitors / prior art (incl. stackwise) |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System architecture and code layout |
+| [docs/SELF_HOSTING.md](docs/SELF_HOSTING.md) | Configuration, data directory, Docker, upgrades |
 | [docs/plans/MVP_PLAN.md](docs/plans/MVP_PLAN.md) | Phased PR implementation sequence |
 | [docs/INDEX.md](docs/INDEX.md) | Full documentation index |
 
-## Planned stack (post–PR #1)
+## Quick start (Docker Compose)
 
-- Self-hosted **Next.js + TypeScript** modular monolith
-- **Drizzle ORM** with **SQLite** initially (PostgreSQL-ready persistence ports)
-- Long-running **Docker** deployment (not serverless / not Vercel-shaped)
-- Capability-based **Git / Deployment / Runtime / Secret** providers
-- **CodeMirror 6** preferred for mobile-friendly editing (evaluate vs Monaco in ADR)
+```bash
+cp .env.example .env
+# Fill in the two required secrets:
+#   STACK_MANAGER_ENCRYPTION_KEY=$(openssl rand -base64 32)
+#   STACK_MANAGER_SESSION_SECRET=$(openssl rand -base64 48)
+docker compose up -d --build
+```
+
+Open `http://<host>:3000` and follow the setup: **admin account → workspace → repository**.
+Put stack-manager behind a TLS-terminating reverse proxy and set `STACK_MANAGER_PUBLIC_URL`.
+For plain-HTTP testing on localhost set `STACK_MANAGER_COOKIE_SECURE=false`.
+
+The container runs as a non-root user with a read-only root filesystem; all state lives in the `/data`
+volume. No Docker socket is mounted. See [docs/SELF_HOSTING.md](docs/SELF_HOSTING.md).
+
+## Development
+
+Requires Node.js 22.12+ (24 recommended), pnpm 9 and `git`.
+
+```bash
+pnpm install
+cp .env.example .env   # set the secrets; STACK_MANAGER_DATA_DIR=./data is fine for dev
+set -a && . ./.env && set +a
+pnpm dev               # http://localhost:3000 (set STACK_MANAGER_COOKIE_SECURE=false)
+```
+
+| Command | Purpose |
+| --- | --- |
+| `pnpm check` | Format check, lint, typecheck, tests |
+| `pnpm test` | Unit + integration tests (Vitest; real SQLite, real `git` against a local smart-HTTP server) |
+| `pnpm build` | Production build (`.next/standalone`) |
+| `pnpm db:generate` | Generate a Drizzle migration after editing `src/server/persistence/schema.ts` |
+| `pnpm db:migrate` | Apply migrations manually (they also run automatically at startup) |
+| `scripts/smoke.sh` | End-to-end HTTP smoke test against a running instance |
+
+## Tech stack
+
+- Self-hosted **Next.js (App Router) + TypeScript** modular monolith, long-running Node (not serverless)
+- **Drizzle ORM** + **SQLite** behind repository ports (PostgreSQL-ready)
+- Persisted job table with an in-process, lease-based worker (no Redis)
+- Capability-based **Git / Deployment / Runtime / Secret** providers (Git implemented in PR #2)
+- **CodeMirror 6** preferred for editors (PR #3)
 
 ## License
 

@@ -1,6 +1,6 @@
 # Phased MVP implementation plan
 
-PR #1 is **documentation only**. Subsequent PRs implement the product. Boundaries may shift for strong technical reasons; avoid giant cross-cutting PRs.
+PR #1 (documentation) is merged. **PR #2 (application foundation) is the active phase.** Subsequent PRs implement the product. Boundaries may shift for strong technical reasons; avoid giant cross-cutting PRs.
 
 ## PR sequence
 
@@ -24,7 +24,21 @@ PR #1 is **documentation only**. Subsequent PRs implement the product. Boundarie
 - [x] Auth/credentials, threat model, UX, backup, testing documented
 - [x] ADRs for tech stack, jobs, editor, monolith, product boundary
 - [x] Phased plan (#2–#8) recorded
-- [ ] PR opened to `uniskela/stack-manager` and CodeRabbit reviewed
+- [x] PR opened to `uniskela/stack-manager` and CodeRabbit reviewed
+
+## PR #2 exit criteria
+
+- [x] Next.js App Router + TypeScript modular monolith; standalone long-running Node server
+- [x] Drizzle schema + migrations for User, Session, Workspace, GitRepositoryConnection, ProviderCredential, Job, AuditEvent
+- [x] First-run admin setup, Argon2id, HTTP-only sessions, origin checks, logout, route protection
+- [x] AES-256-GCM provider credentials with key version; masked API contract; replace-only secrets; fail closed
+- [x] Workspace + repository connection setup flow (GitHub / Gitea / Forgejo over HTTPS)
+- [x] Access test, clone/fetch under the data dir, branch metadata, hardened git invocation
+- [x] Persisted jobs with leases, heartbeats, reclaim, retries and dead-lettering
+- [x] Redaction-by-default logging and audit
+- [x] Dockerfile, docker-compose.yml, `.env.example`, healthcheck, non-root, migrations on start
+- [x] CI: format, lint, typecheck, tests, migration drift, build, smoke, Docker image
+- Deferred: SSH remotes, webhook credential/verification (PR #5), commit/push (PR #4), key re-encryption job
 
 ## Dependency graph
 

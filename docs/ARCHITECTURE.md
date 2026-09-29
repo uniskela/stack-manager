@@ -117,6 +117,36 @@ Self-hosted env examples (names indicative):
 
 No design around ephemeral serverless filesystem.
 
+## Code layout (implemented in PR #2)
+
+```text
+src/
+  instrumentation.ts        # server start: config (fail closed) → data dir → migrations → job worker
+  app/                      # Next.js App Router: pages (server components) + thin API route handlers
+    api/…/route.ts          # every handler wrapped by defineRoute (auth default-deny, origin check, zod)
+  ui/                       # client components (forms, nav); may not import src/server/*
+  server/
+    config/                 # env parsing and validation
+    domain/                 # entities, validation, errors — no framework/persistence imports
+    application/            # services + persistence ports (ports.ts); depend on ports, not Drizzle
+    persistence/            # Drizzle schema; sqlite/ adapters implement the ports
+    providers/git/          # GitProvider capability interface, registry, hardened git CLI runner
+    jobs/                   # lease-based in-process worker (ADR 0002)
+    security/               # AES-256-GCM secret box, Argon2id, session tokens, redaction, path + network policy
+    observability/          # structured JSON logger (redacted)
+    http/                   # route wrapper, cookies, origin checks, request schemas
+    container.ts            # composition root (the only place services are constructed)
+drizzle/                    # generated SQL migrations (applied at startup)
+tests/                      # Vitest unit + integration tests
+```
+
+Layer boundaries are enforced with ESLint `no-restricted-imports` (domain cannot import persistence, providers,
+services or frameworks; services cannot import Drizzle/SQLite; client UI cannot import server modules).
+
+Next.js compiles `instrumentation.ts` and route bundles separately. The container is therefore stored on
+`globalThis`, and the HTTP boundary identifies application errors by a brand (`isAppError`) rather than
+`instanceof`.
+
 ## Stopping rule
 
 If implementation begins resembling a Docker host manager, re-read [PRODUCT.md](PRODUCT.md) and [adr/0005-product-boundary.md](adr/0005-product-boundary.md).
