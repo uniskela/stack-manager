@@ -41,6 +41,25 @@ Lease state is persisted on the `Job` row (not only in memory).
 
 Default lease TTL and heartbeat interval are implementation constants documented at coding time in PR #2/#5.
 
+### Implementation constants (PR #2)
+
+Defined in `src/server/domain/job.ts`:
+
+| Constant | Value |
+| --- | --- |
+| Lease TTL | 60 s |
+| Heartbeat interval | 10 s |
+| Poll interval (idle) | 1 s (API routes can nudge the worker immediately) |
+| Retry backoff | 5 s × 2^(attempt−1), capped at 15 min |
+| Default max attempts | 5 |
+
+Status semantics: a handler error retries (`pending` + backoff) until attempts are exhausted → `dead`;
+a `PermanentJobError` (retrying cannot help, e.g. revoked credential) → `failed`. Terminal and retry
+transitions are fenced on `leaseOwner`, so a worker that lost its lease cannot overwrite the new owner's result;
+heartbeat failure aborts the handler via `AbortSignal`. An optional `dedupeKey` (partial unique index over
+active jobs) prevents duplicate pending work. Payloads must not contain secrets — enqueue rejects any payload
+the redactor would alter. Job type added in PR #2: `repository_sync` (clone or fetch a repository connection).
+
 ## Idempotency for `deployment_trigger`
 
 Inbound forge webhook **delivery IDs** prevent duplicate job creation. That alone does **not** protect a `deployment_trigger` that already called the provider, recorded acceptance, then crashed before marking the job succeeded.

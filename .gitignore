@@ -5,8 +5,13 @@ node_modules/
 data/
 *.db
 *.db-*
+*.sqlite
+*.sqlite-*
 .DS_Store
 dist/
 .next/
+out/
 coverage/
 .serena/
+*.tsbuildinfo
+next-env.d.ts

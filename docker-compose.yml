@@ -1,0 +1,33 @@
+# Self-hosted stack-manager. Copy .env.example to .env and fill in the secrets first.
+# No Docker socket is mounted: stack-manager manages Git-backed source, not containers.
+services:
+  stack-manager:
+    build: .
+    image: stack-manager:local
+    restart: unless-stopped
+    ports:
+      # Published on localhost only by default; put a reverse proxy in front or set STACK_MANAGER_BIND.
+      - '${STACK_MANAGER_BIND:-127.0.0.1}:${STACK_MANAGER_PORT:-3000}:3000'
+    environment:
+      STACK_MANAGER_DATA_DIR: /data
+      STACK_MANAGER_ENCRYPTION_KEY: ${STACK_MANAGER_ENCRYPTION_KEY:?set STACK_MANAGER_ENCRYPTION_KEY in .env}
+      STACK_MANAGER_SESSION_SECRET: ${STACK_MANAGER_SESSION_SECRET:?set STACK_MANAGER_SESSION_SECRET in .env}
+      STACK_MANAGER_ENCRYPTION_KEY_VERSION: ${STACK_MANAGER_ENCRYPTION_KEY_VERSION:-1}
+      STACK_MANAGER_PUBLIC_URL: ${STACK_MANAGER_PUBLIC_URL:-}
+      STACK_MANAGER_COOKIE_SECURE: ${STACK_MANAGER_COOKIE_SECURE:-true}
+      STACK_MANAGER_SETUP_TOKEN: ${STACK_MANAGER_SETUP_TOKEN:-}
+      STACK_MANAGER_ALLOW_PRIVATE_NETWORKS: ${STACK_MANAGER_ALLOW_PRIVATE_NETWORKS:-false}
+      STACK_MANAGER_TRUSTED_PROXY_HOPS: ${STACK_MANAGER_TRUSTED_PROXY_HOPS:-0}
+      STACK_MANAGER_LOG_LEVEL: ${STACK_MANAGER_LOG_LEVEL:-info}
+    volumes:
+      - stack-manager-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  stack-manager-data:

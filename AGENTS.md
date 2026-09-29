@@ -10,9 +10,22 @@ This app manages Git-backed **source/configuration** for Compose stacks. It is *
 
 ## Current phase
 
-**PR #1 — architecture docs only.** Do not scaffold the production app until PR #2.
+**PR #2 — application foundation** (scaffold, auth, DB, encrypted credentials, workspace/repository model,
+Git connection, persisted jobs, audit, Docker). Next up: **PR #3 — source workspace**. Do not build features
+from later PRs ahead of their phase.
 
-See [docs/plans/MVP_PLAN.md](docs/plans/MVP_PLAN.md).
+See [docs/plans/MVP_PLAN.md](docs/plans/MVP_PLAN.md) and the code layout in
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#code-layout-implemented-in-pr-2).
+
+## Working in the code
+
+- `pnpm check` must pass (format, lint, typecheck, tests). `pnpm build` must succeed.
+- Schema changes: edit `src/server/persistence/schema.ts`, run `pnpm db:generate`, commit the migration.
+- API routes: always wrap handlers with `defineRoute` (auth is default-deny; a coverage test enforces this).
+- Services receive dependencies through `src/server/container.ts`; depend on ports, not Drizzle.
+- Never return credential ciphertext/plaintext from APIs; decrypt only via `CredentialService.withPlaintext`.
+- Pass anything user- or provider-derived through the redacting logger/audit APIs; job payloads carry ids only.
+- Run `git` only through `GitCli` (argv arrays, hardened env, protocol allowlist).
 
 ## Tech direction (locked)
 

@@ -1,6 +1,6 @@
 # Documentation index
 
-Architecture and planning for **stack-manager** (PR #1 — docs only).
+Architecture, planning and operations docs for **stack-manager**. Current phase: **PR #2 — application foundation** (see [plans/MVP_PLAN.md](plans/MVP_PLAN.md)).
 
 ## Product and architecture
 
@@ -29,6 +29,7 @@ Architecture and planning for **stack-manager** (PR #1 — docs only).
 
 | Doc | Summary |
 | --- | --- |
+| [SELF_HOSTING.md](SELF_HOSTING.md) | Configuration, data directory, Docker, upgrades |
 | [AUTH_AND_CREDENTIALS.md](AUTH_AND_CREDENTIALS.md) | Auth, encryption at rest |
 | [SECURITY.md](SECURITY.md) | Threat model and controls |
 | [UX.md](UX.md) | Desktop / mobile / PWA |

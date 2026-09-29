@@ -6,12 +6,14 @@ Application data directory (indicative layout):
 
 ```text
 data/
-  db.sqlite
-  db.sqlite-wal (if applicable)
-  credentials is inside DB (ciphertext)
-  repos/   # local clones / worktrees
-  jobs/    # optional spillover; prefer DB
+  stack-manager.sqlite       # includes credential ciphertext, session digests, jobs, audit
+  stack-manager.sqlite-wal   # WAL mode — back up together with the main file (or checkpoint first)
+  stack-manager.sqlite-shm
+  repos/                     # local clones (re-creatable from the forge)
+  git-home/                  # isolated git HOME (re-creatable)
 ```
+
+See [SELF_HOSTING.md](SELF_HOSTING.md#data-directory) for ownership and permissions.
 
 Also back up **configuration env** separately (encryption key, session secret) via host secret management — **not** inside the DB dump alone.
 
