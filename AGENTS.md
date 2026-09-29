@@ -20,6 +20,8 @@ See [docs/plans/MVP_PLAN.md](docs/plans/MVP_PLAN.md) and the code layout in
 ## Working in the code
 
 - `pnpm check` must pass (format, lint, typecheck, tests). `pnpm build` must succeed.
+- PR titles (and so squash-merge commits) must be Conventional Commits (`feat:`, `fix:`, `docs:`, …); Release
+  Please derives versions and the changelog from them. See [docs/RELEASING.md](docs/RELEASING.md).
 - Schema changes: edit `src/server/persistence/schema.ts`, run `pnpm db:generate`, commit the migration.
 - API routes: always wrap handlers with `defineRoute` (auth is default-deny; a coverage test enforces this).
 - Services receive dependencies through `src/server/container.ts`; depend on ports, not Drizzle.

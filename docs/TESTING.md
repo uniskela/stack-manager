@@ -48,9 +48,10 @@ Protect product boundary, credential safety, routing correctness, and editor/wor
 
 ## CI
 
-- Lint, typecheck, unit/integration on PR
-- E2E smoke on main or nightly if heavy
-- CodeRabbit / review bots expected on GitHub PRs
+See [RELEASING.md](RELEASING.md) for the full workflow list. On every PR: workflow lint (actionlint +
+shellcheck), format/lint/typecheck/unit+integration tests, migration drift, build, HTTP smoke test, Playwright + axe,
+production dependency audit, Docker image boot test, secret scan (gitleaks) and a Conventional Commit title check.
+PRs touching the image also run the container security scan (Trivy).
 
 ## What we do not require in CI
 

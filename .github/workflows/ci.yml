@@ -13,12 +13,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  workflows:
+    name: Lint workflows (actionlint + shellcheck)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The official image bundles shellcheck, so run: blocks are linted too.
+      - run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.12 -color
+
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
           cache: pnpm
@@ -37,11 +50,12 @@ jobs:
         run: |
           cp -r .next/static .next/standalone/.next/static
           export STACK_MANAGER_DATA_DIR="$RUNNER_TEMP/sm-data"
-          export STACK_MANAGER_ENCRYPTION_KEY="$(openssl rand -base64 32)"
-          export STACK_MANAGER_SESSION_SECRET="$(openssl rand -base64 48)"
+          STACK_MANAGER_ENCRYPTION_KEY="$(openssl rand -base64 32)"
+          STACK_MANAGER_SESSION_SECRET="$(openssl rand -base64 48)"
+          export STACK_MANAGER_ENCRYPTION_KEY STACK_MANAGER_SESSION_SECRET
           export STACK_MANAGER_COOKIE_SECURE=false PORT=3000 HOSTNAME=127.0.0.1
           (cd .next/standalone && node server.js > "$RUNNER_TEMP/server.log" 2>&1 &)
-          for i in $(seq 1 30); do curl -sf http://127.0.0.1:3000/api/health && break; sleep 1; done
+          for _ in $(seq 1 30); do curl -sf http://127.0.0.1:3000/api/health && break; sleep 1; done
           BASE_URL=http://127.0.0.1:3000 scripts/smoke.sh || (cat "$RUNNER_TEMP/server.log"; exit 1)
       - name: UI tests (Playwright + axe, production build)
         env:
@@ -53,7 +67,7 @@ jobs:
           pnpm test:e2e
       - name: Upload Playwright report
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: playwright-report
           path: |
@@ -66,7 +80,9 @@ jobs:
   docker:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - run: docker build -t stack-manager:ci .
       - name: Container starts, migrates and reports healthy
         run: |
@@ -74,7 +90,7 @@ jobs:
             -e STACK_MANAGER_ENCRYPTION_KEY="$(openssl rand -base64 32)" \
             -e STACK_MANAGER_SESSION_SECRET="$(openssl rand -base64 48)" \
             -v sm-data:/data -p 3000:3000 stack-manager:ci
-          for i in $(seq 1 30); do [ "$(docker inspect -f '{{.State.Health.Status}}' sm)" = healthy ] && break; sleep 2; done
+          for _ in $(seq 1 30); do [ "$(docker inspect -f '{{.State.Health.Status}}' sm)" = healthy ] && break; sleep 2; done
           docker inspect -f '{{.State.Health.Status}}' sm | grep -q healthy || (docker logs sm; exit 1)
       - name: Refuses to start without an encryption key
         run: |

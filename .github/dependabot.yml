@@ -1,0 +1,45 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: '/'
+    schedule:
+      interval: weekly
+      day: monday
+      time: '05:10'
+      timezone: Australia/Sydney
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: 'build(deps)'
+    groups:
+      javascript-dependencies:
+        patterns: ['*']
+        update-types: ['minor', 'patch']
+    # Majors are deliberate upgrades (framework, editor, database); review them by hand.
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
+
+  - package-ecosystem: github-actions
+    directory: '/'
+    schedule:
+      interval: weekly
+      day: monday
+      time: '05:30'
+      timezone: Australia/Sydney
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: 'ci(deps)'
+    groups:
+      github-actions:
+        patterns: ['*']
+
+  - package-ecosystem: docker
+    directory: '/'
+    schedule:
+      interval: weekly
+      day: monday
+      time: '05:40'
+      timezone: Australia/Sydney
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: 'build(docker)'

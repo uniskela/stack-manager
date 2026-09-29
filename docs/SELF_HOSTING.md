@@ -3,6 +3,26 @@
 stack-manager ships as a single long-running Node.js container (see [adr/0004-modular-monolith.md](adr/0004-modular-monolith.md)).
 It needs no database server, no Redis and **no Docker socket**.
 
+## Container image
+
+Every release publishes `ghcr.io/uniskela/stack-manager` (linux/amd64) with these tags:
+
+| Tag | Meaning |
+| --- | --- |
+| `v1.2.3`, `1.2.3` | Immutable release |
+| `1.2` | Latest patch of a minor line |
+| `latest` | Newest release (promoted only after the release image passed its scan and smoke test) |
+| `sha-abc1234` | The exact commit a release was built from |
+
+Images carry an SBOM and build provenance, and are scanned with Trivy before publication (no fixable HIGH or
+CRITICAL vulnerabilities). While the repository is private the package is private too: run
+`docker login ghcr.io` with a token that has `read:packages` before pulling.
+
+```sh
+cp .env.example .env   # fill in the two secrets
+STACK_MANAGER_VERSION=0.1.0 docker compose up -d   # or omit STACK_MANAGER_VERSION for latest
+```
+
 ## Configuration
 
 | Variable | Required | Default | Notes |
@@ -76,7 +96,7 @@ once; afterwards `/setup` redirects to sign-in.
 
 ## Upgrades
 
-Pull/build the new image and restart. Migrations run automatically. Back up the data volume first
+Change `STACK_MANAGER_VERSION` (or pull `latest`), then `docker compose up -d`. Migrations run automatically. Back up the data volume first
 (see [BACKUP_RESTORE.md](BACKUP_RESTORE.md)).
 
 ## Scaling notes

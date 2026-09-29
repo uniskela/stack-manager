@@ -1,0 +1,10 @@
+# Gitleaks configuration: all default rules, plus narrowly scoped allowlists for test fixtures.
+# Add entries here only for values that are provably fake; never allowlist a real credential.
+title = "stack-manager"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Fake credential-shaped strings used to prove the redactor scrubs them"
+paths = ['''^tests/unit/redact\.test\.ts$''']

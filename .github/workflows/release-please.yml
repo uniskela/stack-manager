@@ -1,0 +1,47 @@
+name: Release Please
+
+# After a merge to main, Release Please opens (or updates) a release PR from the conventional-commit
+# history. It never merges that PR itself. When a maintainer merges the release PR, Release Please
+# creates the immutable vX.Y.Z tag + GitHub Release, and this workflow publishes the GHCR image
+# (tags pushed with GITHUB_TOKEN do not trigger other workflows on their own).
+on:
+  push:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - name: Release Please
+        id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          # Optional RELEASE_PLEASE_TOKEN (fine-grained PAT or App token) lets CI run on the release PR;
+          # PRs opened with GITHUB_TOKEN do not trigger workflows.
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  publish-image:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/publish-image.yml
+    with:
+      tag: ${{ needs.release-please.outputs.tag_name }}
+    secrets: inherit

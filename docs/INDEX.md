@@ -31,6 +31,7 @@ Architecture, planning and operations docs for **stack-manager**. Current phase:
 | Doc | Summary |
 | --- | --- |
 | [SELF_HOSTING.md](SELF_HOSTING.md) | Configuration, data directory, Docker, upgrades |
+| [RELEASING.md](RELEASING.md) | CI workflows, Conventional Commits, Release Please, GHCR images |
 | [AUTH_AND_CREDENTIALS.md](AUTH_AND_CREDENTIALS.md) | Auth, encryption at rest |
 | [SECURITY.md](SECURITY.md) | Threat model and controls |
 | [UX.md](UX.md) | Desktop / mobile / PWA |
