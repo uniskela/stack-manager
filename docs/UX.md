@@ -1,5 +1,7 @@
 # Desktop, mobile, and PWA UX
 
+Current-state review and concrete improvement work: [plans/UI_UX_PLAN.md](plans/UI_UX_PLAN.md).
+
 ## UX hierarchy
 
 1. **Source editing** is primary

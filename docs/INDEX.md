@@ -10,6 +10,7 @@ Architecture, planning and operations docs for **stack-manager**. Current phase:
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Modular monolith, providers, request flows |
 | [PRIOR_ART.md](PRIOR_ART.md) | Portainer, Komodo, Arcane, Dockge, stackwise, etc. |
 | [plans/MVP_PLAN.md](plans/MVP_PLAN.md) | PR #2–#8 implementation sequence |
+| [plans/UI_UX_PLAN.md](plans/UI_UX_PLAN.md) | UI/UX review of PR #2 and phased improvement plan |
 
 ## Domain and providers
 
