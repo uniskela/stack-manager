@@ -1,7 +1,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test as setup } from '@playwright/test';
-import { ADMIN, AUTH_STATE, expectAccessible, SAMPLE_REMOTE, SAMPLE_STATE, WORKSPACE_NAME } from './support';
+import {
+  ADMIN,
+  AUTH_STATE,
+  expectAccessible,
+  SAMPLE_REMOTE,
+  SAMPLE_ROOT,
+  SAMPLE_STATE,
+  WORKSPACE_NAME,
+} from './support';
 
 setup('first run: admin account → workspace → skip repository', async ({ page }) => {
   await page.goto('/');
@@ -29,9 +37,9 @@ setup('first run: admin account → workspace → skip repository', async ({ pag
   await page.context().storageState({ path: AUTH_STATE });
 });
 
-/** Connects SAMPLE_REMOTE and registers its root as a stack, for the source workspace specs. */
+/** Connects SAMPLE_REMOTE and registers SAMPLE_ROOT as a stack, for the source workspace specs. */
 setup('sample repository and stack', async ({ browser }) => {
-  setup.skip(!SAMPLE_REMOTE, 'Set E2E_GIT_REMOTE to a public HTTPS repository with a root compose file.');
+  setup.skip(!SAMPLE_REMOTE, 'Set E2E_GIT_REMOTE (and E2E_STACK_ROOT) to a public HTTPS repository.');
   setup.setTimeout(180_000);
   const context = await browser.newContext({ storageState: AUTH_STATE });
   const page = await context.newPage();
@@ -56,7 +64,7 @@ setup('sample repository and stack', async ({ browser }) => {
     `/api/workspaces/${workspaceId}/repositories/${repositoryId}/stacks`,
     {
       headers,
-      data: { rootPath: '', name: 'Sample' },
+      data: { rootPath: SAMPLE_ROOT, name: 'Sample' },
     },
   );
   expect(stack.status(), await stack.text()).toBe(201);

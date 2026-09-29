@@ -42,7 +42,8 @@ Protect product boundary, credential safety, routing correctness, and editor/wor
   light and dark colour schemes. CI runs them after the smoke test.
 - **Source workspace (PR #3):** integration tests against a real Git server cover discovery, stack CRUD, workspace
   isolation, secret/symlink locking, path escapes, draft save/discard, size limits and upstream-change detection;
-  unit tests cover path rules and the Compose analyser. With `E2E_GIT_REMOTE` set (CI uses this repository), the
+  unit tests cover path rules and the Compose analyser. With `E2E_GIT_REMOTE` and `E2E_STACK_ROOT` set (CI uses
+  `docker/awesome-compose` / `nginx-golang`, since the remote must be public), the
   Playwright suite also opens the editor, saves a draft, reviews the diff and checks every stack tab with axe.
 
 ## CI
