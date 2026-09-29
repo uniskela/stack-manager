@@ -49,8 +49,11 @@ export function ConfirmButton({
           loading={loading}
           disabled={disabled}
           onClick={async () => {
-            await onConfirm();
-            setConfirming(false);
+            try {
+              await onConfirm();
+            } finally {
+              setConfirming(false);
+            }
           }}
         >
           {confirmLabel}

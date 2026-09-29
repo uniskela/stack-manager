@@ -73,7 +73,7 @@ export function RepositoryActions(props: { workspaceId: string; repositoryId: st
         </Button>
       </div>
       {message ? (
-        <Alert tone={message.kind} role="status">
+        <Alert tone={message.kind} role={message.kind === 'error' ? 'alert' : 'status'}>
           {message.text}
         </Alert>
       ) : null}

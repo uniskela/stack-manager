@@ -160,7 +160,8 @@ function WorkspaceSwitcher({ current, workspaces }: { current: WorkspaceRef; wor
     );
   }
   return (
-    <details className="ws-switcher">
+    // Keyed by workspace so the list closes after switching (the shell persists across navigation).
+    <details key={current.id} className="ws-switcher">
       <summary className="ws-current" aria-label={`Workspace: ${current.name}. Switch workspace`}>
         {label}
         <ChevronsUpDown className="icon muted" aria-hidden="true" />

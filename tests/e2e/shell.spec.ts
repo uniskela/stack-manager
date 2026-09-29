@@ -57,6 +57,9 @@ test.describe('signed in', () => {
     if (!isMobile(page)) await expect(page.getByRole('complementary', { name: 'Sidebar' })).toBeVisible();
     else await expect(page.getByRole('button', { name: 'Open navigation' })).toBeVisible();
     await expectAccessible(page);
+
+    await page.getByRole('link', { name: 'Back to repositories' }).click();
+    await expect(page).toHaveURL(new RegExp(`${home}$`));
   });
 });
 

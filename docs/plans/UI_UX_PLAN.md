@@ -105,7 +105,7 @@ Goal: fix the **H** findings and give PR #3 a design system to build on. No new 
    - Add `src/ui/primitives/`: `Button` (variants `primary | secondary | danger | ghost`, sizes, `loading` state), `Alert`, `Card`/`Section`, `PageHeader` (title, description, status, actions), `EmptyState`, `ConfirmButton` (the inline two-step confirm used today, standardised), `Badge`/`StatusPill`.
    - Replace every inline `style={{}}` with a utility class or primitive. Add a lint rule (`react/forbid-dom-props` for `style`) to keep it that way.
    - Keep plain CSS (no Tailwind or UI-kit dependency); split `globals.css` into `tokens.css`, `base.css` and `components.css`.
-2. **App shell ready for PR #3** (1.1–1.6)
+2. **App shell ready for PR #3** (1.1–1.7)
    - Desktop: collapsible **left sidebar** (Workspace switcher at top → Repositories → _(Stacks, added in PR #3)_ → Settings), with a slim top bar holding breadcrumbs and an account menu.
    - Mobile: top bar with menu button (sidebar becomes a drawer), current page title, and account menu. Always show the workspace name in the drawer.
    - `Breadcrumbs` component, replacing the ad-hoc "← Repositories" link.
@@ -116,7 +116,7 @@ Goal: fix the **H** findings and give PR #3 a design system to build on. No new 
 5. **Icons** (5.3): add `lucide-react` (tree-shaken, MIT). Use icons only to support text labels, never as the only affordance.
 6. **Tests** (5.7): a Playwright smoke test of the onboarding journey, plus `@axe-core/playwright` on each page at desktop and mobile widths, run in CI.
 
-Exit: zero inline styles, sidebar shell live, axe clean, `pnpm check` and `pnpm build` green.
+Exit: zero inline styles, sidebar shell and workspace switching live, axe clean, `pnpm check` and `pnpm build` green.
 
 ### Phase UI-2 — Forms and feedback (same or next small PR)
 
