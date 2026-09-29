@@ -110,6 +110,8 @@ describe('repository connection test', () => {
       `https://bot:${TOKEN}@git.test/acme/stacks.git`,
       'git@git.test:acme/stacks.git',
       'file:///etc',
+      'https://[::ffff:127.0.0.1]/acme/stacks.git',
+      'https://[::ffff:a9fe:a9fe]/acme/stacks.git',
     ]) {
       const res = await call(testRoute.POST, {
         method: 'POST',
@@ -307,6 +309,48 @@ describe('repository connection lifecycle', () => {
     }
     expect(fs.existsSync(outside)).toBe(false);
     expect(fs.existsSync(path.join(h.dataDir, 'stack-manager.sqlite'))).toBe(true);
+  });
+
+  it('refuses to delete while a sync is running', async () => {
+    const repo = (await connect()).json.repository;
+    const claimed = await h.container.repos.jobs.claimNext('busy-worker', h.clock.now(), 60_000, [
+      'repository_sync',
+    ]);
+    expect(claimed?.payload.repositoryId).toBe(repo.id);
+    const res = await call(repoRoute.DELETE, {
+      method: 'DELETE',
+      cookie,
+      params: { workspaceId, repositoryId: repo.id },
+    });
+    expect(res.status).toBe(409);
+    expect(res.json.error.code).toBe('sync_in_progress');
+    await h.container.repos.jobs.markSucceeded(claimed!.id, 'busy-worker', h.clock.now());
+    expect(
+      (
+        await call(repoRoute.DELETE, {
+          method: 'DELETE',
+          cookie,
+          params: { workspaceId, repositoryId: repo.id },
+        })
+      ).status,
+    ).toBe(200);
+  });
+
+  it('removes the clone when the connection is deleted mid-sync', async () => {
+    const repo = (await connect()).json.repository;
+    const provider = h.container.gitProviders.get('gitea');
+    const original = provider.syncClone.bind(provider);
+    provider.syncClone = async (input) => {
+      const result = await original(input);
+      await h.container.repos.gitRepositories.delete(repo.id); // deletion lands while git was running
+      return result;
+    };
+    try {
+      await expect(h.container.repositories.sync(repo.id)).rejects.toThrow(/deleted during sync/);
+    } finally {
+      provider.syncClone = original;
+    }
+    expect(fs.existsSync(path.join(h.dataDir, 'repos', repo.id))).toBe(false);
   });
 
   it('delete removes the connection and its clone, keeps the credential', async () => {

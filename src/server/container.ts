@@ -72,82 +72,89 @@ export function createContainer(config: AppConfig, overrides: ContainerOverrides
 
   prepareDataDir(config);
   const handle: SqliteHandle = openSqlite(config.databasePath);
-  runMigrations(handle.db, overrides.migrationsFolder);
-  const repos = createSqliteRepositories(handle.db);
+  try {
+    runMigrations(handle.db, overrides.migrationsFolder);
+    const repos = createSqliteRepositories(handle.db);
 
-  const box = new SecretBox(config.encryption);
-  const git = new GitCli({
-    homeDir: path.join(config.dataDir, 'git-home'),
-    allowedProtocols: overrides.gitAllowedProtocols ?? ['https'],
-    extraConfig: overrides.gitExtraConfig,
-  });
-  const gitProviders = createDefaultGitProviderRegistry(git);
+    const box = new SecretBox(config.encryption);
+    const git = new GitCli({
+      homeDir: path.join(config.dataDir, 'git-home'),
+      allowedProtocols: overrides.gitAllowedProtocols ?? ['https'],
+      extraConfig: overrides.gitExtraConfig,
+    });
+    const gitProviders = createDefaultGitProviderRegistry(git);
 
-  const audit = new AuditService(repos.audit, clock, newId, logger.child({ component: 'audit' }));
-  const auth = new AuthService(repos.users, repos.sessions, audit, clock, newId, {
-    sessionSecret: config.sessionSecret,
-    sessionTtlMs: config.sessionTtlMs,
-    setupToken: config.setupToken,
-  });
-  const workspaces = new WorkspaceService(repos.workspaces, audit, clock, newId);
-  const credentials = new CredentialService(repos.credentials, box, audit, clock, newId, (kind, type) =>
-    kind === 'git' ? gitProviders.has(type) : false,
-  );
-  const jobs = new JobQueue(repos.jobs, clock, newId);
-  const repositories = new GitRepositoryService(
-    repos.gitRepositories,
-    credentials,
-    gitProviders,
-    jobs,
-    audit,
-    clock,
-    newId,
-    logger.child({ component: 'git' }),
-    {
-      dataDir: config.dataDir,
-      reposDir: config.reposDir,
-      allowPrivateNetworks: config.allowPrivateNetworks,
-      resolver: overrides.resolver,
-    },
-  );
-
-  const handlers = new Map<string, JobHandler>([
-    [
-      REPOSITORY_SYNC_JOB,
-      async (job, ctx) => {
-        const repositoryId = job.payload.repositoryId;
-        if (typeof repositoryId !== 'string') throw new Error('repository_sync payload missing repositoryId');
-        await repositories.sync(repositoryId, ctx.signal);
+    const audit = new AuditService(repos.audit, clock, newId, logger.child({ component: 'audit' }));
+    const auth = new AuthService(repos.users, repos.sessions, audit, clock, newId, {
+      sessionSecret: config.sessionSecret,
+      sessionTtlMs: config.sessionTtlMs,
+      setupToken: config.setupToken,
+    });
+    const workspaces = new WorkspaceService(repos.workspaces, audit, clock, newId);
+    const credentials = new CredentialService(repos.credentials, box, audit, clock, newId, (kind, type) =>
+      kind === 'git' ? gitProviders.has(type) : false,
+    );
+    const jobs = new JobQueue(repos.jobs, clock, newId);
+    const repositories = new GitRepositoryService(
+      repos.gitRepositories,
+      credentials,
+      gitProviders,
+      jobs,
+      audit,
+      clock,
+      newId,
+      logger.child({ component: 'git' }),
+      {
+        dataDir: config.dataDir,
+        reposDir: config.reposDir,
+        allowPrivateNetworks: config.allowPrivateNetworks,
+        resolver: overrides.resolver,
       },
-    ],
-  ]);
-  const worker = new JobWorker(
-    repos.jobs,
-    handlers,
-    clock,
-    logger.child({ component: 'jobs' }),
-    overrides.workerOptions,
-  );
+    );
 
-  return {
-    config,
-    logger,
-    clock,
-    repos,
-    audit,
-    auth,
-    workspaces,
-    credentials,
-    gitProviders,
-    repositories,
-    jobs,
-    worker,
-    ping: () => pingSqlite(handle.db),
-    close: async () => {
-      await worker.stop();
-      handle.close();
-    },
-  };
+    const handlers = new Map<string, JobHandler>([
+      [
+        REPOSITORY_SYNC_JOB,
+        async (job, ctx) => {
+          const repositoryId = job.payload.repositoryId;
+          if (typeof repositoryId !== 'string')
+            throw new Error('repository_sync payload missing repositoryId');
+          await repositories.sync(repositoryId, ctx.signal);
+        },
+      ],
+    ]);
+    const worker = new JobWorker(
+      repos.jobs,
+      handlers,
+      clock,
+      logger.child({ component: 'jobs' }),
+      overrides.workerOptions,
+    );
+
+    return {
+      config,
+      logger,
+      clock,
+      repos,
+      audit,
+      auth,
+      workspaces,
+      credentials,
+      gitProviders,
+      repositories,
+      jobs,
+      worker,
+      ping: () => pingSqlite(handle.db),
+      close: async () => {
+        await worker.stop();
+        handle.close();
+      },
+    };
+  } catch (error) {
+    // Do not leak the SQLite handle (and its WAL lock) when wiring fails after opening it.
+    handle.close();
+    throw error;
+  }
 }
 
 const GLOBAL_KEY = Symbol.for('stack-manager.container');

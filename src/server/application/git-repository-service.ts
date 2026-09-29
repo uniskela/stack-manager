@@ -276,6 +276,13 @@ export class GitRepositoryService {
 
   async delete(workspaceId: string, id: string, actorUserId: string): Promise<void> {
     const conn = await this.#find(workspaceId, id);
+    const sync = await this.jobs.latestFor(`${REPOSITORY_SYNC_JOB}:${id}`);
+    if (sync?.status === 'running') {
+      throw new ConflictError(
+        'A sync is in progress for this repository. Try again when it finishes.',
+        'sync_in_progress',
+      );
+    }
     await this.repo.delete(id);
     await fs.rm(this.#cloneDir(conn), { recursive: true, force: true });
     await this.audit.record({
@@ -310,6 +317,11 @@ export class GitRepositoryService {
             run({ username: cred.meta.username || provider.defaultUsername(), token }),
           )
         : await run(null);
+      // The connection may have been deleted while git was running: do not leave an orphaned clone behind.
+      if (!(await this.repo.findByIdUnscoped(conn.id))) {
+        await fs.rm(targetDir, { recursive: true, force: true });
+        throw new PermanentJobError('Repository connection was deleted during sync.');
+      }
       const now = this.clock.now();
       await this.repo.update(conn.id, {
         syncStatus: 'ready',

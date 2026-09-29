@@ -55,9 +55,11 @@ export function ConnectRepositoryForm(props: {
         ? { type: 'credential' as const, credentialId }
         : { type: 'none' as const };
 
+  // Any change to the remote, provider or access invalidates the previous test and its branch choice.
   const resetResult = () => {
     setTest(null);
     setError(null);
+    setDefaultBranch('');
   };
 
   async function runTest() {
@@ -73,7 +75,14 @@ export function ConnectRepositoryForm(props: {
         },
       );
       setTest(result);
-      if (result.ok && !defaultBranch && result.defaultBranch) setDefaultBranch(result.defaultBranch);
+      if (result.ok) {
+        // Keep the current choice only if it still exists on this remote.
+        setDefaultBranch((current) =>
+          current && result.branches.includes(current)
+            ? current
+            : (result.defaultBranch ?? result.branches[0] ?? ''),
+        );
+      }
     } catch (err) {
       setTest(null);
       if (err instanceof ApiError) {
