@@ -1,0 +1,16 @@
+.git
+node_modules
+.next
+coverage
+data
+docs
+tests
+*.md
+!README.md
+.env
+.env.*
+!.env.example
+.serena
+.claude*
+Dockerfile
+docker-compose*.yml
