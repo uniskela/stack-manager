@@ -3,7 +3,15 @@
 import { ChevronDown, ChevronRight, FolderGit2, Layers, PencilLine, SearchX } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type KeyboardEvent,
+} from 'react';
 import {
   folderLabel,
   groupStacks,
@@ -39,7 +47,12 @@ import {
   subscribeCollapseMap,
   writeCollapseMap,
 } from './collapse-store';
+import { moveFocus } from './arrow-focus';
+import { rememberListView } from './list-view-memory';
 import { StackListToolbar } from './stack-list-toolbar';
+
+/** Everything in the list that arrow keys move between: repository and folder toggles, and stack rows. */
+const LIST_ITEMS = '.stack-repo-title button, .stack-folder-title button, a.stack-row';
 
 /** Typing settles before the URL is rewritten (browsers throttle rapid history updates). */
 const URL_WRITE_DELAY_MS = 250;
@@ -71,6 +84,7 @@ export function OrganisedStacks(props: { workspaceId: string; stacks: GroupableS
     window.history.replaceState(window.history.state, '', pendingUrl.current);
     pendingUrl.current = null;
   }, []);
+  useEffect(() => rememberListView(props.workspaceId, query), [props.workspaceId, query]);
   useEffect(() => {
     const url = `${window.location.pathname}${query ? `?${query}` : ''}`;
     if (url === `${window.location.pathname}${window.location.search}`) {
@@ -135,6 +149,24 @@ export function OrganisedStacks(props: { workspaceId: string; stacks: GroupableS
   };
 
   const grouping = view.group;
+  const listRef = useRef<HTMLDivElement>(null);
+
+  // ↓ from search enters the list; ↑/↓, Home and End move through it; ↑ from the first item returns to search.
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const list = listRef.current;
+    if (!list || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    const target = event.target as HTMLElement;
+    if (target === searchRef.current) {
+      if (event.key === 'ArrowDown' && moveFocus(list, LIST_ITEMS, 'Home')) event.preventDefault();
+      return;
+    }
+    if (!list.contains(target)) return;
+    if (moveFocus(list, LIST_ITEMS, event.key)) event.preventDefault();
+    else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      searchRef.current?.focus();
+    }
+  };
 
   const clearNarrowing = () => {
     onChange({ q: '', drafts: false, attention: false, repo: null });
@@ -142,7 +174,7 @@ export function OrganisedStacks(props: { workspaceId: string; stacks: GroupableS
   };
 
   return (
-    <>
+    <div className="stack-list" onKeyDown={onKeyDown}>
       <StackListToolbar
         state={view}
         searchRef={searchRef}
@@ -173,7 +205,7 @@ export function OrganisedStacks(props: { workspaceId: string; stacks: GroupableS
         </EmptyState>
       ) : (
         // Clicks reach the capture phase before a stack link navigates.
-        <div className="stack-groups" onClickCapture={flushUrl}>
+        <div className="stack-groups" ref={listRef} onClickCapture={flushUrl}>
           {grouping === 'none' ? (
             <div className="stack-repo">
               <ul className="stack-rows stack-rows-flat" aria-label="Stacks">
@@ -204,7 +236,7 @@ export function OrganisedStacks(props: { workspaceId: string; stacks: GroupableS
           )}
         </div>
       )}
-    </>
+    </div>
   );
 }
 

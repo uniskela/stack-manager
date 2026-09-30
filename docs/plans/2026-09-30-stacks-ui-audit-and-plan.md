@@ -1,6 +1,6 @@
 # Stacks page: UI/UX audit and improvement plan
 
-**Status:** Step 0 and S1–S3 done; S4–S5 not started.
+**Status:** Step 0 and S1–S4 done; S5 not started.
 **Date:** 2026-09-30
 **Scope:** `/w/{workspaceId}/stacks` (the inventory list) and the handful of touch-points that make it easy to get into and back out of a stack. Follows slice A ([design](./2026-09-30-dashboard-stacks-settings-design.md)), which shipped grouping, search and collapse.
 
@@ -198,9 +198,35 @@ monorepo paths, 8 drafts, one repository in `error` with no fetch), captured wit
 ### Phase S4 — Moving around (feat:)
 
 - **D1** Stack page breadcrumb becomes `Stacks › {repository} › {name}`; the "Stacks" crumb and browser Back return to the saved list state (keep the list URL in `sessionStorage`, or pass it as a `from` param validated as a same-origin `/w/{id}/stacks?…` path).
-- Optional sibling switcher on the stack header (dropdown of stacks in the same repository/folder, natural sorted) — *decision needed.*
+- Sibling switcher on the stack header (dropdown of stacks in the same repository/folder, natural sorted) (owner decision 2).
 - **D2** List keyboard navigation: `↑/↓` moves focus between visible rows (roving tabindex), `Enter` opens, `Home/End`. Build the command palette (`⌘K`) only if the owner wants to pull UI-4 forward; otherwise leave it on the existing roadmap.
 - **D3** Replace N `countDrafts` calls with one aggregated query per repository (new `SourceService.countDraftsByStack`/by repository), behind the existing port; add a unit test. Do this only if the baseline measurement shows it matters.
+
+**Done.** Notes on what shipped:
+
+- D1: the breadcrumb is `Stacks › repository › stack` (`src/ui/stacks/stack-breadcrumbs.tsx`).
+  - The list saves its query string per workspace in sessionStorage (`list-view-memory.ts`), and "Stacks" links back
+    to it. Reads are re-parsed and re-serialised, so storage can only ever yield a well-formed `/w/{id}/stacks?…`
+    link. During server render the link is the plain list.
+  - The repository crumb opens the list filtered to that repository (`?repo=`). The repository page is still linked
+    from the header meta.
+  - Browser Back already restored the view in S3.
+- Sibling switcher (`stack-switcher.tsx`): a **Switch stack** disclosure in the header, shown only when the
+  repository has another stack. It lists the repository's stacks by parent folder in natural order and marks and
+  scrolls to the current one. A filter field appears past 8 stacks.
+  - Keyboard: ↑/↓, Home and End; Esc closes and returns focus to the button; clicking outside closes it.
+  - It keeps the current tab (for example `/docs`) but drops `?file=`, which belongs to the stack being left.
+- D2: plain arrow-key shortcuts rather than a roving tabindex, so Tab order is unchanged. ↓ from search enters the
+  list; ↑, ↓, Home and End move between repository toggles, folder toggles and stack rows, skipping collapsed ones;
+  ↑ from the first item returns to search. Enter opens a stack natively. The command palette stays on the UI-4
+  roadmap.
+- D3: measured and deferred. With 112 stacks the list responds in about 60 ms (median of 8) against 27 ms for
+  Repositories, and part of the difference is rendering 112 rows. Revisit if large workspaces feel slow.
+- Verification: e2e covers breadcrumbs (hrefs and returning to the saved view), arrow keys, and the switcher being
+  absent for a lone stack. The public sample repository has a single Compose folder, so the open switcher was checked
+  with a scripted Playwright run against a seeded instance with real clones (74 stacks in one repository). That run
+  covered the filter, ↓, Esc returning focus, outside click, keeping the tab and the breadcrumb at 1280 and 390 px,
+  with axe clean on the header in light and dark.
 
 ### Phase S5 — Finish (docs/test)
 

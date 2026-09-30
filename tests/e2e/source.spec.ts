@@ -128,6 +128,47 @@ test('stacks view lives in the URL and survives opening a stack and going Back',
   await expect(sampleRow).toBeVisible();
 });
 
+test('stack breadcrumbs return to the list as it was left; arrow keys move through the list', async ({
+  page,
+}) => {
+  await page.goto(`/w/${sample().workspaceId}/stacks?group=repository`);
+  const search = page.getByLabel('Search stacks');
+  await search.fill('sample');
+
+  // ↓ from search enters the list, ↑ from its first item goes back.
+  await search.press('ArrowDown');
+  const repoHeader = page.getByRole('heading', { level: 2 }).first().getByRole('button');
+  await expect(repoHeader).toBeFocused();
+  await page.keyboard.press('ArrowDown');
+  const sampleRow = page.getByRole('link', { name: /^Sample\b/ });
+  await expect(sampleRow).toBeFocused();
+  await page.keyboard.press('ArrowUp');
+  await page.keyboard.press('ArrowUp');
+  await expect(search).toBeFocused();
+
+  await sampleRow.click();
+  const crumbs = page.getByRole('navigation', { name: 'Breadcrumb' });
+  await expect(crumbs.getByRole('link', { name: 'Stacks' })).toHaveAttribute(
+    'href',
+    /\/stacks\?q=sample&group=repository$/,
+  );
+  await expect(crumbs.getByRole('link').nth(1)).toHaveAttribute(
+    'href',
+    `/w/${sample().workspaceId}/stacks?repo=${sample().repositoryId}`,
+  );
+  await expect(crumbs.getByText('Sample')).toHaveAttribute('aria-current', 'page');
+  // The switcher appears only when the repository has another stack to switch to.
+  const listed = await page.request.get(
+    `/api/workspaces/${sample().workspaceId}/repositories/${sample().repositoryId}/stacks`,
+  );
+  const siblings = ((await listed.json()) as { stacks: unknown[] }).stacks.length;
+  await expect(page.getByRole('button', { name: 'Switch stack' })).toHaveCount(siblings > 1 ? 1 : 0);
+
+  await crumbs.getByRole('link', { name: 'Stacks' }).click();
+  await expect(page.getByLabel('Search stacks')).toHaveValue('sample');
+  await expect(page).toHaveURL(/group=repository/);
+});
+
 test('edit, save a draft, review and discard it', async ({ page }) => {
   test.skip(
     isMobile(page),
