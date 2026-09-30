@@ -3,6 +3,8 @@ export type AuditAction =
   | 'auth.login'
   | 'auth.login_failed'
   | 'auth.logout'
+  | 'auth.password_changed'
+  | 'auth.password_change_failed'
   | 'workspace.create'
   | 'workspace.update'
   | 'credential.create'

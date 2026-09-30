@@ -4,6 +4,8 @@ const LABELS: Record<string, string> = {
   'auth.login': 'Signed in',
   'auth.login_failed': 'Sign-in failed',
   'auth.logout': 'Signed out',
+  'auth.password_changed': 'Password changed',
+  'auth.password_change_failed': 'Password change failed',
   'workspace.create': 'Workspace created',
   'workspace.update': 'Workspace updated',
   'credential.create': 'Credential added',
