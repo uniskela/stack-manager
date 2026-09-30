@@ -851,6 +851,88 @@
   flex: 1;
 }
 
+/* Stacks list: search with clear button and "/" hint, plus the live result count. */
+.stack-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  margin-bottom: var(--space-3);
+}
+
+.stack-search {
+  flex: 1 1 20rem;
+}
+
+.stack-search-box {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+
+.stack-search-box input {
+  padding-right: var(--control-height);
+}
+
+/* The clear button below replaces the browser's own, which only some engines draw. */
+.stack-search-box input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.stack-search-clear {
+  position: absolute;
+  inset-block: 0;
+  right: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-height);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.stack-search-clear:hover {
+  color: var(--text);
+}
+
+.stack-search-kbd {
+  position: absolute;
+  top: 50%;
+  right: var(--space-3);
+  transform: translateY(-50%);
+  padding: 0 0.4rem;
+  font-family: var(--mono);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  pointer-events: none;
+}
+
+.stack-search-box input:focus ~ .stack-search-kbd {
+  display: none;
+}
+
+/* No hardware keyboard to press "/" on. */
+@media (pointer: coarse) {
+  .stack-search-kbd {
+    display: none;
+  }
+}
+
+.stack-count {
+  margin: 0;
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
 .list-row.list-head {
   min-height: 44px;
   padding-block: 0.5rem;
