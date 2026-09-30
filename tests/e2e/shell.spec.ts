@@ -36,6 +36,17 @@ test.describe('signed in', () => {
 
     await nav.getByRole('link', { name: 'Settings' }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
+    const settingsNav = page.getByRole('navigation', { name: 'Settings' });
+    await expect(settingsNav.getByRole('link', { name: 'General' })).toHaveAttribute('aria-current', 'page');
+    await settingsNav.getByRole('link', { name: 'Credentials' }).click();
+    await expect(page).toHaveURL(/\/settings\/credentials$/);
+    await expect(settingsNav.getByRole('link', { name: 'Credentials' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    await settingsNav.getByRole('link', { name: 'Activity' }).click();
+    await expect(page).toHaveURL(/\/settings\/activity$/);
+    await expect(settingsNav.getByRole('link', { name: 'Activity' })).toHaveAttribute('aria-current', 'page');
     await expect(page.getByRole('dialog', { name: 'Navigation' })).toBeHidden();
     await expectAccessible(page);
   });
