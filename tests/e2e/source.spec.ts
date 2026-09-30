@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
-import { AUTH_STATE, expectAccessible, SAMPLE_REMOTE, SAMPLE_STATE } from './support';
+import { AUTH_STATE, expectAccessible, SAMPLE_REMOTE, SAMPLE_ROOT, SAMPLE_STATE } from './support';
 
 test.use({ storageState: AUTH_STATE });
 test.skip(!SAMPLE_REMOTE, 'Set E2E_GIT_REMOTE to run the source workspace tests.');
@@ -38,11 +38,27 @@ test('stack pages render and are accessible', async ({ page }) => {
 
 test('stacks search reaches collapsed repositories, counts results and clears', async ({ page }) => {
   await page.goto(`/w/${sample().workspaceId}/stacks`);
-  const list = page.getByRole('list', { name: 'Stacks by repository' });
-  const repoHeader = list.getByRole('button').first();
-  const sampleRow = list.getByRole('link', { name: /^Sample\b/ });
+  const repoHeader = page.getByRole('heading', { level: 2 }).first().getByRole('button');
+  // The sample stack's folder group is labelled with its parent folder.
+  const parent = SAMPLE_ROOT.includes('/') ? SAMPLE_ROOT.slice(0, SAMPLE_ROOT.lastIndexOf('/')) : '';
+  const folderLabel = parent || 'Repository root';
+  const folderHeader = page
+    .getByRole('heading', { level: 3 })
+    .filter({ hasText: folderLabel })
+    .first()
+    .getByRole('button');
+  const sampleRow = page.getByRole('link', { name: /^Sample\b/ });
   const count = page.getByRole('status').filter({ hasText: /stacks?$/ });
   await expect(count).toHaveText(/^\d+ stacks?$/);
+  await expect(repoHeader).toHaveAttribute('aria-expanded', 'true');
+  await expectAccessible(page);
+
+  // Folder groups collapse on their own.
+  await folderHeader.click();
+  await expect(folderHeader).toHaveAttribute('aria-expanded', 'false');
+  await expect(sampleRow).toBeHidden();
+  await folderHeader.click();
+  await expect(sampleRow).toBeVisible();
 
   // Collapse the repository: its stacks leave the list.
   await repoHeader.click();
