@@ -1,6 +1,6 @@
 # Design: Dashboard, organised Stacks, Settings split
 
-**Status:** approved — implementation plan at [2026-09-30-dashboard-stacks-settings-implementation.md](./2026-09-30-dashboard-stacks-settings-implementation.md)  
+**Status:** implemented — see [2026-09-30-dashboard-stacks-settings-implementation.md](./2026-09-30-dashboard-stacks-settings-implementation.md)  
 **Date:** 2026-09-30  
 **Slice:** A of the phased UX/ops roadmap (scheduled fetch and Portainer deploy webhooks follow in later PRs)
 

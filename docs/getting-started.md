@@ -13,6 +13,11 @@ Open the app. The first visit starts setup:
 
 Setup can only happen once. After that, `/setup` redirects to sign-in.
 
+After sign-in, the sidebar lists **Dashboard**, **Stacks**, **Repositories** and **Settings** (in that order). The
+**Dashboard** is your workspace home: a quick overview and the main path to connect a repository when the workspace
+is empty. **Settings** has **General**, **Credentials**, **Activity** and **Account** tabs for workspace options,
+saved tokens, the audit log and your password and sessions.
+
 ## 2. Connect a repository
 
 stack-manager works with GitHub, Gitea and Forgejo over HTTPS.
@@ -46,7 +51,8 @@ Each stack is a folder plus its Compose file, so one repository can hold many st
 
 ## 4. Work on a stack
 
-Open a stack from **Stacks**. It has these tabs:
+Open a stack from the **Stacks** page (grouped by repository, with search and collapse for large monorepos). Each stack
+has these tabs:
 
 | Tab | What it's for |
 | --- | --- |

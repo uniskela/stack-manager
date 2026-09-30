@@ -14,10 +14,7 @@ const collapseListeners = new Set<() => void>();
 /** Stable empty snapshot for useSyncExternalStore when storage is missing or invalid. */
 const EMPTY_COLLAPSE_MAP: Record<string, boolean> = Object.freeze({});
 
-const collapseMapCache = new Map<
-  string,
-  { raw: string | null; snapshot: Record<string, boolean> }
->();
+const collapseMapCache = new Map<string, { raw: string | null; snapshot: Record<string, boolean> }>();
 
 function notifyCollapseListeners(): void {
   for (const listener of collapseListeners) {

@@ -2,6 +2,17 @@
 
 Current-state review and concrete improvement work: [plans/UI_UX_PLAN.md](plans/UI_UX_PLAN.md).
 
+## Workspace shell
+
+Signed-in operators work inside a workspace. Primary sidebar navigation (desktop sidebar or mobile drawer):
+
+**Dashboard → Stacks → Repositories → Settings**
+
+- **Dashboard** — workspace home and empty-state CTAs (not a container dashboard).
+- **Stacks** — organised inventory (repository groups, search, collapse).
+- **Repositories** — connect and manage Git remotes.
+- **Settings** — **General**, **Credentials**, **Activity**, **Account** (password change and session list).
+
 ## UX hierarchy
 
 1. **Source editing** is primary

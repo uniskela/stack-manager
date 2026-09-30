@@ -8,3 +8,5 @@ docs
 *.md
 test-results
 playwright-report
+graphify-out
+.vitest

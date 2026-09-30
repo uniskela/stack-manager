@@ -31,6 +31,9 @@ test.describe('signed in', () => {
     await expect(nav.getByText(WORKSPACE_NAME)).toBeVisible();
     await expect(nav.getByText(ADMIN.username)).toBeVisible();
     await expect(nav.getByRole('link', { name: 'Dashboard' })).toHaveAttribute('aria-current', 'page');
+    await expect(nav.getByRole('link', { name: 'Stacks' })).toBeVisible();
+    await expect(nav.getByRole('link', { name: 'Repositories' })).toBeVisible();
+    await expect(nav.getByRole('link', { name: 'Settings' })).toBeVisible();
     await expect(nav.getByRole('link', { name: 'Repositories' })).not.toHaveAttribute('aria-current', 'page');
     if (isMobile(page)) await expectAccessible(page);
 
