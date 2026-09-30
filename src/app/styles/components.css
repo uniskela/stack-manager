@@ -221,8 +221,20 @@
   align-items: flex-start;
 }
 
-a.list-row:hover {
+a.list-row:hover,
+button.list-row:hover {
   background: var(--surface-2);
+}
+
+/* Reset UA button colours so dark-mode titles keep AA contrast on collapse headers. */
+button.list-row {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text);
 }
 
 .list-row .grow {
@@ -232,6 +244,7 @@ a.list-row:hover {
 
 .list-row .title {
   font-weight: 600;
+  color: var(--text);
 }
 
 .list-row-sub {
@@ -609,6 +622,22 @@ table.simple th {
   to {
     background-position: -200% 0;
   }
+}
+
+.dashboard-summary {
+  margin-bottom: var(--space-5);
+}
+
+.dashboard-summary-line {
+  margin: 0;
+}
+
+.dashboard-sync-line {
+  margin: var(--space-2) 0 0;
+}
+
+.dashboard-shortcuts {
+  margin-bottom: var(--space-5);
 }
 
 @media (max-width: 640px) {

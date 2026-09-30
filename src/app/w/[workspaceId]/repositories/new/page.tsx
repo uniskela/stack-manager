@@ -37,7 +37,10 @@ export default async function NewRepositoryPage({
         breadcrumbs={
           onboarding ? undefined : (
             <Breadcrumbs
-              items={[{ label: 'Repositories', href: `/w/${workspaceId}` }, { label: 'Connect' }]}
+              items={[
+                { label: 'Repositories', href: `/w/${workspaceId}/repositories` },
+                { label: 'Connect' },
+              ]}
             />
           )
         }
@@ -45,7 +48,7 @@ export default async function NewRepositoryPage({
         description="The Git repository that holds your Compose stacks, docs and configuration."
         actions={
           onboarding ? (
-            <ButtonLink size="sm" href={`/w/${workspaceId}`}>
+            <ButtonLink size="sm" href={`/w/${workspaceId}/repositories`}>
               Skip for now
             </ButtonLink>
           ) : undefined

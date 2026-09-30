@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, inArray, lt, lte, or } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, inArray, lt, lte, ne, or } from 'drizzle-orm';
 import type {
   AuditRepository,
   CredentialRepository,
@@ -78,6 +78,10 @@ class SqliteUserRepository implements UserRepository {
   async recordLogin(id: string, at: Date) {
     this.db.update(users).set({ lastLoginAt: at, updatedAt: at }).where(eq(users.id, id)).run();
   }
+
+  async updatePasswordHash(id: string, passwordHash: string, updatedAt: Date) {
+    this.db.update(users).set({ passwordHash, updatedAt }).where(eq(users.id, id)).run();
+  }
 }
 
 class SqliteSessionRepository implements SessionRepository {
@@ -108,6 +112,31 @@ class SqliteSessionRepository implements SessionRepository {
 
   async deleteExpired(now: Date) {
     return this.db.delete(sessions).where(lte(sessions.expiresAt, now)).run().changes;
+  }
+
+  async listByUser(userId: string, now: Date) {
+    return this.db
+      .select()
+      .from(sessions)
+      .where(and(eq(sessions.userId, userId), gt(sessions.expiresAt, now)))
+      .orderBy(desc(sessions.lastSeenAt))
+      .all();
+  }
+
+  async deleteForUser(userId: string, sessionId: string) {
+    return (
+      this.db
+        .delete(sessions)
+        .where(and(eq(sessions.userId, userId), eq(sessions.id, sessionId)))
+        .run().changes > 0
+    );
+  }
+
+  async deleteOtherSessions(userId: string, keepSessionId: string) {
+    return this.db
+      .delete(sessions)
+      .where(and(eq(sessions.userId, userId), ne(sessions.id, keepSessionId)))
+      .run().changes;
   }
 }
 
