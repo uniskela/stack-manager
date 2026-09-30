@@ -11,6 +11,14 @@ function collapseStorageKey(workspaceId: string): string {
 
 const collapseListeners = new Set<() => void>();
 
+/** Stable empty snapshot for useSyncExternalStore when storage is missing or invalid. */
+const EMPTY_COLLAPSE_MAP: Record<string, boolean> = Object.freeze({});
+
+const collapseMapCache = new Map<
+  string,
+  { raw: string | null; snapshot: Record<string, boolean> }
+>();
+
 function notifyCollapseListeners(): void {
   for (const listener of collapseListeners) {
     listener();
@@ -18,22 +26,43 @@ function notifyCollapseListeners(): void {
 }
 
 function readCollapseMap(workspaceId: string): Record<string, boolean> {
+  let raw: string | null;
   try {
-    const raw = sessionStorage.getItem(collapseStorageKey(workspaceId));
-    if (!raw) return {};
+    raw = sessionStorage.getItem(collapseStorageKey(workspaceId));
+  } catch {
+    return EMPTY_COLLAPSE_MAP;
+  }
+
+  const cached = collapseMapCache.get(workspaceId);
+  if (cached !== undefined && cached.raw === raw) {
+    return cached.snapshot;
+  }
+
+  if (!raw) {
+    collapseMapCache.set(workspaceId, { raw, snapshot: EMPTY_COLLAPSE_MAP });
+    return EMPTY_COLLAPSE_MAP;
+  }
+
+  try {
     const parsed: unknown = JSON.parse(raw);
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      return parsed as Record<string, boolean>;
+      const snapshot = parsed as Record<string, boolean>;
+      collapseMapCache.set(workspaceId, { raw, snapshot });
+      return snapshot;
     }
   } catch {
     /* ignore */
   }
-  return {};
+
+  collapseMapCache.set(workspaceId, { raw, snapshot: EMPTY_COLLAPSE_MAP });
+  return EMPTY_COLLAPSE_MAP;
 }
 
 function writeCollapseMap(workspaceId: string, map: Record<string, boolean>): void {
   try {
-    sessionStorage.setItem(collapseStorageKey(workspaceId), JSON.stringify(map));
+    const raw = JSON.stringify(map);
+    sessionStorage.setItem(collapseStorageKey(workspaceId), raw);
+    collapseMapCache.set(workspaceId, { raw, snapshot: map });
     notifyCollapseListeners();
   } catch {
     /* ignore */
@@ -63,7 +92,7 @@ export function OrganisedStacks(props: { workspaceId: string; stacks: GroupableS
   const collapsed = useSyncExternalStore(
     subscribeCollapseMap,
     () => readCollapseMap(props.workspaceId),
-    () => ({}),
+    () => EMPTY_COLLAPSE_MAP,
   );
 
   const filtered = useMemo(() => filterStacks(props.stacks, query), [props.stacks, query]);
