@@ -57,15 +57,11 @@ export default async function DashboardPage({ params }: { params: Promise<{ work
   const [draftCounts, openDrafts] = await Promise.all([
     Promise.all(
       stackList.map((s) =>
-        s.repository.headSha
-          ? container.source.countDrafts(s.repository.id, s.rootPath)
-          : Promise.resolve(0),
+        s.repository.headSha ? container.source.countDrafts(s.repository.id, s.rootPath) : Promise.resolve(0),
       ),
     ),
     Promise.all(
-      repositories.map((r) =>
-        r.headSha ? container.source.countDrafts(r.id, '') : Promise.resolve(0),
-      ),
+      repositories.map((r) => (r.headSha ? container.source.countDrafts(r.id, '') : Promise.resolve(0))),
     ).then((counts) => counts.reduce((n, c) => n + c, 0)),
   ]);
   const stacksWithDrafts = stackList.filter((_, i) => (draftCounts[i] ?? 0) > 0);
