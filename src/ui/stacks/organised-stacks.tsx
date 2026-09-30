@@ -1,0 +1,159 @@
+'use client';
+
+import { ChevronDown, ChevronRight, Layers, Search } from 'lucide-react';
+import Link from 'next/link';
+import { useCallback, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { filterStacks, groupStacks, type GroupableStack } from '@/shared/stacks/group-stacks';
+
+function collapseStorageKey(workspaceId: string): string {
+  return `sm.stacks.collapse.${workspaceId}`;
+}
+
+const collapseListeners = new Set<() => void>();
+
+function notifyCollapseListeners(): void {
+  for (const listener of collapseListeners) {
+    listener();
+  }
+}
+
+function readCollapseMap(workspaceId: string): Record<string, boolean> {
+  try {
+    const raw = sessionStorage.getItem(collapseStorageKey(workspaceId));
+    if (!raw) return {};
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as Record<string, boolean>;
+    }
+  } catch {
+    /* ignore */
+  }
+  return {};
+}
+
+function writeCollapseMap(workspaceId: string, map: Record<string, boolean>): void {
+  try {
+    sessionStorage.setItem(collapseStorageKey(workspaceId), JSON.stringify(map));
+    notifyCollapseListeners();
+  } catch {
+    /* ignore */
+  }
+}
+
+function subscribeCollapseMap(onStoreChange: () => void): () => void {
+  collapseListeners.add(onStoreChange);
+  const onStorage = (event: StorageEvent) => {
+    if (event.storageArea === sessionStorage && event.key?.startsWith('sm.stacks.collapse.')) {
+      onStoreChange();
+    }
+  };
+  window.addEventListener('storage', onStorage);
+  return () => {
+    collapseListeners.delete(onStoreChange);
+    window.removeEventListener('storage', onStorage);
+  };
+}
+
+function isRepoCollapsed(map: Record<string, boolean>, repositoryId: string): boolean {
+  return map[repositoryId] === true;
+}
+
+export function OrganisedStacks(props: { workspaceId: string; stacks: GroupableStack[] }) {
+  const [query, setQuery] = useState('');
+  const collapsed = useSyncExternalStore(
+    subscribeCollapseMap,
+    () => readCollapseMap(props.workspaceId),
+    () => ({}),
+  );
+
+  const filtered = useMemo(() => filterStacks(props.stacks, query), [props.stacks, query]);
+  const groups = useMemo(() => groupStacks(filtered), [filtered]);
+
+  const toggleRepo = useCallback(
+    (repositoryId: string) => {
+      const prev = readCollapseMap(props.workspaceId);
+      const next = { ...prev, [repositoryId]: !isRepoCollapsed(prev, repositoryId) };
+      writeCollapseMap(props.workspaceId, next);
+    },
+    [props.workspaceId],
+  );
+
+  return (
+    <>
+      <div className="search-field">
+        <Search className="icon muted" aria-hidden="true" />
+        <input
+          type="search"
+          aria-label="Search stacks"
+          placeholder="Search stacks"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+      </div>
+
+      {filtered.length === 0 ? (
+        <p className="muted">No stacks match.</p>
+      ) : (
+        <ul className="list" aria-label="Stacks by repository">
+          {groups.flatMap((repo) => {
+            const open = !isRepoCollapsed(collapsed, repo.repositoryId);
+            const rows: ReactNode[] = [
+              <li key={`repo:${repo.repositoryId}`}>
+                <button
+                  type="button"
+                  className="list-row"
+                  aria-expanded={open}
+                  onClick={() => toggleRepo(repo.repositoryId)}
+                >
+                  {open ? (
+                    <ChevronDown className="icon muted" aria-hidden="true" />
+                  ) : (
+                    <ChevronRight className="icon muted" aria-hidden="true" />
+                  )}
+                  <div className="grow">
+                    <div className="title truncate">{repo.repositoryName}</div>
+                  </div>
+                </button>
+              </li>,
+            ];
+            if (!open) return rows;
+
+            for (const folder of repo.folders) {
+              if (repo.folders.length > 1) {
+                rows.push(
+                  <li key={`folder:${repo.repositoryId}:${folder.segment}`}>
+                    <div className="list-row">
+                      <span className="grow muted">{folder.segment}</span>
+                    </div>
+                  </li>,
+                );
+              }
+              for (const stack of folder.stacks) {
+                rows.push(
+                  <li key={stack.id}>
+                    <Link className="list-row" href={`/w/${props.workspaceId}/stacks/${stack.id}`}>
+                      <Layers className="icon muted" aria-hidden="true" />
+                      <div className="grow">
+                        <div className="title truncate">{stack.name}</div>
+                        <div className="muted truncate list-row-sub">
+                          <span className="mono">{stack.rootPath || '(root)'}</span>
+                        </div>
+                      </div>
+                      {stack.draftCount ? (
+                        <span className="pill pending">
+                          {stack.draftCount} draft{stack.draftCount === 1 ? '' : 's'}
+                        </span>
+                      ) : null}
+                      <ChevronRight className="icon muted" aria-hidden="true" />
+                    </Link>
+                  </li>,
+                );
+              }
+            }
+            return rows;
+          })}
+        </ul>
+      )}
+    </>
+  );
+}
