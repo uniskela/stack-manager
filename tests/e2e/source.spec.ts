@@ -90,6 +90,44 @@ test('stacks search reaches collapsed repositories, counts results and clears', 
   await expect(sampleRow).toBeVisible();
 });
 
+test('stacks view lives in the URL and survives opening a stack and going Back', async ({ page }) => {
+  await page.goto(`/w/${sample().workspaceId}/stacks?sort=path`);
+  const group = page.getByLabel('Group');
+  const sort = page.getByLabel('Sort');
+  // On phones sort and grouping sit behind the Filters disclosure.
+  if (isMobile(page)) {
+    await expect(group).toBeHidden();
+    await page.getByRole('button', { name: 'Filters', exact: true }).click();
+  }
+  await expect(sort).toHaveValue('path');
+  await expectAccessible(page);
+
+  // Collapse all / expand all act on every repository.
+  const repoHeader = page.getByRole('heading', { level: 2 }).first().getByRole('button');
+  await page.getByRole('button', { name: 'Collapse all' }).click();
+  await expect(repoHeader).toHaveAttribute('aria-expanded', 'false');
+  await page.getByRole('button', { name: 'Expand all' }).click();
+  await expect(repoHeader).toHaveAttribute('aria-expanded', 'true');
+
+  // Flat list, search highlighted, all written to the URL.
+  await group.selectOption('none');
+  await expect(page.getByRole('button', { name: 'Expand all' })).toBeHidden();
+  await page.getByLabel('Search stacks').fill('sample');
+  const sampleRow = page.getByRole('list', { name: 'Stacks' }).getByRole('link', { name: /^Sample\b/ });
+  await expect(sampleRow.locator('mark')).toHaveText('Sample');
+  await expect(page).toHaveURL(/[?&]q=sample\b/);
+  await expect(page).toHaveURL(/[?&]group=none\b/);
+  await expect(page).toHaveURL(/[?&]sort=path\b/);
+
+  await sampleRow.click();
+  await expect(page.getByRole('navigation', { name: 'Stack' })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByLabel('Search stacks')).toHaveValue('sample');
+  if (isMobile(page)) await page.getByRole('button', { name: 'Filters', exact: true }).click();
+  await expect(group).toHaveValue('none');
+  await expect(sampleRow).toBeVisible();
+});
+
 test('edit, save a draft, review and discard it', async ({ page }) => {
   test.skip(
     isMobile(page),

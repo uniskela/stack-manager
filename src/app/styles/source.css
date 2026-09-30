@@ -851,13 +851,101 @@
   flex: 1;
 }
 
-/* Stacks list: search with clear button and "/" hint, plus the live result count. */
+/*
+ * Stacks list toolbar: search with clear button and "/" hint and the live result count, then filters, sort, grouping
+ * and expand/collapse. On phones the filters sit behind a "Filters" disclosure.
+ */
 .stack-toolbar {
+  display: grid;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.stack-toolbar-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2) var(--space-4);
-  margin-bottom: var(--space-3);
+}
+
+.stack-filters {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Sort and grouping sit at the end of the row and wrap as one cluster. */
+.stack-view {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  margin-left: auto;
+}
+
+.stack-filters-toggle {
+  display: none;
+}
+
+.stack-expand {
+  display: flex;
+  align-self: flex-start;
+  gap: var(--space-1);
+  margin-left: auto;
+}
+
+.stack-expand .btn.icon-only {
+  width: var(--control-height-sm);
+}
+
+.filter-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: var(--control-height-sm);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.filter-toggle:hover {
+  background: var(--surface-2);
+}
+
+.filter-toggle[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.inline-select {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+select.compact-select {
+  width: auto;
+  max-width: 14rem;
+  min-height: var(--control-height-sm);
+  padding: 0.3rem 0.5rem;
+  font-size: var(--text-sm);
+}
+
+.stack-groups mark {
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: inherit;
 }
 
 .stack-search {
@@ -1075,7 +1163,30 @@
   white-space: nowrap;
 }
 
+/* Flat lists (grouped by repository only, or not at all) have no folder labels above their first row. */
+.stack-rows-flat {
+  padding-top: var(--space-2);
+}
+
 @media (max-width: 640px) {
+  .stack-filters-toggle {
+    display: inline-flex;
+  }
+
+  .stack-filters {
+    order: 3;
+    flex-basis: 100%;
+  }
+
+  .stack-filters[data-open='false'] {
+    display: none;
+  }
+
+  .stack-view {
+    flex-basis: 100%;
+    margin-left: 0;
+  }
+
   .stack-repo-head {
     flex-wrap: wrap;
     padding-bottom: var(--space-2);

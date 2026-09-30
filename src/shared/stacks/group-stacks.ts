@@ -104,7 +104,11 @@ function compareFolders(a: string, b: string): number {
  * Repository (natural name order, then id) → parent folder (root first, then natural path order) → stack
  * (whole-repository stack first, then natural name order, then path and id so equal names never swap).
  */
-export function groupStacks<T extends GroupableStack>(stacks: T[]): StackRepoGroup<T>[] {
+export function groupStacks<T extends GroupableStack>(
+  stacks: T[],
+  /** Order of stacks inside a folder (default: natural name order). The whole-repository stack still leads. */
+  compare?: (a: T, b: T) => number,
+): StackRepoGroup<T>[] {
   const byRepo = new Map<string, { repository: T['repository']; stacks: T[] }>();
   for (const s of stacks) {
     const cur = byRepo.get(s.repository.id) ?? { repository: s.repository, stacks: [] as T[] };
@@ -130,9 +134,11 @@ export function groupStacks<T extends GroupableStack>(stacks: T[]): StackRepoGro
           (x, y) =>
             // A stack covering the whole repository leads the root group.
             Number(y.rootPath === '') - Number(x.rootPath === '') ||
-            naturalCompare(x.name, y.name) ||
-            naturalCompare(x.rootPath, y.rootPath) ||
-            x.id.localeCompare(y.id),
+            (compare
+              ? compare(x, y)
+              : naturalCompare(x.name, y.name) ||
+                naturalCompare(x.rootPath, y.rootPath) ||
+                x.id.localeCompare(y.id)),
         ),
       }));
     return {
