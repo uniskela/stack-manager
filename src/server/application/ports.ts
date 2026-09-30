@@ -20,6 +20,7 @@ export interface UserRepository {
   /** Atomically inserts the user only if no users exist yet. Returns null if setup already happened. */
   createFirstAdmin(user: UserWithPasswordHash): Promise<User | null>;
   recordLogin(id: string, at: Date): Promise<void>;
+  updatePasswordHash(id: string, passwordHash: string, updatedAt: Date): Promise<void>;
 }
 
 export interface SessionRepository {
@@ -28,6 +29,9 @@ export interface SessionRepository {
   touch(id: string, lastSeenAt: Date, expiresAt: Date): Promise<void>;
   delete(id: string): Promise<void>;
   deleteExpired(now: Date): Promise<number>;
+  listByUser(userId: string, now: Date): Promise<Session[]>;
+  deleteForUser(userId: string, sessionId: string): Promise<boolean>;
+  deleteOtherSessions(userId: string, keepSessionId: string): Promise<number>;
 }
 
 export interface WorkspaceRepository {

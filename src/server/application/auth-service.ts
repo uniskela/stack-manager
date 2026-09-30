@@ -179,6 +179,87 @@ export class AuthService {
     return this.sessions.deleteExpired(this.clock.now());
   }
 
+  async changePassword(
+    userId: string,
+    currentSessionId: string,
+    input: { currentPassword: string; newPassword: string },
+    ctx: RequestContext,
+  ): Promise<void> {
+    const user = await this.users.findById(userId);
+    if (!user) throw new AuthenticationError();
+    const record = await this.users.findByUsername(user.username);
+    if (!record) throw new AuthenticationError();
+
+    const currentPassword = typeof input.currentPassword === 'string' ? input.currentPassword : '';
+    const ok =
+      currentPassword.length <= PASSWORD_MAX_LENGTH &&
+      (await verifyPassword(record.passwordHash, currentPassword));
+    if (!ok) {
+      await this.audit.record({
+        action: 'auth.password_change_failed',
+        outcome: 'failure',
+        actorUserId: userId,
+        meta: { ip: ctx.ip },
+        knownSecrets: [currentPassword],
+      });
+      throw new AuthenticationError('Current password is incorrect.');
+    }
+
+    const password = validateNewPassword(input.newPassword);
+    if (password.toLowerCase().includes(user.username)) {
+      throw new ValidationError('Password must not contain the username.', {
+        password: 'Must not contain the username.',
+      });
+    }
+
+    const now = this.clock.now();
+    await this.users.updatePasswordHash(userId, await hashPassword(password), now);
+    await this.sessions.deleteOtherSessions(userId, currentSessionId);
+    await this.audit.record({
+      action: 'auth.password_changed',
+      actorUserId: userId,
+      entityType: 'user',
+      entityId: userId,
+      knownSecrets: [currentPassword, password],
+    });
+  }
+
+  async listSessions(
+    userId: string,
+    currentSessionId: string,
+  ): Promise<
+    Array<{
+      id: string;
+      createdAt: string;
+      lastSeenAt: string;
+      userAgent: string | null;
+      current: boolean;
+    }>
+  > {
+    const now = this.clock.now();
+    const rows = await this.sessions.listByUser(userId, now);
+    return rows.map((s) => ({
+      id: s.id,
+      createdAt: s.createdAt.toISOString(),
+      lastSeenAt: s.lastSeenAt.toISOString(),
+      userAgent: s.userAgent,
+      current: s.id === currentSessionId,
+    }));
+  }
+
+  async revokeSession(userId: string, sessionId: string, currentSessionId: string): Promise<void> {
+    if (sessionId === currentSessionId) {
+      throw new ValidationError('Use Sign out to end the current session.', {
+        sessionId: 'Cannot revoke the current session here.',
+      });
+    }
+    await this.sessions.deleteForUser(userId, sessionId);
+  }
+
+  async revokeOtherSessions(userId: string, currentSessionId: string): Promise<number> {
+    return this.sessions.deleteOtherSessions(userId, currentSessionId);
+  }
+
   async #createSession(userId: string, ctx: RequestContext): Promise<{ token: string; expiresAt: Date }> {
     const token = generateSessionToken();
     const now = this.clock.now();

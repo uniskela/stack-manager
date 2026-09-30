@@ -3,6 +3,9 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as login from '@/app/api/auth/login/route';
 import * as logout from '@/app/api/auth/logout/route';
+import * as passwordRoute from '@/app/api/auth/password/route';
+import * as sessionsRoute from '@/app/api/auth/sessions/route';
+import * as sessionById from '@/app/api/auth/sessions/[sessionId]/route';
 import * as sessionRoute from '@/app/api/auth/session/route';
 import * as health from '@/app/api/health/route';
 import * as setup from '@/app/api/setup/route';
@@ -222,6 +225,115 @@ describe('sessions', () => {
       expect(logs).not.toContain(needle);
     }
     expect(audit).toContain('auth.login_failed');
+  });
+});
+
+describe('account', () => {
+  const NEW_PASSWORD = 'fresh horse battery staple';
+
+  async function secondSessionCookie() {
+    const res = await call(login.POST, {
+      method: 'POST',
+      body: { username: 'admin', password: PASSWORD },
+      headers: { 'user-agent': 'OtherBrowser/1.0' },
+    });
+    expect(res.status).toBe(200);
+    return cookieFrom(res);
+  }
+
+  it('changes password, revokes other sessions, keeps current, and audits without leaking secrets', async () => {
+    const cookieA = await setupAdmin();
+    const cookieB = await secondSessionCookie();
+    expect((await call(sessionRoute.GET, { cookie: cookieB })).status).toBe(200);
+
+    const bad = await call(passwordRoute.POST, {
+      method: 'POST',
+      cookie: cookieA,
+      body: { currentPassword: 'wrong', newPassword: NEW_PASSWORD, confirmPassword: NEW_PASSWORD },
+    });
+    expect(bad.status).toBe(401);
+    expect(bad.json.error.message).toBe('Current password is incorrect.');
+    expect(JSON.stringify(bad.json)).not.toMatch(/hash|argon/i);
+
+    const mismatch = await call(passwordRoute.POST, {
+      method: 'POST',
+      cookie: cookieA,
+      body: { currentPassword: PASSWORD, newPassword: NEW_PASSWORD, confirmPassword: 'no-match-here!!' },
+    });
+    expect(mismatch.status).toBe(400);
+    expect(mismatch.json.error.fields.confirmPassword).toBeTruthy();
+
+    const ok = await call(passwordRoute.POST, {
+      method: 'POST',
+      cookie: cookieA,
+      body: { currentPassword: PASSWORD, newPassword: NEW_PASSWORD, confirmPassword: NEW_PASSWORD },
+    });
+    expect(ok.status).toBe(200);
+    expect(JSON.stringify(ok.json)).not.toMatch(/hash|password/i);
+
+    expect((await call(sessionRoute.GET, { cookie: cookieA })).status).toBe(200);
+    expect((await call(sessionRoute.GET, { cookie: cookieB })).status).toBe(401);
+    expect(
+      (await call(login.POST, { method: 'POST', body: { username: 'admin', password: PASSWORD } })).status,
+    ).toBe(401);
+    expect(
+      (await call(login.POST, { method: 'POST', body: { username: 'admin', password: NEW_PASSWORD } }))
+        .status,
+    ).toBe(200);
+
+    const audit = JSON.stringify(await h.container.audit.list({ limit: 50 }));
+    expect(audit).toContain('auth.password_changed');
+    expect(audit).not.toContain(PASSWORD);
+    expect(audit).not.toContain(NEW_PASSWORD);
+  });
+
+  it('lists sessions with hashed ids and revokes one or all others', async () => {
+    const cookieA = await setupAdmin();
+    const cookieB = await secondSessionCookie();
+
+    const list = await call(sessionsRoute.GET, { cookie: cookieA });
+    expect(list.status).toBe(200);
+    expect(list.json.sessions).toHaveLength(2);
+    const current = list.json.sessions.find((s: { current: boolean }) => s.current);
+    const other = list.json.sessions.find((s: { current: boolean }) => !s.current);
+    expect(current).toBeTruthy();
+    expect(other).toBeTruthy();
+    expect(current.id).toMatch(/^[0-9a-f]{64}$/);
+    expect(JSON.stringify(list.json)).not.toMatch(/^sm_session=/);
+
+    const selfRevoke = await call(sessionById.DELETE, {
+      method: 'DELETE',
+      cookie: cookieA,
+      params: { sessionId: current.id },
+    });
+    expect(selfRevoke.status).toBe(400);
+    expect(selfRevoke.json.error.message).toMatch(/sign out/i);
+
+    const revokeOther = await call(sessionById.DELETE, {
+      method: 'DELETE',
+      cookie: cookieA,
+      params: { sessionId: other.id },
+    });
+    expect(revokeOther.status).toBe(200);
+    expect((await call(sessionRoute.GET, { cookie: cookieB })).status).toBe(401);
+    expect((await call(sessionRoute.GET, { cookie: cookieA })).status).toBe(200);
+
+    const cookieC = await secondSessionCookie();
+    expect((await call(sessionsRoute.DELETE, { method: 'DELETE', cookie: cookieA })).json).toEqual({
+      revoked: 1,
+    });
+    expect((await call(sessionRoute.GET, { cookie: cookieA })).status).toBe(200);
+    expect((await call(sessionRoute.GET, { cookie: cookieC })).status).toBe(401);
+  });
+
+  it('requires authentication for account APIs', async () => {
+    await setupAdmin();
+    expect((await call(passwordRoute.POST, { method: 'POST', body: {} })).status).toBe(401);
+    expect((await call(sessionsRoute.GET)).status).toBe(401);
+    expect((await call(sessionsRoute.DELETE, { method: 'DELETE' })).status).toBe(401);
+    expect(
+      (await call(sessionById.DELETE, { method: 'DELETE', params: { sessionId: 'a'.repeat(64) } })).status,
+    ).toBe(401);
   });
 });
 
