@@ -1,6 +1,6 @@
 {
   "name": "stack-manager",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Git-native source workspace for self-hosted Compose infrastructure, with deployment awareness.",
   "license": "MIT",

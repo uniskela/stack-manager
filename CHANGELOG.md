@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/uniskela/stack-manager/compare/v0.2.0...v0.3.0) (2026-09-30)
+
+
+### Features
+
+* dashboard home, organised stacks, and settings split ([#15](https://github.com/uniskela/stack-manager/issues/15)) ([105b855](https://github.com/uniskela/stack-manager/commit/105b8554a4e7501f0f0fe53823890fec27646d74))
+
 ## [0.2.0](https://github.com/uniskela/stack-manager/compare/v0.1.0...v0.2.0) (2026-09-30)
 
 
