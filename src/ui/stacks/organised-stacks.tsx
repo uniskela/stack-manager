@@ -49,6 +49,9 @@ export function OrganisedStacks(props: { workspaceId: string; stacks: GroupableS
   const [state, setState] = useState<StackListState>(() => parseStackListState(searchParams));
   const onChange = useCallback((patch: Partial<StackListState>) => setState((s) => ({ ...s, ...patch })), []);
   const searchRef = useRef<HTMLInputElement>(null);
+  // Own replaceState writes do not update useSearchParams; this tracks Next-driven query changes only.
+  const lastSearch = useRef(searchParams.toString());
+  const pendingUrl = useRef<string | null>(null);
 
   const repositories = useMemo(() => {
     const byId = new Map(props.stacks.map((s) => [s.repository.id, s.repository]));
@@ -63,7 +66,6 @@ export function OrganisedStacks(props: { workspaceId: string; stacks: GroupableS
   // Keep the view in the URL so Back, reload and shared links reproduce it. Pending writes flush before a stack
   // link navigates, so the list entry in history always holds the latest view.
   const query = serialiseStackListState(view);
-  const pendingUrl = useRef<string | null>(null);
   const flushUrl = useCallback(() => {
     if (pendingUrl.current === null) return;
     window.history.replaceState(window.history.state, '', pendingUrl.current);
@@ -79,6 +81,16 @@ export function OrganisedStacks(props: { workspaceId: string; stacks: GroupableS
     const timer = window.setTimeout(flushUrl, URL_WRITE_DELAY_MS);
     return () => window.clearTimeout(timer);
   }, [query, flushUrl]);
+
+  // Soft navigation / Back onto /stacks with a different query must restore controls; drop any pending write
+  // so it cannot overwrite the restored URL.
+  useEffect(() => {
+    const nextSearch = searchParams.toString();
+    if (nextSearch === lastSearch.current) return;
+    lastSearch.current = nextSearch;
+    pendingUrl.current = null;
+    setState(parseStackListState(searchParams));
+  }, [searchParams]);
 
   // Collapse state: the saved per-browser layout, except while search or a filter narrows the list. Then every
   // group starts open so matches are never hidden, and toggles apply only until the narrowing changes.
