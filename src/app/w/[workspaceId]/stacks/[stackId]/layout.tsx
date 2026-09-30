@@ -1,10 +1,11 @@
 import { Folder, FolderGit2, GitBranch, GitCommitHorizontal, Hourglass } from 'lucide-react';
 import Link from 'next/link';
 import { getContainer } from '@/server/container';
-import { Breadcrumbs } from '@/ui/primitives/breadcrumbs';
 import { EmptyState } from '@/ui/primitives/empty-state';
 import { PageHeader } from '@/ui/primitives/page-header';
 import { StackTabs } from '@/ui/source/stack-tabs';
+import { StackBreadcrumbs } from '@/ui/stacks/stack-breadcrumbs';
+import { StackSwitcher } from '@/ui/stacks/stack-switcher';
 import { orNotFound } from '../../../../_lib/session';
 
 export default async function StackLayout({
@@ -18,7 +19,10 @@ export default async function StackLayout({
   const { stacks, source } = getContainer();
   const stack = await orNotFound(stacks.get(workspaceId, stackId));
   const fetched = stack.repository.headSha !== null;
-  const drafts = fetched ? await source.countDrafts(stack.repository.id, stack.rootPath) : 0;
+  const [drafts, siblings] = await Promise.all([
+    fetched ? source.countDrafts(stack.repository.id, stack.rootPath) : 0,
+    stacks.listForRepository(workspaceId, stack.repository.id),
+  ]);
   const base = `/w/${workspaceId}/stacks/${stackId}`;
 
   return (
@@ -26,11 +30,21 @@ export default async function StackLayout({
       <div className="stack-head">
         <PageHeader
           breadcrumbs={
-            <Breadcrumbs
-              items={[{ label: 'Stacks', href: `/w/${workspaceId}/stacks` }, { label: stack.name }]}
+            <StackBreadcrumbs
+              workspaceId={workspaceId}
+              repository={{ id: stack.repository.id, name: stack.repository.name }}
+              stackName={stack.name}
             />
           }
           title={stack.name}
+          actions={
+            <StackSwitcher
+              workspaceId={workspaceId}
+              currentId={stack.id}
+              repository={{ id: stack.repository.id, name: stack.repository.name }}
+              stacks={siblings.map((s) => ({ id: s.id, name: s.name, rootPath: s.rootPath }))}
+            />
+          }
           description={
             <div className="stack-meta">
               <span>
