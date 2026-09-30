@@ -56,6 +56,9 @@ test.describe('signed in', () => {
 
   test('connect repository: breadcrumbs and server-side validation', async ({ page }) => {
     await page.goto('/');
+    // Connect CTA lives on the repositories inventory (Dashboard only shows it when empty).
+    const home = new URL(page.url()).pathname;
+    await page.goto(`${home}/repositories`);
     await page.getByRole('link', { name: 'Connect repository' }).click();
     await expect(page.getByRole('navigation', { name: 'Breadcrumb' })).toContainText('Repositories');
     await expectAccessible(page);
