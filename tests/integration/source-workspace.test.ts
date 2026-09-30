@@ -271,6 +271,38 @@ describe('adding all stacks', () => {
     server.commitFiles(REPO, 'main', { 'apps/memos/compose.yaml': null });
   });
 
+  it('keeps going and reports a folder as failed when the recovery re-read fails', async () => {
+    const stacks = h.container.repos.stacks;
+    const insert = stacks.insert.bind(stacks);
+    const list = stacks.listByRepository.bind(stacks);
+    let broken = false;
+    stacks.insert = async (stack) => {
+      if (stack.rootPath === 'apps/blinko') {
+        broken = true;
+        throw new Error('disk I/O error');
+      }
+      return insert(stack);
+    };
+    stacks.listByRepository = async (...args) => {
+      if (broken) {
+        broken = false;
+        throw new Error('database is locked');
+      }
+      return list(...args);
+    };
+    try {
+      const res = await addAll();
+      expect(res.json.result).toEqual({
+        added: 2,
+        existing: 0,
+        failed: [{ rootPath: 'apps/blinko', message: 'Could not add this folder as a stack.' }],
+      });
+    } finally {
+      stacks.insert = insert;
+      stacks.listByRepository = list;
+    }
+  });
+
   it('registers every folder even when the suggestion list is capped', async () => {
     const files: Record<string, string> = {};
     for (let i = 0; i < 2001; i++) files[`s${String(i).padStart(4, '0')}/compose.yaml`] = 'services: {}\n';

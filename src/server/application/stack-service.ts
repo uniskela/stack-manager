@@ -204,7 +204,13 @@ export class StackService {
       } catch {
         // Another addAll (the post-fetch auto-add and the "Add all" button can overlap) may have registered
         // this folder, or taken the slug, since the suggestions were read: re-read and settle it.
-        const current = await this.repo.listByRepository(workspaceId, repositoryId);
+        let current: Stack[];
+        try {
+          current = await this.repo.listByRepository(workspaceId, repositoryId);
+        } catch {
+          result.failed.push({ rootPath: s.rootPath, message: 'Could not add this folder as a stack.' });
+          continue;
+        }
         if (current.some((x) => x.rootPath === s.rootPath)) {
           result.existing++;
           continue;
