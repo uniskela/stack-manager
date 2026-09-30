@@ -548,7 +548,12 @@ describe('drafts', () => {
     const events = await h.container.audit.list({ workspaceId });
     const draftEvents = events.filter((e) => e.action.startsWith('draft.'));
     expect(draftEvents.length).toBeGreaterThanOrEqual(3);
-    expect(JSON.stringify(draftEvents)).not.toContain('1.5');
+    // Draft file content must not land in audit meta. Check meta only — createdAt can
+    // contain the substring "1.5" (e.g. …41.544Z) and falsely trip a whole-event scan.
+    for (const event of draftEvents) {
+      expect(event.meta).not.toHaveProperty('content');
+      expect(JSON.stringify(event.meta)).not.toContain('1.5');
+    }
   });
 
   it('creates new files as drafts and shows them in the tree', async () => {
