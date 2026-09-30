@@ -14,7 +14,7 @@ export default function WorkspaceNotFound() {
       icon={FileQuestion}
       headingLevel={1}
       title="Page not found"
-      actions={<ButtonLink href={`/w/${workspaceId}`}>Back to repositories</ButtonLink>}
+      actions={<ButtonLink href={`/w/${workspaceId}`}>Back to dashboard</ButtonLink>}
     >
       That page does not exist, or it was removed.
     </EmptyState>

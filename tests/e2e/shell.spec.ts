@@ -19,7 +19,10 @@ test.describe('signed in', () => {
     await page.goto('/');
     // Empty workspace, or the repository list when the source workspace tests connected a sample repo.
     await expect(
-      page.getByRole('heading', { level: 1, name: /^(Connect your Compose repository|Repositories)$/ }),
+      page.getByRole('heading', {
+        level: 1,
+        name: /^(Connect your Compose repository|Dashboard|.+)$/,
+      }),
     ).toBeVisible();
     await expect(page.getByRole('link', { name: 'stack-manager home' }).first()).toBeVisible();
     await expectAccessible(page);
@@ -27,7 +30,8 @@ test.describe('signed in', () => {
     const nav = await openNav(page);
     await expect(nav.getByText(WORKSPACE_NAME)).toBeVisible();
     await expect(nav.getByText(ADMIN.username)).toBeVisible();
-    await expect(nav.getByRole('link', { name: 'Repositories' })).toHaveAttribute('aria-current', 'page');
+    await expect(nav.getByRole('link', { name: 'Dashboard' })).toHaveAttribute('aria-current', 'page');
+    await expect(nav.getByRole('link', { name: 'Repositories' })).not.toHaveAttribute('aria-current', 'page');
     if (isMobile(page)) await expectAccessible(page);
 
     await nav.getByRole('link', { name: 'Settings' }).click();
@@ -59,7 +63,7 @@ test.describe('signed in', () => {
     else await expect(page.getByRole('button', { name: 'Open navigation' })).toBeVisible();
     await expectAccessible(page);
 
-    await page.getByRole('link', { name: 'Back to repositories' }).click();
+    await page.getByRole('link', { name: 'Back to dashboard' }).click();
     await expect(page).toHaveURL(new RegExp(`${home}$`));
   });
 });

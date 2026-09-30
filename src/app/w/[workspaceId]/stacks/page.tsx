@@ -19,7 +19,7 @@ export default async function StacksPage({ params }: { params: Promise<{ workspa
         icon={Layers}
         headingLevel={1}
         title="No stacks yet"
-        actions={<ButtonLink href={`/w/${workspaceId}`}>Go to repositories</ButtonLink>}
+        actions={<ButtonLink href={`/w/${workspaceId}/repositories`}>Go to repositories</ButtonLink>}
       >
         A stack is a folder in one of your repositories with a Compose file. Open a repository to pick the
         folders stack-manager found, or add one by path.

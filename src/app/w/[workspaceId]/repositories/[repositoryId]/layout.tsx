@@ -23,7 +23,10 @@ export default async function RepositoryLayout({
         <PageHeader
           breadcrumbs={
             <Breadcrumbs
-              items={[{ label: 'Repositories', href: `/w/${workspaceId}` }, { label: repo.name }]}
+              items={[
+                { label: 'Repositories', href: `/w/${workspaceId}/repositories` },
+                { label: repo.name },
+              ]}
             />
           }
           title={repo.name}
