@@ -622,6 +622,14 @@ describe('drafts', () => {
     const after = (await readFile(stackId, 'apps/liftlog/compose.yaml')).json.file;
     expect(after.content).toContain('# upstream');
     expect(after.draft).toMatchObject({ outdated: true, baseBlobSha: base.blobSha });
+    const outdatedSummaries = await h.container.source.listOutdatedDraftSummaries(workspaceId);
+    expect(outdatedSummaries).toContainEqual(
+      expect.objectContaining({
+        repositoryId,
+        path: 'apps/liftlog/compose.yaml',
+        stackId,
+      }),
+    );
     // Restore for other tests.
     server.commitFiles(REPO, 'main', { 'apps/liftlog/compose.yaml': LIFTLOG_COMPOSE });
   });

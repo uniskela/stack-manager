@@ -611,6 +611,22 @@ table.simple th {
   }
 }
 
+.dashboard-summary {
+  margin-bottom: var(--space-5);
+}
+
+.dashboard-summary-line {
+  margin: 0;
+}
+
+.dashboard-sync-line {
+  margin: var(--space-2) 0 0;
+}
+
+.dashboard-shortcuts {
+  margin-bottom: var(--space-5);
+}
+
 @media (max-width: 640px) {
   .meta-grid {
     grid-template-columns: 1fr;

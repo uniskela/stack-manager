@@ -7,7 +7,7 @@ import { isSecretPath, isWithin, languageFor } from '@/shared/source/paths';
 import type { ChangeView, FileView, LockReason, TreeNodeView } from '@/shared/source/types';
 import type { AuditService } from './audit-service';
 import type { GitRepositoryService } from './git-repository-service';
-import type { SourceDraftRepository } from './ports';
+import type { SourceDraftRepository, StackRepository } from './ports';
 
 export type { ChangeView, DraftView, FileView, LockReason, TreeNodeView } from '@/shared/source/types';
 
@@ -34,6 +34,7 @@ export class SourceService {
     private readonly repositories: GitRepositoryService,
     private readonly reader: SourceTreeReader,
     private readonly drafts: SourceDraftRepository,
+    private readonly stacks: StackRepository,
     private readonly audit: AuditService,
     private readonly clock: Clock,
     private readonly newId: () => string,
@@ -208,6 +209,34 @@ export class SourceService {
     return (await this.drafts.list(repositoryId, root || undefined)).length;
   }
 
+  /** Drafts outdated vs current tree blobs (no draft content). */
+  async listOutdatedDraftSummaries(
+    workspaceId: string,
+  ): Promise<Array<{ repositoryId: string; path: string; stackId?: string }>> {
+    const [repos, stacks] = await Promise.all([
+      this.repositories.list(workspaceId),
+      this.stacks.list(workspaceId),
+    ]);
+    const out: Array<{ repositoryId: string; path: string; stackId?: string }> = [];
+    for (const repo of repos) {
+      const source = await this.repositories.localSource(workspaceId, repo.id);
+      if (!source) continue;
+      const entries = await this.reader.listTree(source.cloneDir, source.commitSha);
+      const byPath = new Map(entries.map((e) => [e.path, e]));
+      const drafts = await this.drafts.list(repo.id);
+      for (const draft of drafts) {
+        if (!isOutdated(draft, byPath.get(draft.path))) continue;
+        out.push({
+          repositoryId: repo.id,
+          path: draft.path,
+          stackId: stackIdForPath(stacks, repo.id, draft.path),
+        });
+      }
+    }
+    out.sort((a, b) => a.path.localeCompare(b.path));
+    return out;
+  }
+
   async #fileView(snap: Snapshot, path: string, draft: SourceDraft | null): Promise<FileView | null> {
     const entry = snap.byPath.get(path) ?? null;
     if (!entry && !draft) return null;
@@ -319,4 +348,17 @@ function lockReason(entry: SourceTreeEntry): LockReason | null {
 function isOutdated(draft: SourceDraft, entry: SourceTreeEntry | undefined): boolean {
   if (draft.baseBlobSha === null) return entry !== undefined;
   return entry?.objectSha !== draft.baseBlobSha;
+}
+
+function stackIdForPath(
+  stacks: Awaited<ReturnType<StackRepository['list']>>,
+  repositoryId: string,
+  path: string,
+): string | undefined {
+  let best: (typeof stacks)[number] | undefined;
+  for (const stack of stacks) {
+    if (stack.repositoryId !== repositoryId || !isWithin(stack.rootPath, path)) continue;
+    if (!best || stack.rootPath.length > best.rootPath.length) best = stack;
+  }
+  return best?.id;
 }
