@@ -1,110 +1,30 @@
 'use client';
 
-import { ChevronDown, ChevronRight, Layers, Search, SearchX, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, FolderGit2, Layers, PencilLine, Search, SearchX, X } from 'lucide-react';
 import Link from 'next/link';
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-  type ReactNode,
-} from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
   filterStacks,
+  folderLabel,
   groupStacks,
+  pluralise,
   stackCountLabel,
+  stackRowDetail,
   type GroupableStack,
+  type StackFolderGroup,
+  type StackRepoGroup,
 } from '@/shared/stacks/group-stacks';
 import { Button } from '@/ui/primitives/button';
 import { EmptyState } from '@/ui/primitives/empty-state';
-
-function collapseStorageKey(workspaceId: string): string {
-  return `sm.stacks.collapse.${workspaceId}`;
-}
-
-const collapseListeners = new Set<() => void>();
-
-/** Stable empty snapshot for useSyncExternalStore when storage is missing or invalid. */
-const EMPTY_COLLAPSE_MAP: Record<string, boolean> = Object.freeze({});
-
-const collapseMapCache = new Map<string, { raw: string | null; snapshot: Record<string, boolean> }>();
-
-function notifyCollapseListeners(): void {
-  for (const listener of collapseListeners) {
-    listener();
-  }
-}
-
-function readCollapseMap(workspaceId: string): Record<string, boolean> {
-  let raw: string | null;
-  try {
-    raw = sessionStorage.getItem(collapseStorageKey(workspaceId));
-  } catch {
-    // Storage unavailable — keep toggles working via the in-memory snapshot.
-    return collapseMapCache.get(workspaceId)?.snapshot ?? EMPTY_COLLAPSE_MAP;
-  }
-
-  const cached = collapseMapCache.get(workspaceId);
-  if (cached !== undefined && cached.raw === raw) {
-    return cached.snapshot;
-  }
-
-  if (!raw) {
-    // After a failed persist we cache { raw: null, snapshot }; keep that so toggles stick.
-    if (cached !== undefined && cached.raw === null && cached.snapshot !== EMPTY_COLLAPSE_MAP) {
-      return cached.snapshot;
-    }
-    collapseMapCache.set(workspaceId, { raw, snapshot: EMPTY_COLLAPSE_MAP });
-    return EMPTY_COLLAPSE_MAP;
-  }
-
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      const snapshot = parsed as Record<string, boolean>;
-      collapseMapCache.set(workspaceId, { raw, snapshot });
-      return snapshot;
-    }
-  } catch {
-    /* ignore */
-  }
-
-  collapseMapCache.set(workspaceId, { raw, snapshot: EMPTY_COLLAPSE_MAP });
-  return EMPTY_COLLAPSE_MAP;
-}
-
-function writeCollapseMap(workspaceId: string, map: Record<string, boolean>): void {
-  // Always update memory + notify so collapse works when sessionStorage is full or blocked.
-  let raw: string | null = null;
-  try {
-    raw = JSON.stringify(map);
-    sessionStorage.setItem(collapseStorageKey(workspaceId), raw);
-  } catch {
-    raw = null;
-  }
-  collapseMapCache.set(workspaceId, { raw, snapshot: map });
-  notifyCollapseListeners();
-}
-
-function subscribeCollapseMap(onStoreChange: () => void): () => void {
-  collapseListeners.add(onStoreChange);
-  const onStorage = (event: StorageEvent) => {
-    if (event.storageArea === sessionStorage && event.key?.startsWith('sm.stacks.collapse.')) {
-      onStoreChange();
-    }
-  };
-  window.addEventListener('storage', onStorage);
-  return () => {
-    collapseListeners.delete(onStoreChange);
-    window.removeEventListener('storage', onStorage);
-  };
-}
-
-function isRepoCollapsed(map: Record<string, boolean>, repositoryId: string): boolean {
-  return map[repositoryId] === true;
-}
+import { StatusPill } from '@/ui/primitives/status-pill';
+import {
+  EMPTY_COLLAPSE_MAP,
+  folderCollapseKey,
+  isCollapsed,
+  readCollapseMap,
+  subscribeCollapseMap,
+  writeCollapseMap,
+} from './collapse-store';
 
 /** True when a "/" press should focus search: not while typing somewhere else or using a modifier. */
 function isSearchShortcut(event: KeyboardEvent): boolean {
@@ -137,18 +57,14 @@ export function OrganisedStacks(props: { workspaceId: string; stacks: GroupableS
   const filtered = useMemo(() => filterStacks(props.stacks, query), [props.stacks, query]);
   const groups = useMemo(() => groupStacks(filtered), [filtered]);
 
-  const toggleRepo = useCallback(
-    (repositoryId: string) => {
+  const toggle = useCallback(
+    (key: string) => {
       if (searching) {
-        setSearchCollapse({
-          term,
-          map: { ...searchCollapsed, [repositoryId]: !isRepoCollapsed(searchCollapsed, repositoryId) },
-        });
+        setSearchCollapse({ term, map: { ...searchCollapsed, [key]: !isCollapsed(searchCollapsed, key) } });
         return;
       }
       const prev = readCollapseMap(props.workspaceId);
-      const next = { ...prev, [repositoryId]: !isRepoCollapsed(prev, repositoryId) };
-      writeCollapseMap(props.workspaceId, next);
+      writeCollapseMap(props.workspaceId, { ...prev, [key]: !isCollapsed(prev, key) });
     },
     [props.workspaceId, searching, term, searchCollapsed],
   );
@@ -225,66 +141,140 @@ export function OrganisedStacks(props: { workspaceId: string; stacks: GroupableS
           Nothing matches “{term}” in stack names, repository names or paths.
         </EmptyState>
       ) : (
-        <ul className="list" aria-label="Stacks by repository">
-          {groups.flatMap((repo) => {
-            const open = !isRepoCollapsed(activeCollapsed, repo.repositoryId);
-            const rows: ReactNode[] = [
-              <li key={`repo:${repo.repositoryId}`}>
-                <button
-                  type="button"
-                  className="list-row"
-                  aria-expanded={open}
-                  onClick={() => toggleRepo(repo.repositoryId)}
-                >
-                  {open ? (
-                    <ChevronDown className="icon muted" aria-hidden="true" />
-                  ) : (
-                    <ChevronRight className="icon muted" aria-hidden="true" />
-                  )}
-                  <div className="grow">
-                    <div className="title truncate">{repo.repositoryName}</div>
-                  </div>
-                </button>
-              </li>,
-            ];
-            if (!open) return rows;
-
-            for (const folder of repo.folders) {
-              if (repo.folders.length > 1) {
-                rows.push(
-                  <li key={`folder:${repo.repositoryId}:${folder.segment}`}>
-                    <div className="list-row">
-                      <span className="grow muted">{folder.segment}</span>
-                    </div>
-                  </li>,
-                );
-              }
-              for (const stack of folder.stacks) {
-                rows.push(
-                  <li key={stack.id}>
-                    <Link className="list-row" href={`/w/${props.workspaceId}/stacks/${stack.id}`}>
-                      <Layers className="icon muted" aria-hidden="true" />
-                      <div className="grow">
-                        <div className="title truncate">{stack.name}</div>
-                        <div className="muted truncate list-row-sub">
-                          <span className="mono">{stack.rootPath || '(root)'}</span>
-                        </div>
-                      </div>
-                      {stack.draftCount ? (
-                        <span className="pill pending">
-                          {stack.draftCount} draft{stack.draftCount === 1 ? '' : 's'}
-                        </span>
-                      ) : null}
-                      <ChevronRight className="icon muted" aria-hidden="true" />
-                    </Link>
-                  </li>,
-                );
-              }
-            }
-            return rows;
-          })}
-        </ul>
+        <div className="stack-groups">
+          {groups.map((repo) => (
+            <RepositoryGroup
+              key={repo.repositoryId}
+              workspaceId={props.workspaceId}
+              repo={repo}
+              collapsed={activeCollapsed}
+              onToggle={toggle}
+            />
+          ))}
+        </div>
       )}
     </>
+  );
+}
+
+function Chevron({ open }: { open: boolean }) {
+  const Icon = open ? ChevronDown : ChevronRight;
+  return <Icon className="icon muted" aria-hidden="true" />;
+}
+
+/** A repository section: heading with counts and fetch state, then its folder groups. */
+function RepositoryGroup(props: {
+  workspaceId: string;
+  repo: StackRepoGroup;
+  collapsed: Record<string, boolean>;
+  onToggle: (key: string) => void;
+}) {
+  const { repo } = props;
+  const open = !isCollapsed(props.collapsed, repo.repositoryId);
+  const headingId = `stack-repo-${repo.repositoryId}`;
+  const bodyId = `${headingId}-body`;
+  const drafts = repo.repository.draftCount ?? 0;
+  const status = repo.repository.syncStatus ?? 'ready';
+  return (
+    <section className="stack-repo" aria-labelledby={headingId}>
+      <div className="stack-repo-head">
+        <h2 className="stack-repo-title" id={headingId}>
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-controls={bodyId}
+            onClick={() => props.onToggle(repo.repositoryId)}
+          >
+            <Chevron open={open} />
+            <span className="truncate">{repo.repositoryName}</span>
+          </button>
+        </h2>
+        <span className="stack-repo-meta">
+          {pluralise(repo.stackCount, 'stack')}
+          {drafts ? ` · ${pluralise(drafts, 'draft')}` : null}
+        </span>
+        {status !== 'ready' ? <StatusPill status={status} /> : null}
+        <Link
+          className="btn ghost small icon-only"
+          href={`/w/${props.workspaceId}/repositories/${repo.repositoryId}`}
+          aria-label={`Open repository ${repo.repositoryName}`}
+          title="Open repository"
+        >
+          <FolderGit2 className="icon" aria-hidden="true" />
+        </Link>
+      </div>
+      <div className="stack-repo-body" id={bodyId} hidden={!open}>
+        {repo.folders.map((folder, index) => (
+          <FolderGroup
+            key={folder.path}
+            id={`${headingId}-folder-${index}`}
+            workspaceId={props.workspaceId}
+            repositoryId={repo.repositoryId}
+            folder={folder}
+            collapsed={props.collapsed}
+            onToggle={props.onToggle}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/** Stacks sharing a parent folder, under a collapsible path label. */
+function FolderGroup(props: {
+  id: string;
+  workspaceId: string;
+  repositoryId: string;
+  folder: StackFolderGroup;
+  collapsed: Record<string, boolean>;
+  onToggle: (key: string) => void;
+}) {
+  const key = folderCollapseKey(props.repositoryId, props.folder.path);
+  const open = !isCollapsed(props.collapsed, key);
+  const label = folderLabel(props.folder.path);
+  return (
+    <div className="stack-folder">
+      <h3 className="stack-folder-title">
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={props.id}
+          onClick={() => props.onToggle(key)}
+        >
+          <Chevron open={open} />
+          <span className={props.folder.path ? 'mono truncate' : 'truncate'}>{label}</span>
+          <span className="stack-folder-count">
+            {props.folder.stacks.length}
+            <span className="visually-hidden"> {props.folder.stacks.length === 1 ? 'stack' : 'stacks'}</span>
+          </span>
+        </button>
+      </h3>
+      <ul className="stack-rows" id={props.id} hidden={!open} aria-label={`Stacks in ${label}`}>
+        {props.folder.stacks.map((stack) => (
+          <StackRow key={stack.id} workspaceId={props.workspaceId} stack={stack} />
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function StackRow({ workspaceId, stack }: { workspaceId: string; stack: GroupableStack }) {
+  const detail = stackRowDetail(stack);
+  const drafts = stack.draftCount ?? 0;
+  return (
+    <li>
+      <Link className="stack-row" href={`/w/${workspaceId}/stacks/${stack.id}`}>
+        <Layers className="icon muted" aria-hidden="true" />
+        <span className="stack-row-name truncate">{stack.name}</span>
+        {detail ? <span className="stack-row-detail truncate">{detail}</span> : null}
+        {drafts ? (
+          <span className="draft-badge">
+            <PencilLine className="icon" aria-hidden="true" />
+            {pluralise(drafts, 'draft')}
+            {stack.rootPath === '' ? ' in repository' : null}
+          </span>
+        ) : null}
+      </Link>
+    </li>
   );
 }
