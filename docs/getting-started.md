@@ -51,8 +51,29 @@ Each stack is a folder plus its Compose file, so one repository can hold many st
 
 ## 4. Work on a stack
 
-Open a stack from the **Stacks** page (grouped by repository, with search and collapse for large monorepos). Each stack
-has these tabs:
+### Find a stack
+
+The **Stacks** page lists every stack by repository, then by the folder that contains it (`apps/media`,
+`services/auth`). Numbers sort the way you'd read them, so `3-network` comes before `10-core`. Each repository shows
+its stack and draft counts, plus a status if its last fetch failed or it hasn't been fetched yet.
+
+- **Search** matches stack names, repository names and paths. Every word must match (`media plex`). Press `/` to jump
+  to the search box, Esc to clear it, and ↓ to move into the list; ↑ and ↓ then move between groups and stacks.
+- **Filters** narrow the list to stacks **with drafts**, stacks whose repository **needs attention**, or one
+  repository.
+- **Sort** by name, path or most drafts. **Group** by folder (the default), by repository only, or not at all.
+- **Expand all** and **Collapse all** open or fold every repository. Collapsed groups stay that way while you browse
+  and open again whenever a search or filter is active, so nothing is hidden.
+
+The search, filters, sort and grouping are kept in the page address, so Back, reload and a shared link show the same
+list. On a phone they sit behind **Filters**.
+
+Inside a stack, the breadcrumb (**Stacks › repository › stack**) takes you back to the list as you left it, and
+**Switch stack** jumps to another stack in the same repository without leaving the tab you're on.
+
+### Stack tabs
+
+Each stack has these tabs:
 
 | Tab | What it's for |
 | --- | --- |
