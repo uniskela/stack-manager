@@ -12,7 +12,18 @@ const collapseListeners = new Set<() => void>();
 /** Stable empty snapshot for useSyncExternalStore when storage is missing or invalid. */
 export const EMPTY_COLLAPSE_MAP: Record<string, boolean> = Object.freeze({});
 
-const collapseMapCache = new Map<string, { raw: string | null; snapshot: Record<string, boolean> }>();
+type CollapseCacheEntry = {
+  /** Last serialised value known to match sessionStorage, or null when empty / unpersisted. */
+  raw: string | null;
+  snapshot: Record<string, boolean>;
+  /**
+   * Snapshot is newer than sessionStorage (setItem failed). Reads must return this snapshot until a
+   * write succeeds — otherwise getItem still yields the previous stored map and overwrites the toggle.
+   */
+  dirty: boolean;
+};
+
+const collapseMapCache = new Map<string, CollapseCacheEntry>();
 
 function notifyCollapseListeners(): void {
   for (const listener of collapseListeners) {
@@ -21,25 +32,25 @@ function notifyCollapseListeners(): void {
 }
 
 export function readCollapseMap(workspaceId: string): Record<string, boolean> {
+  const cached = collapseMapCache.get(workspaceId);
+  if (cached?.dirty) {
+    return cached.snapshot;
+  }
+
   let raw: string | null;
   try {
     raw = sessionStorage.getItem(collapseStorageKey(workspaceId));
   } catch {
     // Storage unavailable — keep toggles working via the in-memory snapshot.
-    return collapseMapCache.get(workspaceId)?.snapshot ?? EMPTY_COLLAPSE_MAP;
+    return cached?.snapshot ?? EMPTY_COLLAPSE_MAP;
   }
 
-  const cached = collapseMapCache.get(workspaceId);
   if (cached !== undefined && cached.raw === raw) {
     return cached.snapshot;
   }
 
   if (!raw) {
-    // After a failed persist we cache { raw: null, snapshot }; keep that so toggles stick.
-    if (cached !== undefined && cached.raw === null && cached.snapshot !== EMPTY_COLLAPSE_MAP) {
-      return cached.snapshot;
-    }
-    collapseMapCache.set(workspaceId, { raw, snapshot: EMPTY_COLLAPSE_MAP });
+    collapseMapCache.set(workspaceId, { raw, snapshot: EMPTY_COLLAPSE_MAP, dirty: false });
     return EMPTY_COLLAPSE_MAP;
   }
 
@@ -47,27 +58,30 @@ export function readCollapseMap(workspaceId: string): Record<string, boolean> {
     const parsed: unknown = JSON.parse(raw);
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
       const snapshot = parsed as Record<string, boolean>;
-      collapseMapCache.set(workspaceId, { raw, snapshot });
+      collapseMapCache.set(workspaceId, { raw, snapshot, dirty: false });
       return snapshot;
     }
   } catch {
     /* ignore */
   }
 
-  collapseMapCache.set(workspaceId, { raw, snapshot: EMPTY_COLLAPSE_MAP });
+  collapseMapCache.set(workspaceId, { raw, snapshot: EMPTY_COLLAPSE_MAP, dirty: false });
   return EMPTY_COLLAPSE_MAP;
 }
 
 export function writeCollapseMap(workspaceId: string, map: Record<string, boolean>): void {
   // Always update memory + notify so collapse works when sessionStorage is full or blocked.
   let raw: string | null = null;
+  let dirty = false;
   try {
     raw = JSON.stringify(map);
     sessionStorage.setItem(collapseStorageKey(workspaceId), raw);
   } catch {
+    // setItem throws before replacing the previous value; keep the new snapshot as dirty.
     raw = null;
+    dirty = true;
   }
-  collapseMapCache.set(workspaceId, { raw, snapshot: map });
+  collapseMapCache.set(workspaceId, { raw, snapshot: map, dirty });
   notifyCollapseListeners();
 }
 

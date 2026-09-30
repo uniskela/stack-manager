@@ -1,6 +1,6 @@
 # Stacks page: UI/UX audit and improvement plan
 
-**Status:** Step 0, S1 and S2 done; S3–S5 not started.
+**Status:** Step 0 and S1–S3 done; S4–S5 not started.
 **Date:** 2026-09-30
 **Scope:** `/w/{workspaceId}/stacks` (the inventory list) and the handful of touch-points that make it easy to get into and back out of a stack. Follows slice A ([design](./2026-09-30-dashboard-stacks-settings-design.md)), which shipped grouping, search and collapse.
 
@@ -167,6 +167,33 @@ monorepo paths, 8 drafts, one repository in `error` with no fetch), captured wit
 - **URL state** (A3): `?q=&drafts=1&repo=<id>&attention=1&sort=&group=` via `useSearchParams` + `router.replace` (no history spam, debounced for typing). Invalid params fall back to defaults; unknown repo ids are ignored.
 - Pure helpers in `src/shared/stacks`: `parseStackListState`, `serialiseStackListState`, `applyStackFilters`, `sortStacks`, extended `groupStacks`. Extend `GroupableStack` with `repository.syncStatus` and `repository.headSha !== null` (from `StackView`).
 - Tests: unit tests for every helper and the URL round-trip; e2e for filter → open stack → Back restores the same view.
+
+**Done.** Notes on what shipped:
+
+- State lives in `src/shared/stacks/list-state.ts`: `parseStackListState` and `serialiseStackListState` (defaults
+  omitted, stable order, the query capped at 200 characters, unknown values fall back to the defaults),
+  `applyStackFilters`, `stackComparator`, `needsAttention` and `highlightParts`. `groupStacks` takes the
+  comparator, and the whole-repository stack still leads its folder.
+- The URL is written with `history.replaceState`, as the editor already does for `?file=`, rather than
+  `router.replace`, which would re-run the server page on every keystroke. Writes wait 250 ms for typing to settle,
+  and a pending write flushes in the list's click-capture phase, so opening a stack always records the latest view.
+  The initial state comes from `useSearchParams`, so Back and reload restore it. A `repo` id that matches nothing is
+  ignored.
+- Anything that narrows the list (search or a filter) opens every group, extending the S1 rule. Toggles apply only
+  until the narrowing changes. Sort and grouping don't count as narrowing.
+- The toolbar is `src/ui/stacks/stack-list-toolbar.tsx`. Filters sit on the left: toggle buttons with `aria-pressed`,
+  shown only when they can match something or are already on, a repository select when there is more than one
+  repository, and **Clear filters**. Sort and Group form a cluster on the right that wraps as one piece. Expand all
+  and Collapse all are labelled icon buttons, hidden in flat mode; Collapse all folds repositories only, leaving an
+  overview. On phones everything except Expand/Collapse sits behind **Filters** (with an active-filter count).
+- Deviation: no removable filter chips. The pressed toggles, the Filters count on phones and Clear filters cover the
+  same need without showing each filter twice. The repository filter is a single select; add multi-select if it's
+  missed.
+- Grouping options: Folder (default), Repository (flat per repository, rows show the full path) and None (one list,
+  rows show "repository · path").
+- `<mark>` highlights search terms in stack names, row detail, folder paths and repository names, using an accent tint
+  that axe checks in both schemes.
+- The no-match state offers **Clear search and filters**.
 
 ### Phase S4 — Moving around (feat:)
 
