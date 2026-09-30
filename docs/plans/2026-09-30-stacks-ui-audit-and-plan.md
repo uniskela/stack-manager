@@ -1,6 +1,6 @@
 # Stacks page: UI/UX audit and improvement plan
 
-**Status:** Step 0 and S1–S4 done; S5 not started.
+**Status:** implemented (Step 0 and S1–S5). PRs #17, #19, #20, #21 and the S5 docs PR.
 **Date:** 2026-09-30
 **Scope:** `/w/{workspaceId}/stacks` (the inventory list) and the handful of touch-points that make it easy to get into and back out of a stack. Follows slice A ([design](./2026-09-30-dashboard-stacks-settings-design.md)), which shipped grouping, search and collapse.
 
@@ -234,6 +234,27 @@ monorepo paths, 8 drafts, one repository in `error` with no fetch), captured wit
 - Update `docs/UX.md` ("Stacks — organised inventory (groups, search, filters, sort)"), `docs/getting-started.md` (how to find a stack), and mark this plan's status. List nothing new in `docs/manifest.json` unless a new user-facing page appears.
 - Add this plan to `docs/INDEX.md` (note: that file currently has uncommitted changes in the working tree, so reconcile before editing).
 - `pnpm check` and `pnpm build` green; `pnpm test:e2e` with `E2E_GIT_REMOTE`/`E2E_STACK_ROOT` for the editor-dependent tests.
+
+**Done.**
+
+- Axe runs in e2e on `/stacks` in its default, no-match, collapsed-folder and filters-open states (the mobile
+  disclosure included), at desktop and Pixel 7 sizes, light and dark. There is no chip row (see S3). The switcher
+  header was checked separately (S4).
+- `docs/getting-started.md` gains a "Find a stack" section; `docs/UX.md` describes the new page and links here. No new
+  user-facing page, so `docs/manifest.json` is unchanged.
+- Not done: the `docs/INDEX.md` entry. That file has an unrelated uncommitted rewrite in the owner's working tree;
+  add this plan when that lands.
+
+## Outcome against the success criteria
+
+- **Found in ≤ 3 interactions:** yes. `/` and a few letters, or one filter toggle, with ~12 rows above the fold at
+  1280 px.
+- **Collapsed groups never hide results; the count is always visible and announced:** yes (S1/S3).
+- **Tiers distinguishable; counts and problems on collapsed headers:** yes (S2). Collapse all gives a repository
+  overview with stack and draft counts and sync status.
+- **Reload, Back and a pasted link reproduce the view:** yes (S3), and the breadcrumb returns to it (S4).
+- **Numeric names sort naturally:** yes (S1).
+- **Axe clean; no inline styles; `pnpm check` and `pnpm build` green:** yes.
 
 ## Out of scope
 

@@ -9,7 +9,10 @@ Signed-in operators work inside a workspace. Primary sidebar navigation (desktop
 **Dashboard → Stacks → Repositories → Settings**
 
 - **Dashboard** — workspace home and empty-state CTAs (not a container dashboard).
-- **Stacks** — organised inventory (repository groups, search, collapse).
+- **Stacks** — organised inventory: repository cards, parent-folder groups, search, filters (drafts, needs
+  attention, repository), sort, grouping and collapse, all kept in the URL. Stack pages have a breadcrumb back to the
+  list as it was left, and a sibling-stack switcher. Design and rationale:
+  [plans/2026-09-30-stacks-ui-audit-and-plan.md](plans/2026-09-30-stacks-ui-audit-and-plan.md).
 - **Repositories** — connect and manage Git remotes.
 - **Settings** — **General**, **Credentials**, **Activity**, **Account** (password change and session list).
 
