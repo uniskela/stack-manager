@@ -10,6 +10,7 @@ on:
       - .github/workflows/notify-uniskela-docs.yml
   release:
     types: [published]
+  workflow_call:
   workflow_dispatch:
 permissions:
   contents: read

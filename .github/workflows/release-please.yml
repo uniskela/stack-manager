@@ -45,3 +45,13 @@ jobs:
     with:
       tag: ${{ needs.release-please.outputs.tag_name }}
     secrets: inherit
+
+  # Releases created with GITHUB_TOKEN do not fire `release: published` for other workflows,
+  # so call the docs sync directly once a release exists.
+  notify-docs:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/notify-uniskela-docs.yml
+    secrets: inherit
