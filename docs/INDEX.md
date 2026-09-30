@@ -21,6 +21,8 @@ are listed in [manifest.json](manifest.json) (see [../.github/docs-sync.md](../.
 | [PRIOR_ART.md](PRIOR_ART.md) | Portainer, Komodo, Arcane, Dockge, stackwise, etc. |
 | [plans/MVP_PLAN.md](plans/MVP_PLAN.md) | PR #2–#8 implementation sequence |
 | [plans/UI_UX_PLAN.md](plans/UI_UX_PLAN.md) | UI/UX review of PR #2 and phased improvement plan |
+| [plans/2026-09-30-dashboard-stacks-settings-design.md](plans/2026-09-30-dashboard-stacks-settings-design.md) | Dashboard home, organised stacks, settings split (slice A) |
+| [plans/2026-09-30-dashboard-stacks-settings-implementation.md](plans/2026-09-30-dashboard-stacks-settings-implementation.md) | Implementation plan for slice A (nav, dashboard, stacks, settings, account) |
 
 ## Domain and providers
 
