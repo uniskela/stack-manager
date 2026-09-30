@@ -186,6 +186,10 @@ export class AuthService {
     input: { currentPassword: string; newPassword: string },
     ctx: RequestContext,
   ): Promise<void> {
+    // Bound wrong-current-password guesses for a stolen/unattended session cookie (CWE-307).
+    const limiterKey = `password-change:${userId}`;
+    if (this.#loginLimiter.isBlocked(limiterKey)) throw new RateLimitedError();
+
     const user = await this.users.findById(userId);
     if (!user) throw new AuthenticationError();
     const record = await this.users.findByUsername(user.username);
@@ -196,6 +200,7 @@ export class AuthService {
       currentPassword.length <= PASSWORD_MAX_LENGTH &&
       (await verifyPassword(record.passwordHash, currentPassword));
     if (!ok) {
+      this.#loginLimiter.recordFailure(limiterKey);
       await this.audit.record({
         action: 'auth.password_change_failed',
         outcome: 'failure',
@@ -205,6 +210,7 @@ export class AuthService {
       });
       throw new AuthenticationError('Current password is incorrect.');
     }
+    this.#loginLimiter.reset(limiterKey);
 
     const password = validateNewPassword(input.newPassword);
     if (password.toLowerCase().includes(user.username)) {

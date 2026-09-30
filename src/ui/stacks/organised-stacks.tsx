@@ -27,7 +27,8 @@ function readCollapseMap(workspaceId: string): Record<string, boolean> {
   try {
     raw = sessionStorage.getItem(collapseStorageKey(workspaceId));
   } catch {
-    return EMPTY_COLLAPSE_MAP;
+    // Storage unavailable — keep toggles working via the in-memory snapshot.
+    return collapseMapCache.get(workspaceId)?.snapshot ?? EMPTY_COLLAPSE_MAP;
   }
 
   const cached = collapseMapCache.get(workspaceId);
@@ -36,6 +37,10 @@ function readCollapseMap(workspaceId: string): Record<string, boolean> {
   }
 
   if (!raw) {
+    // After a failed persist we cache { raw: null, snapshot }; keep that so toggles stick.
+    if (cached !== undefined && cached.raw === null && cached.snapshot !== EMPTY_COLLAPSE_MAP) {
+      return cached.snapshot;
+    }
     collapseMapCache.set(workspaceId, { raw, snapshot: EMPTY_COLLAPSE_MAP });
     return EMPTY_COLLAPSE_MAP;
   }
@@ -56,14 +61,16 @@ function readCollapseMap(workspaceId: string): Record<string, boolean> {
 }
 
 function writeCollapseMap(workspaceId: string, map: Record<string, boolean>): void {
+  // Always update memory + notify so collapse works when sessionStorage is full or blocked.
+  let raw: string | null = null;
   try {
-    const raw = JSON.stringify(map);
+    raw = JSON.stringify(map);
     sessionStorage.setItem(collapseStorageKey(workspaceId), raw);
-    collapseMapCache.set(workspaceId, { raw, snapshot: map });
-    notifyCollapseListeners();
   } catch {
-    /* ignore */
+    raw = null;
   }
+  collapseMapCache.set(workspaceId, { raw, snapshot: map });
+  notifyCollapseListeners();
 }
 
 function subscribeCollapseMap(onStoreChange: () => void): () => void {

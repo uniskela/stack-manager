@@ -283,8 +283,35 @@ describe('account', () => {
 
     const audit = JSON.stringify(await h.container.audit.list({ limit: 50 }));
     expect(audit).toContain('auth.password_changed');
+    expect(audit).toContain('auth.password_change_failed');
     expect(audit).not.toContain(PASSWORD);
     expect(audit).not.toContain(NEW_PASSWORD);
+  });
+
+  it('rate-limits repeated wrong current-password attempts', async () => {
+    const cookie = await setupAdmin();
+    for (let i = 0; i < 10; i++) {
+      const res = await call(passwordRoute.POST, {
+        method: 'POST',
+        cookie,
+        body: {
+          currentPassword: `wrong-password-${i}`,
+          newPassword: NEW_PASSWORD,
+          confirmPassword: NEW_PASSWORD,
+        },
+      });
+      expect(res.status).toBe(401);
+    }
+    const limited = await call(passwordRoute.POST, {
+      method: 'POST',
+      cookie,
+      body: {
+        currentPassword: PASSWORD,
+        newPassword: NEW_PASSWORD,
+        confirmPassword: NEW_PASSWORD,
+      },
+    });
+    expect(limited.status).toBe(429);
   });
 
   it('lists sessions with hashed ids and revokes one or all others', async () => {
