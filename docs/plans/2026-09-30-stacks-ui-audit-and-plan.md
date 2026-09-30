@@ -1,6 +1,6 @@
 # Stacks page: UI/UX audit and improvement plan
 
-**Status:** Step 0 and S1 done; S2–S5 not started.
+**Status:** Step 0, S1 and S2 done; S3–S5 not started.
 **Date:** 2026-09-30
 **Scope:** `/w/{workspaceId}/stacks` (the inventory list) and the handful of touch-points that make it easy to get into and back out of a stack. Follows slice A ([design](./2026-09-30-dashboard-stacks-settings-design.md)), which shipped grouping, search and collapse.
 
@@ -127,10 +127,31 @@ monorepo paths, 8 drafts, one repository in `error` with no fetch), captured wit
 - New row anatomy: stack name (title), folder path as secondary text only when it adds information (hide the segment already shown in the folder header), drafts badge with icon and neutral/accent styling distinct from error/warn, no trailing chevron (hover/focus affordance instead).
 - **Repository header** (B2, B7): name, link to repository, "N stacks", total drafts, sync badge (`error`, `syncing`, "not fetched yet" shown inline with a one-line reason/link). Collapsed state still shows those counts.
 - **Folder sub-label** (B3): collapsible, with count, always rendered for a consistent layout when a repo has any folders; the repository-root group is labelled "Repository root".
-- **Nested folders** (C5): group by the full directory tree (collapse to a single chain where a folder has one child) — *decision needed, see below.*
+- **Nested folders** (C5): group by each stack's **parent folder**, shown as its full path (owner decision 1).
 - Page header (B5): stack count in the description; primary action "Add stacks" linking to Repositories (or the auto-discovery flow), kept secondary to content.
 - Markup: nested `ul`s with headings or `role="group"` + `aria-labelledby` per group (E3).
 - CSS: new `.stack-group`, `.stack-row` classes in `components.css` or a new `stacks.css`; no inline styles (lint-enforced).
+
+**Done.** Notes on what shipped:
+
+- Each repository is a card: an `h2` toggle (bold name), "N stacks · N drafts", a `StatusPill` when the repository
+  isn't `ready` (the same wording as the Repositories page: Queued / Syncing / Sync failed), and an icon link to the
+  repository. It is a `section` labelled by its heading. On phones the counts and status wrap under the name.
+- Folder groups are `h3` toggles labelled with the parent folder path (monospace) or "Repository root", plus a stack
+  count. Collapse state is keyed `repositoryId:path` in the same per-workspace map, so it is also scoped to the search
+  while searching.
+- Rows are a single line, 44 px: icon, name, and detail only when it adds information: the folder name when the stack
+  was renamed, or "Whole repository" for a root stack, which sorts first in its group. There is no chevron. The draft
+  badge uses an accent tint with a pencil icon, so it no longer looks like a warning. On phones the detail moves under
+  the name.
+- A4 (owner decision): a root stack's badge reads "N drafts in repository". The repository header's draft total comes
+  from one `countDrafts(repository, '')` per repository rather than summing the stacks' counts, which overlap.
+- Folder headers have no draft totals, because counts overlap when stacks nest.
+- B5: the page gains an **Add stacks** action (to Repositories). The stack count stays in the toolbar's live count
+  rather than being repeated in the description.
+- The collapse store moved to `src/ui/stacks/collapse-store.ts`.
+- Result: about 12 stacks above the fold at 1280 px instead of 7. Axe is clean on the new structure in light and dark
+  at both widths (e2e).
 
 ### Phase S3 — Search, filters, sort (feat:)
 
@@ -171,10 +192,17 @@ monorepo paths, 8 drafts, one repository in `error` with no fetch), captured wit
 
 ## Decisions for the owner
 
-1. **Nested folders vs. first segment only** (S2). Recommendation: full tree with single-child chains collapsed; it matches how monorepos actually nest and costs little once grouping is tree-based.
-2. **Sibling stack switcher in the stack header** (S4). Recommendation: yes — it is the cheapest fix for "go back, find it again", and needs no new data.
-3. **Filter state in URL vs. session only** (S3). Recommendation: URL (shareable, survives refresh, fixes Back).
-4. **Command palette now or per the UI-4 roadmap** (S4). Recommendation: leave on the roadmap; S3's toolbar plus `/` covers the need.
+Decided 2026-09-30:
+
+1. **Folder grouping** (S2): by **parent folder**, shown as its full path (`apps/media`, `services/auth`). It is flat
+   and needs no deep indentation, and natural path order keeps related folders together. Chosen over a nested tree
+   and over the first segment only.
+2. **Sibling stack switcher in the stack header** (S4): **yes**.
+3. **List state** (S3): in the **URL** (it survives Back and refresh and can be shared). Collapse state stays
+   per-browser.
+4. **Command palette**: stays on the UI-4 roadmap.
+5. **Root-stack draft count** (A4): keep the count, which matches the stack's Changes tab, and label it "N drafts in
+   repository".
 
 ## Success criteria
 
