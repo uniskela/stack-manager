@@ -309,6 +309,13 @@ describe('account', () => {
     expect(selfRevoke.status).toBe(400);
     expect(selfRevoke.json.error.message).toMatch(/sign out/i);
 
+    const unknownSession = await call(sessionById.DELETE, {
+      method: 'DELETE',
+      cookie: cookieA,
+      params: { sessionId: 'b'.repeat(64) },
+    });
+    expect(unknownSession.status).toBe(404);
+
     const revokeOther = await call(sessionById.DELETE, {
       method: 'DELETE',
       cookie: cookieA,

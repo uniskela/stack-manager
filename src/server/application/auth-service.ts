@@ -3,6 +3,7 @@ import {
   AuthenticationError,
   ConflictError,
   ForbiddenError,
+  NotFoundError,
   RateLimitedError,
   ValidationError,
 } from '@/server/domain/errors';
@@ -253,7 +254,8 @@ export class AuthService {
         sessionId: 'Cannot revoke the current session here.',
       });
     }
-    await this.sessions.deleteForUser(userId, sessionId);
+    const deleted = await this.sessions.deleteForUser(userId, sessionId);
+    if (!deleted) throw new NotFoundError('Session not found.');
   }
 
   async revokeOtherSessions(userId: string, currentSessionId: string): Promise<number> {
