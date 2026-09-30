@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.4.0](https://github.com/uniskela/stack-manager/compare/v0.3.0...v0.4.0) (2026-09-30)
+
+
+### Features
+
+* clearer stacks list with repository cards and parent-folder groups ([#19](https://github.com/uniskela/stack-manager/issues/19)) ([#23](https://github.com/uniskela/stack-manager/issues/23)) ([77a18c5](https://github.com/uniskela/stack-manager/commit/77a18c53569aee82f7613670d9704756567dcd53))
+* stack breadcrumbs, sibling switcher and list keyboard navigation ([#24](https://github.com/uniskela/stack-manager/issues/24)) ([e00521f](https://github.com/uniskela/stack-manager/commit/e00521fd3fb8f2f286d4e7d37789004def0e6c7a))
+* stacks list filters, sort, grouping and shareable URL state ([#20](https://github.com/uniskela/stack-manager/issues/20)) ([de595d9](https://github.com/uniskela/stack-manager/commit/de595d94a1c089d95dc4b7a2140db7b00ceacc53))
+
+
+### Bug Fixes
+
+* stacks list search, natural ordering and result count ([#17](https://github.com/uniskela/stack-manager/issues/17)) ([38ff728](https://github.com/uniskela/stack-manager/commit/38ff728b0cb9935ef1e1a00e9ae56a46060f624a))
+* stop draft audit assertion from matching timestamps ([#26](https://github.com/uniskela/stack-manager/issues/26)) ([719f3da](https://github.com/uniskela/stack-manager/commit/719f3da1fb2e50ecf7262cffd4054d82f4714545))
+
+
+### Documentation
+
+* how to find a stack, and the Stacks page UX ([#25](https://github.com/uniskela/stack-manager/issues/25)) ([7c1c932](https://github.com/uniskela/stack-manager/commit/7c1c9321df932449e1ed413578de603921a4ad90))
+
 ## [0.3.0](https://github.com/uniskela/stack-manager/compare/v0.2.0...v0.3.0) (2026-09-30)
 
 
