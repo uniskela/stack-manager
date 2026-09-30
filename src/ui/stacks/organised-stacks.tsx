@@ -1,9 +1,24 @@
 'use client';
 
-import { ChevronDown, ChevronRight, Layers, Search } from 'lucide-react';
+import { ChevronDown, ChevronRight, Layers, Search, SearchX, X } from 'lucide-react';
 import Link from 'next/link';
-import { useCallback, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { filterStacks, groupStacks, type GroupableStack } from '@/shared/stacks/group-stacks';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react';
+import {
+  filterStacks,
+  groupStacks,
+  stackCountLabel,
+  type GroupableStack,
+} from '@/shared/stacks/group-stacks';
+import { Button } from '@/ui/primitives/button';
+import { EmptyState } from '@/ui/primitives/empty-state';
 
 function collapseStorageKey(workspaceId: string): string {
   return `sm.stacks.collapse.${workspaceId}`;
@@ -91,45 +106,128 @@ function isRepoCollapsed(map: Record<string, boolean>, repositoryId: string): bo
   return map[repositoryId] === true;
 }
 
+/** True when a "/" press should focus search: not while typing somewhere else or using a modifier. */
+function isSearchShortcut(event: KeyboardEvent): boolean {
+  if (event.key !== '/' || event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey)
+    return false;
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) return true;
+  return !target.isContentEditable && !['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
+}
+
 export function OrganisedStacks(props: { workspaceId: string; stacks: GroupableStack[] }) {
   const [query, setQuery] = useState('');
+  const searchRef = useRef<HTMLInputElement>(null);
   const collapsed = useSyncExternalStore(
     subscribeCollapseMap,
     () => readCollapseMap(props.workspaceId),
     () => EMPTY_COLLAPSE_MAP,
   );
+  // While searching every group starts open so matches are never hidden. Toggles made during a search apply
+  // to that search only and reset when the query changes; the saved browsing layout is left untouched.
+  const term = query.trim();
+  const searching = term !== '';
+  const [searchCollapse, setSearchCollapse] = useState<{ term: string; map: Record<string, boolean> }>({
+    term: '',
+    map: EMPTY_COLLAPSE_MAP,
+  });
+  const searchCollapsed = searchCollapse.term === term ? searchCollapse.map : EMPTY_COLLAPSE_MAP;
+  const activeCollapsed = searching ? searchCollapsed : collapsed;
 
   const filtered = useMemo(() => filterStacks(props.stacks, query), [props.stacks, query]);
   const groups = useMemo(() => groupStacks(filtered), [filtered]);
 
   const toggleRepo = useCallback(
     (repositoryId: string) => {
+      if (searching) {
+        setSearchCollapse({
+          term,
+          map: { ...searchCollapsed, [repositoryId]: !isRepoCollapsed(searchCollapsed, repositoryId) },
+        });
+        return;
+      }
       const prev = readCollapseMap(props.workspaceId);
       const next = { ...prev, [repositoryId]: !isRepoCollapsed(prev, repositoryId) };
       writeCollapseMap(props.workspaceId, next);
     },
-    [props.workspaceId],
+    [props.workspaceId, searching, term, searchCollapsed],
   );
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!isSearchShortcut(event)) return;
+      event.preventDefault();
+      searchRef.current?.focus();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  const clearSearch = () => {
+    setQuery('');
+    searchRef.current?.focus();
+  };
 
   return (
     <>
-      <div className="search-field">
-        <Search className="icon muted" aria-hidden="true" />
-        <input
-          type="search"
-          aria-label="Search stacks"
-          placeholder="Search stacks"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
+      <div className="stack-toolbar">
+        <div className="search-field stack-search">
+          <Search className="icon muted" aria-hidden="true" />
+          <div className="stack-search-box">
+            <input
+              ref={searchRef}
+              type="search"
+              aria-label="Search stacks"
+              aria-keyshortcuts="/"
+              placeholder="Search stacks"
+              autoComplete="off"
+              spellCheck={false}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape' && query) {
+                  e.preventDefault();
+                  setQuery('');
+                }
+              }}
+            />
+            {query ? (
+              <button
+                type="button"
+                className="stack-search-clear"
+                aria-label="Clear search"
+                onClick={clearSearch}
+              >
+                <X className="icon" aria-hidden="true" />
+              </button>
+            ) : (
+              <kbd className="stack-search-kbd" aria-hidden="true">
+                /
+              </kbd>
+            )}
+          </div>
+        </div>
+        <p className="muted stack-count" role="status">
+          {stackCountLabel(filtered.length, props.stacks.length)}
+        </p>
       </div>
 
       {filtered.length === 0 ? (
-        <p className="muted">No stacks match.</p>
+        <EmptyState
+          icon={SearchX}
+          title="No stacks match"
+          actions={
+            <Button size="sm" onClick={clearSearch}>
+              Clear search
+            </Button>
+          }
+        >
+          Nothing matches “{term}” in stack names, repository names or paths.
+        </EmptyState>
       ) : (
         <ul className="list" aria-label="Stacks by repository">
           {groups.flatMap((repo) => {
-            const open = !isRepoCollapsed(collapsed, repo.repositoryId);
+            const open = !isRepoCollapsed(activeCollapsed, repo.repositoryId);
             const rows: ReactNode[] = [
               <li key={`repo:${repo.repositoryId}`}>
                 <button

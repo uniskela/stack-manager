@@ -36,6 +36,44 @@ test('stack pages render and are accessible', async ({ page }) => {
   }
 });
 
+test('stacks search reaches collapsed repositories, counts results and clears', async ({ page }) => {
+  await page.goto(`/w/${sample().workspaceId}/stacks`);
+  const list = page.getByRole('list', { name: 'Stacks by repository' });
+  const repoHeader = list.getByRole('button').first();
+  const sampleRow = list.getByRole('link', { name: /^Sample\b/ });
+  const count = page.getByRole('status').filter({ hasText: /stacks?$/ });
+  await expect(count).toHaveText(/^\d+ stacks?$/);
+
+  // Collapse the repository: its stacks leave the list.
+  await repoHeader.click();
+  await expect(repoHeader).toHaveAttribute('aria-expanded', 'false');
+  await expect(sampleRow).toBeHidden();
+
+  // "/" focuses search, and a match inside the collapsed repository is shown.
+  const search = page.getByLabel('Search stacks');
+  await page.keyboard.press('/');
+  await expect(search).toBeFocused();
+  await search.fill('sample');
+  await expect(sampleRow).toBeVisible();
+  await expect(repoHeader).toHaveAttribute('aria-expanded', 'true');
+  await expect(count).toHaveText(/^(\d+ of )?\d+ stacks?$/);
+
+  // Escape clears the search and restores the saved (collapsed) layout.
+  await search.press('Escape');
+  await expect(search).toHaveValue('');
+  await expect(repoHeader).toHaveAttribute('aria-expanded', 'false');
+  await repoHeader.click();
+
+  await search.fill('zz-no-such-stack');
+  await expect(page.getByRole('heading', { name: 'No stacks match' })).toBeVisible();
+  await expect(count).toHaveText(/^0 of \d+ stacks?$/);
+  await expectAccessible(page);
+  await page.getByRole('button', { name: 'Clear search' }).first().click();
+  await expect(search).toHaveValue('');
+  await expect(search).toBeFocused();
+  await expect(sampleRow).toBeVisible();
+});
+
 test('edit, save a draft, review and discard it', async ({ page }) => {
   test.skip(
     isMobile(page),
