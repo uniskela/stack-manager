@@ -271,6 +271,26 @@ describe('adding all stacks', () => {
     server.commitFiles(REPO, 'main', { 'apps/memos/compose.yaml': null });
   });
 
+  it('registers every folder even when the suggestion list is capped', async () => {
+    const files: Record<string, string> = {};
+    for (let i = 0; i < 2001; i++) files[`s${String(i).padStart(4, '0')}/compose.yaml`] = 'services: {}\n';
+    server.createRepo('acme/many.git', ['main']);
+    server.commitFiles('acme/many.git', 'main', files);
+    const many = await call(reposRoute.POST, {
+      method: 'POST',
+      cookie,
+      params: { workspaceId },
+      body: { gitProviderType: 'gitea', remoteUrl: 'https://git.test/acme/many.git', auth: { type: 'none' } },
+    });
+    await drainJobs();
+    const id = many.json.repository.id;
+    const listed = await call(repoStacksRoute.GET, { cookie, params: { workspaceId, repositoryId: id } });
+    expect(listed.json.suggestions).toHaveLength(2000);
+    // createRepo seeds a root compose.yaml as well.
+    expect(listed.json.stacks.length).toBeGreaterThanOrEqual(2001);
+    expect(listed.json.stacks.some((s: { rootPath: string }) => s.rootPath === 's2000')).toBe(true);
+  }, 60_000);
+
   it('is on by default for new connections', async () => {
     server.createRepo('acme/second.git', ['main']);
     const other = await call(reposRoute.POST, {

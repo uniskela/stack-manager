@@ -57,6 +57,7 @@ const IGNORED_SEGMENTS = new Set([
   'dist',
   'build',
 ]);
+/** Folders listed in the UI and API; add-all and auto-add are not capped. */
 const MAX_SUGGESTIONS = 2000;
 
 /**
@@ -89,6 +90,11 @@ export class StackService {
 
   /** Directories containing a Compose file at the fetched commit. Empty until the first fetch. */
   async suggest(workspaceId: string, repositoryId: string): Promise<StackSuggestion[]> {
+    return (await this.#discover(workspaceId, repositoryId)).slice(0, MAX_SUGGESTIONS);
+  }
+
+  /** Every Compose folder at the fetched commit (uncapped: add-all must reach all of them). */
+  async #discover(workspaceId: string, repositoryId: string): Promise<StackSuggestion[]> {
     const source = await this.repositories.localSource(workspaceId, repositoryId);
     if (!source) return [];
     const entries = await this.reader.listTree(source.cloneDir, source.commitSha);
@@ -106,7 +112,6 @@ export class StackService {
     }
     return [...byDir.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
-      .slice(0, MAX_SUGGESTIONS)
       .map(([rootPath, composePath]) => ({
         rootPath,
         composePath,
@@ -176,7 +181,7 @@ export class StackService {
     if (!source) {
       throw new ConflictError('Fetch the repository before adding stacks.', 'not_synced');
     }
-    const suggestions = await this.suggest(workspaceId, repositoryId);
+    const suggestions = await this.#discover(workspaceId, repositoryId);
     const slugs = new Set((await this.repo.listByRepository(workspaceId, repositoryId)).map((s) => s.slug));
     const result: AddAllResult = { added: 0, existing: 0, failed: [] };
     for (const s of suggestions) {

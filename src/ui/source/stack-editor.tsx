@@ -50,8 +50,9 @@ export interface StackEditorProps {
   apiBase: string;
   /** Folder the editor is scoped to ('' for the whole repository). */
   rootPath: string;
-  /** The stack's Compose file; any compose-named file is validated as Compose either way. */
-  composePath?: string;
+  /** Configured Compose files (the stack's, or every stack's in a repository); any compose-named file is
+   * validated as Compose either way. */
+  composePaths?: readonly string[];
   branch: string;
   commitSha: string;
   entries: TreeNodeView[];
@@ -105,6 +106,7 @@ export function StackEditor(props: StackEditorProps) {
   const [actionError, setActionError] = useState<string | null>(null);
 
   const active = tabs.find((t) => t.path === activePath) ?? null;
+  const activeComposePath = active && props.composePaths?.includes(active.path) ? active.path : undefined;
   const dirtyPaths = useMemo(
     () =>
       new Set(
@@ -117,8 +119,8 @@ export function StackEditor(props: StackEditorProps) {
   const activeDirty = active ? dirtyPaths.has(active.path) : false;
   const deferredText = useDeferredValue(active?.text ?? '');
   const problems = useMemo(
-    () => (active?.file?.editable ? problemsFor(active.path, deferredText, props.composePath) : []),
-    [active?.path, active?.file?.editable, deferredText, props.composePath],
+    () => (active?.file?.editable ? problemsFor(active.path, deferredText, activeComposePath) : []),
+    [active?.path, active?.file?.editable, deferredText, activeComposePath],
   );
   const counts = useMemo(
     () => ({
@@ -482,7 +484,7 @@ export function StackEditor(props: StackEditorProps) {
             docKey={docKey(active)}
             initialValue={active.text}
             language={active.file.language}
-            compose={isCompose(active.path, props.composePath)}
+            compose={isCompose(active.path, activeComposePath)}
             wrap={wrap}
             problems={problems}
             openKeys={openKeys}

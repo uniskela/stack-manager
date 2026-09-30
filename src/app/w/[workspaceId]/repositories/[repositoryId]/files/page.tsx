@@ -19,10 +19,12 @@ export default async function RepositoryFilesPage({
   searchParams: Promise<Record<string, string | string[]>>;
 }) {
   const { workspaceId, repositoryId } = await params;
-  const { repositories, source } = getContainer();
+  const { repositories, stacks, source } = getContainer();
   const repo = await repositories.get(workspaceId, repositoryId);
   if (!repo.headSha) return <NotFetched />;
   const tree = await source.tree(workspaceId, repositoryId, '');
+  // Stacks may use a Compose file with a non-standard name; validate those as Compose here too.
+  const composePaths = (await stacks.listForRepository(workspaceId, repositoryId)).map((s) => s.composePath);
   const files = tree.entries.filter((e) => e.kind === 'file' && !e.locked);
 
   // Open ?file= if given, else a sensible landing file: README, a root .env template, a root Compose file.
@@ -44,6 +46,7 @@ export default async function RepositoryFilesPage({
         workspaceId={workspaceId}
         apiBase={repositorySourceApi(workspaceId, repositoryId)}
         rootPath=""
+        composePaths={composePaths}
         branch={repo.defaultBranch}
         commitSha={tree.commitSha}
         entries={tree.entries}

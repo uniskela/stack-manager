@@ -31,7 +31,7 @@ export default async function StackEditorPage({
       workspaceId={workspaceId}
       apiBase={`/api/workspaces/${workspaceId}/stacks/${stackId}`}
       rootPath={stack.rootPath}
-      composePath={stack.composePath}
+      composePaths={[stack.composePath]}
       branch={stack.repository.defaultBranch}
       commitSha={tree.commitSha}
       entries={tree.entries}
