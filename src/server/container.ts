@@ -27,6 +27,7 @@ import { createDefaultGitProviderRegistry, type GitProviderRegistry } from '@/se
 import { GitSourceReader } from '@/server/providers/git/source-reader';
 import type { Resolver } from '@/server/security/network-policy';
 import { SecretBox } from '@/server/security/secret-box';
+import { safeErrorMessage } from '@/server/security/redact';
 
 /**
  * Composition root. Wires config → persistence adapters → services → providers → worker.
@@ -121,6 +122,7 @@ export function createContainer(config: AppConfig, overrides: ContainerOverrides
     const stacks = new StackService(repos.stacks, repositories, reader, audit, clock, newId);
     const source = new SourceService(repositories, reader, repos.drafts, audit, clock, newId);
 
+    const syncLogger = logger.child({ component: 'stacks' });
     const handlers = new Map<string, JobHandler>([
       [
         REPOSITORY_SYNC_JOB,
@@ -129,6 +131,22 @@ export function createContainer(config: AppConfig, overrides: ContainerOverrides
           if (typeof repositoryId !== 'string')
             throw new Error('repository_sync payload missing repositoryId');
           await repositories.sync(repositoryId, ctx.signal);
+          // Keep stacks in step with the repository. A failure here must not fail the fetch itself.
+          const conn = await repos.gitRepositories.findByIdUnscoped(repositoryId);
+          if (!conn?.autoAddStacks) return;
+          try {
+            const result = await stacks.addAll(conn.workspaceId, conn.id, null);
+            if (result.failed.length > 0)
+              syncLogger.warn('some stacks could not be added automatically', {
+                repositoryId,
+                failed: result.failed.length,
+              });
+          } catch (error) {
+            syncLogger.warn('automatic stack registration failed', {
+              repositoryId,
+              error: safeErrorMessage(error),
+            });
+          }
         },
       ],
     ]);

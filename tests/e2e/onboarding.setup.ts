@@ -48,7 +48,13 @@ setup('sample repository and stack', async ({ browser }) => {
   const headers = { Origin: new URL(page.url()).origin };
   const created = await page.request.post(`/api/workspaces/${workspaceId}/repositories`, {
     headers,
-    data: { gitProviderType: 'github', remoteUrl: SAMPLE_REMOTE, auth: { type: 'none' } },
+    // Auto-add off so the spec can register SAMPLE_ROOT by hand and exercise "Add all" in the UI.
+    data: {
+      gitProviderType: 'github',
+      remoteUrl: SAMPLE_REMOTE,
+      auth: { type: 'none' },
+      autoAddStacks: false,
+    },
   });
   expect(created.status(), await created.text()).toBe(201);
   const repositoryId = (await created.json()).repository.id as string;
@@ -69,6 +75,9 @@ setup('sample repository and stack', async ({ browser }) => {
   );
   expect(stack.status(), await stack.text()).toBe(201);
   fs.mkdirSync(path.dirname(SAMPLE_STATE), { recursive: true });
-  fs.writeFileSync(SAMPLE_STATE, JSON.stringify({ workspaceId, stackId: (await stack.json()).stack.id }));
+  fs.writeFileSync(
+    SAMPLE_STATE,
+    JSON.stringify({ workspaceId, repositoryId, stackId: (await stack.json()).stack.id }),
+  );
   await context.close();
 });

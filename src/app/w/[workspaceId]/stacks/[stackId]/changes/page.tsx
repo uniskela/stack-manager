@@ -16,7 +16,7 @@ export default async function StackChangesPage({
   return (
     <ChangesView
       workspaceId={workspaceId}
-      stackId={stackId}
+      apiBase={`/api/workspaces/${workspaceId}/stacks/${stackId}`}
       rootPath={stack.rootPath}
       changes={changes}
       editorHref={`/w/${workspaceId}/stacks/${stackId}`}

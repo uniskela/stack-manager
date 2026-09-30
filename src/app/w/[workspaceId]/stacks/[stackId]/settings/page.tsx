@@ -12,8 +12,9 @@ export default async function StackSettingsPage({
   params: Promise<{ workspaceId: string; stackId: string }>;
 }) {
   const { workspaceId, stackId } = await params;
-  const { stacks, source } = getContainer();
+  const { stacks, source, repositories } = getContainer();
   const stack = await stacks.get(workspaceId, stackId);
+  const repository = await repositories.get(workspaceId, stack.repository.id);
   const tree = await source.tree(workspaceId, stack.repository.id, stack.rootPath);
   const yamlFiles = tree.entries
     .filter((e) => e.kind === 'file' && !e.locked && e.draft !== 'new' && languageFor(e.path) === 'yaml')
@@ -44,7 +45,7 @@ export default async function StackSettingsPage({
         </dl>
       </Section>
       <Section id="stack-danger" title="Danger zone">
-        <DeleteStack workspaceId={workspaceId} stackId={stackId} />
+        <DeleteStack workspaceId={workspaceId} stackId={stackId} autoAddStacks={repository.autoAddStacks} />
       </Section>
     </div>
   );

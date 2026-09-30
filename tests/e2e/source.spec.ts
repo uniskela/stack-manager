@@ -7,7 +7,11 @@ test.skip(!SAMPLE_REMOTE, 'Set E2E_GIT_REMOTE to run the source workspace tests.
 
 const isMobile = (page: Page) => (page.viewportSize()?.width ?? 1280) <= 900;
 const sample = () =>
-  JSON.parse(fs.readFileSync(SAMPLE_STATE, 'utf8')) as { workspaceId: string; stackId: string };
+  JSON.parse(fs.readFileSync(SAMPLE_STATE, 'utf8')) as {
+    workspaceId: string;
+    repositoryId: string;
+    stackId: string;
+  };
 const stackUrl = () => `/w/${sample().workspaceId}/stacks/${sample().stackId}`;
 
 test('stack pages render and are accessible', async ({ page }) => {
@@ -67,4 +71,50 @@ test('mobile: the explorer opens as an overlay', async ({ page }) => {
   await expectAccessible(page);
   await page.getByRole('button', { name: 'Close explorer' }).click();
   await expect(page.getByRole('complementary', { name: 'Explorer' })).toBeHidden();
+});
+
+test('repository page pages through Compose folders and adds them all', async ({ page }) => {
+  await page.goto(`/w/${sample().workspaceId}/repositories/${sample().repositoryId}`);
+  const folders = page.getByRole('list', { name: 'Compose folders' });
+  await expect(folders).toBeVisible();
+  await expect(page.getByLabel('Add new stacks automatically')).not.toBeChecked();
+  await expectAccessible(page);
+
+  const pager = page.getByRole('navigation', { name: 'Compose folder pages' });
+  if (await pager.isVisible()) {
+    await expect(pager).toContainText(/^.*1–25 of \d+/);
+    await pager.getByRole('button', { name: 'Next' }).click();
+    await expect(pager).toContainText(/26–/);
+  }
+
+  // The desktop and mobile projects share one instance: only the first run still has folders to add.
+  const addAll = page.getByRole('button', { name: /^Add all \d+ stacks$|^Add the new stack$/ });
+  if (await addAll.isVisible()) {
+    await addAll.click();
+    await expect(page.getByRole('status')).toContainText(/Added \d+ stacks?\./);
+  }
+  await expect(addAll).toBeHidden();
+  await expect(folders.getByRole('checkbox')).toHaveCount(0);
+});
+
+test('repository Files, Docs and Changes tabs cover files outside stacks', async ({ page }) => {
+  const base = `/w/${sample().workspaceId}/repositories/${sample().repositoryId}`;
+  const tabs = page.getByRole('navigation', { name: 'Repository' });
+
+  await page.goto(`${base}/files`);
+  await expect(tabs.getByRole('link', { name: /Files/ })).toHaveAttribute('aria-current', 'page');
+  await expect(page.locator('.cm-editor')).toBeVisible();
+  // The landing file is the root README.
+  await expect(page.locator('.cm-content')).toContainText(/\S/);
+  await expect(page).toHaveURL(/file=README\.md/);
+  await expectAccessible(page);
+
+  await tabs.getByRole('link', { name: /Docs/ }).click();
+  await expect(tabs.getByRole('link', { name: /Docs/ })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByRole('navigation', { name: 'Documentation pages' })).toBeVisible();
+  await expectAccessible(page);
+
+  await tabs.getByRole('link', { name: /Changes/ }).click();
+  await expect(tabs.getByRole('link', { name: /Changes/ })).toHaveAttribute('aria-current', 'page');
+  await expectAccessible(page);
 });

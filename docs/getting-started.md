@@ -31,9 +31,15 @@ metadata addresses are always blocked.
 
 ## 3. Add stacks
 
-After the first successful fetch, the repository page lists every folder that contains a Compose file
-(`compose.yaml`, `compose.yml`, `docker-compose.yaml` or `docker-compose.yml`). Pick the ones you want and optionally
-rename them. Nothing is added automatically, and adding a stack never changes your repository.
+Every folder that contains a Compose file (`compose.yaml`, `compose.yml`, `docker-compose.yaml` or
+`docker-compose.yml`) becomes a stack. By default this happens automatically after each fetch, so new stacks you
+commit show up without any clicks. Folders named `node_modules`, `vendor`, `dist`, `build` or CI folders such as
+`.github` are skipped. Adding a stack never changes your repository, and a folder that disappears keeps its stack
+until you remove it.
+
+To choose stacks yourself, turn off **Add new stacks automatically** on the repository page. The page then lists the
+folders (25 per page, with a filter for large repositories), and you can **Add all** at once, tick individual folders
+and rename them, or add a folder by path.
 
 Each stack is a folder plus its Compose file, so one repository can hold many stacks. See
 [Stack discovery](STACK_DISCOVERY.md) for the rules.
@@ -60,7 +66,19 @@ draft, the editor warns you, so you don't overwrite someone else's change unknow
 
 Committing and pushing drafts to Git is the next feature on the [roadmap](plans/MVP_PLAN.md).
 
-## 5. Keep it up to date
+## 5. Files outside stacks
+
+Not everything lives in a stack folder: a root `README.md`, a `docs/` folder or a shared `.env.example` belong to the
+whole repository. The repository page has tabs for them:
+
+| Tab | What it's for |
+| --- | --- |
+| **Overview** | Fetch status, stacks, branches and the credential. |
+| **Files** | The whole repository in the same editor as a stack, with the same draft and secret-file rules. |
+| **Docs** | Every Markdown file in the repository, grouped by folder, rendered and editable as drafts. |
+| **Changes** | Every draft in the repository, including the ones made inside stacks. |
+
+## 6. Keep it up to date
 
 Use **Fetch now** on the repository page to pull the latest commits from your Git server. The editor, docs and environment
 views always read from the fetched commit plus your drafts.

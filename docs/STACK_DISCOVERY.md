@@ -4,7 +4,8 @@
 
 1. A Git repository may contain many stacks (monorepo).
 2. Stacks are **explicit** records with `rootPath` + `composePath`.
-3. Discovery helpers may **suggest** stacks; they never silently create authoritative bindings to deploy/runtime/secrets.
+3. Discovery helpers may **suggest** or, with the repository's **auto-add** setting (on by default), **register**
+   stacks. A stack record alone is harmless: they never create bindings to deploy/runtime/secrets.
 4. Folder names alone do not imply Portainer stack names or webhook targets.
 
 ## Compose file detection
@@ -23,8 +24,10 @@ When connecting a repository:
 1. Fetch default branch
 2. Walk tree (bounded depth / ignore heavy dirs: `.git`, `node_modules`, image layers, etc.)
 3. Find candidate directories containing a compose file
-4. Present candidates for user confirmation → create `Stack` rows
-5. Leave Deployment/Runtime/Secret bindings empty until configured
+4. With auto-add on, create `Stack` rows for every candidate after each successful fetch (`StackService.addAll`,
+   audited with no actor). Otherwise present candidates: **Add all**, or tick individual folders.
+5. Never remove a stack because its folder disappeared (it may carry drafts); the operator removes it.
+6. Leave Deployment/Runtime/Secret bindings empty until configured
 
 ## Configurable stack scopes
 

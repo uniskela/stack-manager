@@ -1,19 +1,10 @@
 import type { Metadata } from 'next';
 import { getContainer } from '@/server/container';
-import { isMarkdownPath, joinRepoPath, normalizeRepoPath, relativeTo } from '@/shared/source/paths';
+import { relativeTo } from '@/shared/source/paths';
 import { DocWorkspace } from '@/ui/source/doc-workspace';
+import { markdownDocs, resolveRequested } from '../../../../../_lib/source';
 
 export const metadata: Metadata = { title: 'Docs' };
-
-/** README first, then top-level pages, then nested ones. */
-function docOrder(root: string) {
-  const weight = (p: string) => {
-    const rel = relativeTo(root, p);
-    if (/^readme\.md$/i.test(rel)) return 0;
-    return rel.includes('/') ? 2 : 1;
-  };
-  return (a: string, b: string) => weight(a) - weight(b) || a.localeCompare(b);
-}
 
 export default async function StackDocsPage({
   params,
@@ -26,20 +17,11 @@ export default async function StackDocsPage({
   const { stacks, source } = getContainer();
   const stack = await stacks.get(workspaceId, stackId);
   const tree = await source.tree(workspaceId, stack.repository.id, stack.rootPath);
-  const docs = tree.entries
-    .filter((e) => e.kind === 'file' && !e.locked && isMarkdownPath(e.path))
-    .sort((a, b) => docOrder(stack.rootPath)(a.path, b.path));
-
-  const requested = (await searchParams).doc;
-  let path = docs[0]?.path ?? null;
-  if (typeof requested === 'string' && requested) {
-    try {
-      const candidate = normalizeRepoPath(joinRepoPath(stack.rootPath, normalizeRepoPath(requested)));
-      if (docs.some((d) => d.path === candidate)) path = candidate;
-    } catch {
-      /* ignore malformed ?doc= */
-    }
-  }
+  const docs = markdownDocs(tree.entries, stack.rootPath);
+  const path =
+    resolveRequested(stack.rootPath, (await searchParams).doc, (p) => docs.some((d) => d.path === p)) ??
+    docs[0]?.path ??
+    null;
   const file = path
     ? await source.readFile(workspaceId, stack.repository.id, stack.rootPath, path).catch(() => null)
     : null;
@@ -52,7 +34,7 @@ export default async function StackDocsPage({
     <DocWorkspace
       key={path ?? 'none'}
       workspaceId={workspaceId}
-      stackId={stackId}
+      apiBase={`/api/workspaces/${workspaceId}/stacks/${stackId}`}
       rootPath={stack.rootPath}
       docs={docs.map((d) => ({ path: d.path, draft: d.draft !== null }))}
       file={file}

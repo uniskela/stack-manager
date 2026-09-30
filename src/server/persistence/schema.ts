@@ -105,6 +105,8 @@ export const gitRepositoryConnections = sqliteTable(
     lastSyncError: text('last_sync_error'),
     headSha: text('head_sha'),
     lastFetchedAt: ts('last_fetched_at'),
+    /** Register every Compose folder as a stack after each successful fetch. */
+    autoAddStacks: integer('auto_add_stacks', { mode: 'boolean' }).notNull().default(true),
     createdAt: ts('created_at').notNull(),
     updatedAt: ts('updated_at').notNull(),
   },

@@ -46,9 +46,13 @@ interface Tab {
 
 export interface StackEditorProps {
   workspaceId: string;
-  stackId: string;
+  /** Source API of the scope: `/api/workspaces/:w/stacks/:s` or `/api/workspaces/:w/repositories/:r/source`. */
+  apiBase: string;
+  /** Folder the editor is scoped to ('' for the whole repository). */
   rootPath: string;
-  composePath: string;
+  /** Configured Compose files (the stack's, or every stack's in a repository); any compose-named file is
+   * validated as Compose either way. */
+  composePaths?: readonly string[];
   branch: string;
   commitSha: string;
   entries: TreeNodeView[];
@@ -80,12 +84,12 @@ function tabFromFile(file: FileView): Tab {
 }
 
 /**
- * VS Code-style editor for one stack: explorer, tabs, CodeMirror, live problems and a status bar.
+ * VS Code-style editor for one stack (or a whole repository): explorer, tabs, CodeMirror, live problems and a status bar.
  * Saving stores a draft on the server (PR #3); committing and pushing drafts arrives in PR #4.
  */
 export function StackEditor(props: StackEditorProps) {
   const router = useRouter();
-  const base = `/api/workspaces/${props.workspaceId}/stacks/${props.stackId}`;
+  const base = props.apiBase;
   const [tabs, setTabs] = useState<Tab[]>(() => (props.initialFile ? [tabFromFile(props.initialFile)] : []));
   const [activePath, setActivePath] = useState<string | null>(props.initialFile?.path ?? null);
   const [filter, setFilter] = useState('');
@@ -102,6 +106,7 @@ export function StackEditor(props: StackEditorProps) {
   const [actionError, setActionError] = useState<string | null>(null);
 
   const active = tabs.find((t) => t.path === activePath) ?? null;
+  const activeComposePath = active && props.composePaths?.includes(active.path) ? active.path : undefined;
   const dirtyPaths = useMemo(
     () =>
       new Set(
@@ -114,8 +119,8 @@ export function StackEditor(props: StackEditorProps) {
   const activeDirty = active ? dirtyPaths.has(active.path) : false;
   const deferredText = useDeferredValue(active?.text ?? '');
   const problems = useMemo(
-    () => (active?.file?.editable ? problemsFor(active.path, deferredText, props.composePath) : []),
-    [active?.path, active?.file?.editable, deferredText, props.composePath],
+    () => (active?.file?.editable ? problemsFor(active.path, deferredText, activeComposePath) : []),
+    [active?.path, active?.file?.editable, deferredText, activeComposePath],
   );
   const counts = useMemo(
     () => ({
@@ -250,7 +255,10 @@ export function StackEditor(props: StackEditorProps) {
       setNewError(err instanceof RepoPathError ? err.message : 'Invalid file name.');
       return;
     }
-    if (!isWithin(props.rootPath, path)) return setNewError('Choose a path inside the stack folder.');
+    if (!isWithin(props.rootPath, path))
+      return setNewError(
+        props.rootPath ? 'Choose a path inside the stack folder.' : 'Choose a path inside the repository.',
+      );
     if (isSecretPath(path)) return setNewError('Secret files (.env, keys, secrets/) cannot be created here.');
     if (props.entries.some((x) => x.path === path) || tabs.some((t) => t.path === path)) {
       setNewError(null);
@@ -476,7 +484,7 @@ export function StackEditor(props: StackEditorProps) {
             docKey={docKey(active)}
             initialValue={active.text}
             language={active.file.language}
-            compose={isCompose(active.path, props.composePath)}
+            compose={isCompose(active.path, activeComposePath)}
             wrap={wrap}
             problems={problems}
             openKeys={openKeys}

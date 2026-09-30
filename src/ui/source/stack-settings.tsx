@@ -81,7 +81,7 @@ export function StackSettingsForm(props: {
   );
 }
 
-export function DeleteStack(props: { workspaceId: string; stackId: string }) {
+export function DeleteStack(props: { workspaceId: string; stackId: string; autoAddStacks: boolean }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -90,7 +90,11 @@ export function DeleteStack(props: { workspaceId: string; stackId: string }) {
       <ConfirmButton
         label="Remove stack…"
         confirmLabel="Confirm remove"
-        description="Only the stack record is removed. Files in Git and saved drafts are not touched."
+        description={
+          props.autoAddStacks
+            ? 'Only the stack record is removed; files in Git and saved drafts are not touched. This repository adds stacks automatically, so the stack comes back on the next fetch while its Compose file exists. Turn off "Add new stacks automatically" on the repository page to keep it removed.'
+            : 'Only the stack record is removed. Files in Git and saved drafts are not touched.'
+        }
         loading={busy}
         onConfirm={async () => {
           setBusy(true);

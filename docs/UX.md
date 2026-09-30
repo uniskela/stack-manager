@@ -17,6 +17,9 @@ Current-state review and concrete improvement work: [plans/UI_UX_PLAN.md](plans/
 
 No primary nav items for Containers / Images / Networks / Volumes.
 
+Repository pages have **Overview**, **Files**, **Docs** and **Changes** tabs: the same editor, docs and review
+views scoped to the whole repository, for files outside any stack (root README, `docs/`, shared `.env.example`).
+
 Implemented in PR #3: **Editor** (explorer, tabs, problems, status bar), **Docs**, **Environment**, **Changes** and
 **Settings** tabs. Secrets and Deployments arrive with PR #6 and PR #5.
 

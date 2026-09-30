@@ -48,6 +48,7 @@ export interface RepositoryView {
   lastSyncError: string | null;
   headSha: string | null;
   lastFetchedAt: string | null;
+  autoAddStacks: boolean;
   createdAt: string;
   sync: { status: Job['status']; attempts: number; runAfter: string } | null;
 }
@@ -125,6 +126,7 @@ export class GitRepositoryService {
       gitProviderType: string;
       remoteUrl: string;
       defaultBranch?: string;
+      autoAddStacks?: boolean;
       auth: RepositoryAuthInput;
     },
     actorUserId: string,
@@ -188,6 +190,7 @@ export class GitRepositoryService {
       lastSyncError: null,
       headSha: null,
       lastFetchedAt: null,
+      autoAddStacks: input.autoAddStacks ?? true,
       createdAt: now,
       updatedAt: now,
     };
@@ -229,21 +232,22 @@ export class GitRepositoryService {
   async update(
     workspaceId: string,
     id: string,
-    input: { name?: string; defaultBranch?: string },
+    input: { name?: string; defaultBranch?: string; autoAddStacks?: boolean },
     actorUserId: string,
   ): Promise<RepositoryView> {
     await this.#find(workspaceId, id);
+    const { autoAddStacks } = input;
     const name = input.name === undefined ? undefined : validateRepositoryName(input.name);
     const defaultBranch =
       input.defaultBranch === undefined ? undefined : validateBranchName(input.defaultBranch);
-    await this.repo.update(id, { name, defaultBranch, updatedAt: this.clock.now() });
+    await this.repo.update(id, { name, defaultBranch, autoAddStacks, updatedAt: this.clock.now() });
     await this.audit.record({
       action: 'repository.update',
       actorUserId,
       workspaceId,
       entityType: 'repository',
       entityId: id,
-      meta: { name, defaultBranch },
+      meta: { name, defaultBranch, autoAddStacks },
     });
     if (defaultBranch !== undefined) await this.#enqueueSync(id, actorUserId);
     return this.get(workspaceId, id);
@@ -474,6 +478,7 @@ export class GitRepositoryService {
       lastSyncError: conn.lastSyncError,
       headSha: conn.headSha,
       lastFetchedAt: conn.lastFetchedAt?.toISOString() ?? null,
+      autoAddStacks: conn.autoAddStacks,
       createdAt: conn.createdAt.toISOString(),
       sync: job ? { status: job.status, attempts: job.attempts, runAfter: job.runAfter.toISOString() } : null,
     };

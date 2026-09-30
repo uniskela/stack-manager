@@ -1,4 +1,9 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import * as repoRoute from '@/app/api/workspaces/[workspaceId]/repositories/[repositoryId]/route';
+import * as repoDraftsRoute from '@/app/api/workspaces/[workspaceId]/repositories/[repositoryId]/source/drafts/route';
+import * as repoFilesRoute from '@/app/api/workspaces/[workspaceId]/repositories/[repositoryId]/source/files/route';
+import * as repoTreeRoute from '@/app/api/workspaces/[workspaceId]/repositories/[repositoryId]/source/tree/route';
+import * as addAllRoute from '@/app/api/workspaces/[workspaceId]/repositories/[repositoryId]/stacks/all/route';
 import * as repoStacksRoute from '@/app/api/workspaces/[workspaceId]/repositories/[repositoryId]/stacks/route';
 import * as syncRoute from '@/app/api/workspaces/[workspaceId]/repositories/[repositoryId]/sync/route';
 import * as reposRoute from '@/app/api/workspaces/[workspaceId]/repositories/route';
@@ -55,7 +60,8 @@ beforeEach(async () => {
     method: 'POST',
     cookie,
     params: { workspaceId },
-    body: { gitProviderType: 'gitea', remoteUrl: REMOTE, auth: { type: 'none' } },
+    // Most tests exercise picking stacks by hand; auto-add has its own tests below.
+    body: { gitProviderType: 'gitea', remoteUrl: REMOTE, auth: { type: 'none' }, autoAddStacks: false },
   });
   expect(res.status).toBe(201);
   repositoryId = res.json.repository.id;
@@ -185,6 +191,254 @@ describe('stack discovery', () => {
 
   it('requires authentication', async () => {
     expect((await call(stacksRoute.GET, { params: { workspaceId } })).status).toBe(401);
+  });
+});
+
+describe('adding all stacks', () => {
+  const suggestions = async () =>
+    (await call(repoStacksRoute.GET, { cookie, params: { workspaceId, repositoryId } })).json.suggestions as {
+      rootPath: string;
+      existingStackId: string | null;
+    }[];
+  const addAll = () =>
+    call(addAllRoute.POST, { method: 'POST', cookie, params: { workspaceId, repositoryId } });
+
+  it('registers every Compose folder that is not a stack yet, once', async () => {
+    const liftlogId = await liftlog();
+    const res = await addAll();
+    expect(res.status).toBe(200);
+    expect(res.json.result).toEqual({ added: 2, existing: 1, failed: [] });
+    const after = await suggestions();
+    expect(after.every((s) => s.existingStackId)).toBe(true);
+    expect(after.find((s) => s.rootPath === 'apps/liftlog')?.existingStackId).toBe(liftlogId);
+    const list = await call(stacksRoute.GET, { cookie, params: { workspaceId } });
+    expect(list.json.stacks.map((s: { slug: string }) => s.slug).sort()).toEqual([
+      'acme-homelab',
+      'blinko',
+      'liftlog',
+    ]);
+
+    expect((await addAll()).json.result).toEqual({ added: 0, existing: 3, failed: [] });
+  });
+
+  it('counts folders registered by a concurrent add-all as existing, not failed', async () => {
+    // Simulate another addAll winning the race: the moment this call inserts apps/blinko, a stack for the
+    // same folder has just been registered by someone else.
+    const stacks = h.container.repos.stacks;
+    const insert = stacks.insert.bind(stacks);
+    let raced = false;
+    stacks.insert = async (stack) => {
+      if (!raced && stack.rootPath === 'apps/blinko') {
+        raced = true;
+        await insert({ ...stack, id: `${stack.id}-other`, slug: `${stack.slug}-other` });
+      }
+      return insert(stack);
+    };
+    try {
+      const res = await addAll();
+      expect(res.json.result).toEqual({ added: 2, existing: 1, failed: [] });
+    } finally {
+      stacks.insert = insert;
+    }
+    expect((await suggestions()).every((s) => s.existingStackId)).toBe(true);
+  });
+
+  it('adds new stacks after each fetch when auto-add is on, and only then', async () => {
+    server.commitFiles(REPO, 'main', {
+      'apps/memos/compose.yaml': 'services:\n  memos:\n    image: memos:1\n',
+    });
+    await call(syncRoute.POST, { method: 'POST', cookie, params: { workspaceId, repositoryId } });
+    await drainJobs();
+    expect((await suggestions()).every((s) => s.existingStackId === null)).toBe(true);
+
+    const patched = await call(repoRoute.PATCH, {
+      method: 'PATCH',
+      cookie,
+      params: { workspaceId, repositoryId },
+      body: { autoAddStacks: true },
+    });
+    expect(patched.json.repository.autoAddStacks).toBe(true);
+    await call(syncRoute.POST, { method: 'POST', cookie, params: { workspaceId, repositoryId } });
+    await drainJobs();
+    const after = await suggestions();
+    expect(after.map((s) => s.rootPath)).toContain('apps/memos');
+    expect(after.every((s) => s.existingStackId)).toBe(true);
+
+    const audit = await h.container.repos.audit.list({ workspaceId, limit: 50 });
+    const auto = audit.filter((e) => e.action === 'stack.create' && e.actorUserId === null);
+    expect(auto).toHaveLength(4);
+    // Restore for other tests.
+    server.commitFiles(REPO, 'main', { 'apps/memos/compose.yaml': null });
+  });
+
+  it('keeps going and reports a folder as failed when the recovery re-read fails', async () => {
+    const stacks = h.container.repos.stacks;
+    const insert = stacks.insert.bind(stacks);
+    const list = stacks.listByRepository.bind(stacks);
+    let broken = false;
+    stacks.insert = async (stack) => {
+      if (stack.rootPath === 'apps/blinko') {
+        broken = true;
+        throw new Error('disk I/O error');
+      }
+      return insert(stack);
+    };
+    stacks.listByRepository = async (...args) => {
+      if (broken) {
+        broken = false;
+        throw new Error('database is locked');
+      }
+      return list(...args);
+    };
+    try {
+      const res = await addAll();
+      expect(res.json.result).toEqual({
+        added: 2,
+        existing: 0,
+        failed: [{ rootPath: 'apps/blinko', message: 'Could not add this folder as a stack.' }],
+      });
+    } finally {
+      stacks.insert = insert;
+      stacks.listByRepository = list;
+    }
+  });
+
+  it('registers every folder even when the suggestion list is capped', async () => {
+    const files: Record<string, string> = {};
+    for (let i = 0; i < 2001; i++) files[`s${String(i).padStart(4, '0')}/compose.yaml`] = 'services: {}\n';
+    server.createRepo('acme/many.git', ['main']);
+    server.commitFiles('acme/many.git', 'main', files);
+    const many = await call(reposRoute.POST, {
+      method: 'POST',
+      cookie,
+      params: { workspaceId },
+      body: { gitProviderType: 'gitea', remoteUrl: 'https://git.test/acme/many.git', auth: { type: 'none' } },
+    });
+    await drainJobs();
+    const id = many.json.repository.id;
+    const listed = await call(repoStacksRoute.GET, { cookie, params: { workspaceId, repositoryId: id } });
+    expect(listed.json.suggestions).toHaveLength(2000);
+    // createRepo seeds a root compose.yaml as well.
+    expect(listed.json.stacks.length).toBeGreaterThanOrEqual(2001);
+    expect(listed.json.stacks.some((s: { rootPath: string }) => s.rootPath === 's2000')).toBe(true);
+  }, 60_000);
+
+  it('is on by default for new connections', async () => {
+    server.createRepo('acme/second.git', ['main']);
+    const other = await call(reposRoute.POST, {
+      method: 'POST',
+      cookie,
+      params: { workspaceId },
+      body: {
+        gitProviderType: 'gitea',
+        remoteUrl: 'https://git.test/acme/second.git',
+        auth: { type: 'none' },
+      },
+    });
+    expect(other.json.repository.autoAddStacks).toBe(true);
+  });
+
+  it('returns 409 before the first fetch and requires authentication', async () => {
+    await h.container.repos.gitRepositories.update(repositoryId, { headSha: null, updatedAt: new Date() });
+    expect((await addAll()).status).toBe(409);
+    const anon = await call(addAllRoute.POST, { method: 'POST', params: { workspaceId, repositoryId } });
+    expect(anon.status).toBe(401);
+  });
+});
+
+describe('repository-wide files', () => {
+  const ROOT_FILES = {
+    'README.md': '# Homelab\n\nSee [setup](docs/setup.md).\n',
+    'docs/setup.md': '# Setup\n',
+    '.env.example': 'TZ=\n',
+    '.env': 'TZ=Europe/Tallinn\nTOKEN=hunter2\n',
+  };
+  const refetch = async () => {
+    await call(syncRoute.POST, { method: 'POST', cookie, params: { workspaceId, repositoryId } });
+    await drainJobs();
+  };
+  const readRepoFile = (path: string, ws = workspaceId) =>
+    call(repoFilesRoute.GET, {
+      cookie,
+      params: { workspaceId: ws, repositoryId },
+      path: `/x?path=${encodeURIComponent(path)}`,
+    });
+  const saveRepoDraft = (body: Record<string, unknown>) =>
+    call(repoDraftsRoute.PUT, { method: 'PUT', cookie, params: { workspaceId, repositoryId }, body });
+
+  beforeEach(async () => {
+    server.commitFiles(REPO, 'main', ROOT_FILES);
+    await refetch();
+  });
+  afterEach(() => {
+    server.commitFiles(REPO, 'main', Object.fromEntries(Object.keys(ROOT_FILES).map((k) => [k, null])));
+  });
+
+  it('lists files outside any stack, with secret files locked', async () => {
+    const res = await call(repoTreeRoute.GET, { cookie, params: { workspaceId, repositoryId } });
+    expect(res.status).toBe(200);
+    const locked = Object.fromEntries(
+      res.json.entries.map((e: { path: string; locked: string | null }) => [e.path, e.locked]),
+    );
+    expect(locked).toMatchObject({
+      'README.md': null,
+      'docs/setup.md': null,
+      '.env.example': null,
+      '.env': 'secret',
+      'apps/liftlog/compose.yaml': null,
+      'apps/liftlog/.env': 'secret',
+    });
+  });
+
+  it('reads and drafts root docs and .env templates, never secret files', async () => {
+    const readme = await readRepoFile('README.md');
+    expect(readme.status).toBe(200);
+    expect(readme.json.file).toMatchObject({ path: 'README.md', editable: true });
+    expect(readme.json.file.content).toContain('# Homelab');
+
+    const env = (await readRepoFile('.env.example')).json.file;
+    const saved = await saveRepoDraft({
+      path: '.env.example',
+      content: 'TZ=\nPUID=\n',
+      baseBlobSha: env.blobSha,
+    });
+    expect(saved.status).toBe(200);
+    expect(saved.json.file.draft.content).toBe('TZ=\nPUID=\n');
+
+    const secret = await readRepoFile('.env');
+    expect(secret.json.file?.content ?? null).toBeNull();
+    expect(secret.json.file?.locked).toBe('secret');
+    expect((await saveRepoDraft({ path: '.env', content: 'TOKEN=x\n', baseBlobSha: null })).status).toBe(400);
+    expect((await saveRepoDraft({ path: '../escape.md', content: 'x', baseBlobSha: null })).status).toBe(400);
+
+    const changes = await call(repoDraftsRoute.GET, { cookie, params: { workspaceId, repositoryId } });
+    expect(changes.json.changes.map((c: { path: string }) => c.path)).toEqual(['.env.example']);
+    const discarded = await call(repoDraftsRoute.DELETE, {
+      method: 'DELETE',
+      cookie,
+      params: { workspaceId, repositoryId },
+      path: '/x?path=.env.example',
+    });
+    expect(discarded.status).toBe(200);
+  });
+
+  it('includes drafts made inside stacks and hides the repository from other workspaces', async () => {
+    const stackId = await liftlog();
+    const base = (await readFile(stackId, 'apps/liftlog/README.md')).json.file;
+    await saveDraft(stackId, {
+      path: 'apps/liftlog/README.md',
+      content: '# LiftLog\n',
+      baseBlobSha: base.blobSha,
+    });
+    const changes = await call(repoDraftsRoute.GET, { cookie, params: { workspaceId, repositoryId } });
+    expect(changes.json.changes.map((c: { path: string }) => c.path)).toEqual(['apps/liftlog/README.md']);
+
+    const other = (await call(workspaces.POST, { method: 'POST', body: { name: 'Other' }, cookie })).json
+      .workspace.id;
+    expect((await readRepoFile('README.md', other)).status).toBe(404);
+    expect(
+      (await call(repoTreeRoute.GET, { cookie, params: { workspaceId: other, repositoryId } })).status,
+    ).toBe(404);
   });
 });
 

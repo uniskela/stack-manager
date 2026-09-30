@@ -24,7 +24,8 @@ const errorText = (err: unknown) => (err instanceof ApiError ? err.message : 'Co
  */
 export function DocWorkspace(props: {
   workspaceId: string;
-  stackId: string;
+  /** Source API of the scope (see StackEditorProps.apiBase). */
+  apiBase: string;
   rootPath: string;
   docs: { path: string; draft: boolean }[];
   file: FileView | null;
@@ -33,7 +34,7 @@ export function DocWorkspace(props: {
   docsHref: string;
 }) {
   const router = useRouter();
-  const base = `/api/workspaces/${props.workspaceId}/stacks/${props.stackId}`;
+  const base = props.apiBase;
   const [file, setFile] = useState(props.file);
   const initial = file?.draft?.content ?? file?.content ?? '';
   const [text, setText] = useState(initial);
@@ -133,15 +134,33 @@ export function DocWorkspace(props: {
     <div className="docs">
       <nav className="docs-nav" aria-label="Documentation pages">
         <ul>
-          {props.docs.map((d) => (
-            <li key={d.path}>
-              <Link href={props.hrefFor[d.path]!} aria-current={d.path === file?.path ? 'page' : undefined}>
-                <FileText className="icon" aria-hidden="true" />
-                <span className="truncate">{relativeTo(props.rootPath, d.path)}</span>
-                {d.draft ? <span className="tree-badge modified">M</span> : null}
-              </Link>
-            </li>
-          ))}
+          {props.docs.map((d, i) => {
+            // Pages are sorted by path, so each folder's pages are contiguous: label the folder once.
+            const rel = relativeTo(props.rootPath, d.path);
+            const dir = rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : '';
+            const prev = props.docs[i - 1];
+            const prevRel = prev ? relativeTo(props.rootPath, prev.path) : '';
+            const prevDir = prevRel.includes('/') ? prevRel.slice(0, prevRel.lastIndexOf('/')) : '';
+            return (
+              <li key={d.path}>
+                {dir && (i === 0 || dir !== prevDir) ? (
+                  <div className="docs-nav-group truncate" title={dir}>
+                    {dir}/
+                  </div>
+                ) : null}
+                <Link
+                  href={props.hrefFor[d.path]!}
+                  aria-current={d.path === file?.path ? 'page' : undefined}
+                  title={rel}
+                  className={dir ? 'nested' : undefined}
+                >
+                  <FileText className="icon" aria-hidden="true" />
+                  <span className="truncate">{dir ? rel.slice(dir.length + 1) : rel}</span>
+                  {d.draft ? <span className="tree-badge modified">M</span> : null}
+                </Link>
+              </li>
+            );
+          })}
         </ul>
       </nav>
 

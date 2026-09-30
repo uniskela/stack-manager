@@ -63,7 +63,8 @@ function Diff({ before, after }: { before: string; after: string }) {
 /** Review of draft changes in a stack, as unified diffs against the version each draft started from. */
 export function ChangesView(props: {
   workspaceId: string;
-  stackId: string;
+  /** Source API of the scope (see StackEditorProps.apiBase). */
+  apiBase: string;
   rootPath: string;
   changes: ChangeView[];
   editorHref: string;
@@ -84,12 +85,9 @@ export function ChangesView(props: {
     setBusy(path);
     setError(null);
     try {
-      await api(
-        `/api/workspaces/${props.workspaceId}/stacks/${props.stackId}/drafts?path=${encodeURIComponent(path)}`,
-        {
-          method: 'DELETE',
-        },
-      );
+      await api(`${props.apiBase}/drafts?path=${encodeURIComponent(path)}`, {
+        method: 'DELETE',
+      });
       router.refresh();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not reach the server.');

@@ -385,6 +385,7 @@ a.list-row:hover {
 input[type='text'],
 input[type='password'],
 input[type='url'],
+input[type='search'],
 select {
   font: inherit;
   width: 100%;
