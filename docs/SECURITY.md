@@ -71,7 +71,10 @@ Assume: operator places stack-manager on a trusted homelab network behind auth a
   (no leading `-`), a protocol allowlist (`https` only), hooks disabled, no system/global config, an isolated
   `HOME`, no credential helpers or prompts, and redirects not followed (auth headers are never replayed to
   another host). Tokens travel as an `http.extraHeader` via `GIT_CONFIG_*` environment variables — never in
-  argv, remote URLs or `.git/config` — and are scrubbed from any git error output.
+  argv, remote URLs or `.git/config` — and are scrubbed from stdout and stderr before either can become an error.
+  Mutation operations disable signing, filesystem-monitor commands and automatic maintenance. Selected contents are hashed without clean filters; hooks never run.
+- **Git mutation:** detached temporary worktrees have isolated indexes and no checkout. Canonical selected paths are verified against Git objects; symlinks, submodules, secrets and file/directory collisions are refused.
+  Expected local/remote heads, base blobs and ancestry are checked under a repository lock. Push uses an exact SHA-to-branch refspec with no force or mirror option. Cancellation does not cancel cleanup; provider operations never delete drafts.
 - **Remote URL policy:** HTTPS only; embedded credentials, query strings and traversal segments are rejected.
   Resolved addresses must not be loopback, link-local/metadata or multicast — including IPv4 embedded in IPv6
   (mapped, compatible, translated and NAT64 forms, dotted or hex); private ranges require
