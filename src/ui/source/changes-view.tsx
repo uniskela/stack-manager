@@ -304,6 +304,7 @@ export function ChangesView(props: {
   const canCommit =
     !!props.gitIdentity &&
     selectedChanges.length > 0 &&
+    selectedChanges.length <= 100 &&
     message.trim().length > 0 &&
     blockingErrors.length === 0 &&
     outdatedSelected.length === 0 &&
@@ -571,6 +572,11 @@ export function ChangesView(props: {
                     );
                   })}
                 </ul>
+              </Alert>
+            ) : null}
+            {selectedChanges.length > 100 ? (
+              <Alert tone="warn" title="Too many drafts selected">
+                Commit up to 100 drafts at a time. Unselect drafts to split the changes into batches.
               </Alert>
             ) : null}
             {outdatedSelected.length ? (
