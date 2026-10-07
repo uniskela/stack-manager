@@ -21,7 +21,11 @@ export type AuditAction =
   | 'stack.update'
   | 'stack.delete'
   | 'draft.save'
-  | 'draft.discard';
+  | 'draft.discard'
+  | 'git.commit'
+  | 'git.push'
+  | 'git.push_rejected'
+  | 'git.commit_validation_overridden';
 
 export interface AuditEvent {
   id: string;

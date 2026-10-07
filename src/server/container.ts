@@ -6,6 +6,7 @@ import { AuditService } from '@/server/application/audit-service';
 import { AuthService } from '@/server/application/auth-service';
 import { CredentialService } from '@/server/application/credential-service';
 import { GitRepositoryService, REPOSITORY_SYNC_JOB } from '@/server/application/git-repository-service';
+import { GitWorkflowService } from '@/server/application/git-workflow-service';
 import { JobQueue } from '@/server/application/job-queue';
 import type { Repositories } from '@/server/application/ports';
 import { SourceService } from '@/server/application/source-service';
@@ -46,6 +47,7 @@ export interface Container {
   repositories: GitRepositoryService;
   stacks: StackService;
   source: SourceService;
+  gitWorkflow: GitWorkflowService;
   jobs: JobQueue;
   worker: JobWorker;
   ping(): boolean;
@@ -121,6 +123,15 @@ export function createContainer(config: AppConfig, overrides: ContainerOverrides
     const reader = new GitSourceReader(git);
     const stacks = new StackService(repos.stacks, repositories, reader, audit, clock, newId);
     const source = new SourceService(repositories, reader, repos.drafts, repos.stacks, audit, clock, newId);
+    const gitWorkflow = new GitWorkflowService(
+      repositories,
+      repos.drafts,
+      repos.stacks,
+      repos.users,
+      reader,
+      audit,
+      config,
+    );
 
     const syncLogger = logger.child({ component: 'stacks' });
     const handlers = new Map<string, JobHandler>([
@@ -171,6 +182,7 @@ export function createContainer(config: AppConfig, overrides: ContainerOverrides
       repositories,
       stacks,
       source,
+      gitWorkflow,
       jobs,
       worker,
       ping: () => pingSqlite(handle.db),

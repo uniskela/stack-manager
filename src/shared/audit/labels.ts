@@ -23,6 +23,10 @@ const LABELS: Record<string, string> = {
   'stack.delete': 'Stack removed',
   'draft.save': 'Draft saved',
   'draft.discard': 'Draft discarded',
+  'git.commit': 'Drafts committed',
+  'git.push': 'Git commit pushed',
+  'git.push_rejected': 'Git push blocked',
+  'git.commit_validation_overridden': 'Commit warnings acknowledged',
 };
 
 export function auditActionLabel(action: string): string {
