@@ -315,6 +315,13 @@ export function ChangesView(props: {
         expectedRemoteSha: next.expectedRemoteSha,
         branch: next.branch,
       });
+    } else if (next.operation !== 'push' && next.state && next.state.ahead > 0 && next.state.behind === 0) {
+      // An unpushed commit from an earlier visit: offer Push again (the server re-checks heads before pushing).
+      setRetained({
+        commitSha: next.state.localHeadSha,
+        expectedRemoteSha: next.state.remoteHeadSha,
+        branch: next.state.branch,
+      });
     }
     if (next.status === 'push_succeeded') setRetained(null);
     if (next.status === 'warnings_unacknowledged') setWarningAckScope(null);

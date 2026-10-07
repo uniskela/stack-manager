@@ -262,6 +262,65 @@ test('mocked push success shows branch confirmation', async ({ page }) => {
   await page.unroute(`**/repositories/${repositoryId}/git/commit`);
 });
 
+test('an unpushed commit from an earlier visit can still be pushed', async ({ page }) => {
+  test.skip(isMobile(page), 'Retained push recovery runs once on desktop.');
+  await setGitIdentity(page);
+  const marker = `retained-${Date.now()}`;
+  const { repositoryId } = sample();
+  await openChangesWithDraft(page, marker);
+
+  const local = 'f'.repeat(40);
+  const remote = '1'.repeat(40);
+  await page.route(`**/repositories/${repositoryId}/git/commit`, async (route) => {
+    if (route.request().method() !== 'POST') return route.continue();
+    await route.fulfill({
+      status: 409,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        status: 'draft_outdated',
+        repositoryId,
+        branch: 'main',
+        operation: 'inspect',
+        commitSha: null,
+        expectedRemoteSha: remote,
+        state: { branch: 'main', localHeadSha: local, remoteHeadSha: remote, ahead: 1, behind: 0 },
+        problems: [],
+        outdatedPaths: [],
+        draftsPreserved: true,
+      }),
+    });
+  });
+  let pushed: unknown = null;
+  await page.route(`**/repositories/${repositoryId}/git/push`, async (route) => {
+    pushed = route.request().postDataJSON();
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        status: 'push_succeeded',
+        repositoryId,
+        branch: 'main',
+        operation: 'push',
+        commitSha: local,
+        expectedRemoteSha: remote,
+        state: { branch: 'main', localHeadSha: local, remoteHeadSha: local, ahead: 0, behind: 0 },
+        problems: [],
+        outdatedPaths: [],
+        draftsPreserved: true,
+      }),
+    });
+  });
+
+  await page.getByLabel('Commit message').fill(`e2e: ${marker}`);
+  await page.getByRole('button', { name: 'Commit', exact: true }).click();
+  await page.getByRole('button', { name: 'Push fffffff' }).click();
+  await expect(page.getByRole('status').filter({ hasText: /Pushed fffffff to main/ })).toBeVisible();
+  expect(pushed).toEqual({ commitSha: local, expectedRemoteSha: remote });
+  await expectWorkPreserved(page);
+  await page.unroute(`**/repositories/${repositoryId}/git/commit`);
+  await page.unroute(`**/repositories/${repositoryId}/git/push`);
+});
+
 test('mobile: changes commit layout and accessibility', async ({ page }) => {
   test.skip(!isMobile(page), 'Narrow layout only.');
   await setGitIdentity(page);
