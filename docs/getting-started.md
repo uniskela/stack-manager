@@ -80,7 +80,7 @@ Each stack has these tabs:
 | **Editor** | Browse files in the explorer, open them in tabs and edit with syntax highlighting. Compose files are validated as you type and issues appear in the problems panel. **Save draft** (Ctrl+S / ⌘S) keeps your edit on the server. |
 | **Docs** | Read the stack's Markdown files rendered (README first), follow links between them and edit them as drafts. |
 | **Environment** | Variables the Compose file references, whether `.env.example` documents them, env files it expects, and values that look like hard-coded secrets. Values are never shown. |
-| **Changes** | Every draft as a line-by-line diff against the fetched commit. Discard the drafts you don't want. |
+| **Changes** | Every draft as a line-by-line diff against the fetched commit. Select files, commit with your Account Git identity, and push when ready. Discard drafts you don't want. |
 | **Settings** | Rename the stack, change its Compose file or remove it (files and drafts are kept). |
 
 Files that look like secrets (`.env`, private keys, certificates, anything in a `secrets/` folder) are listed but
@@ -91,7 +91,8 @@ can't be opened or edited.
 Drafts are stored in stack-manager's database and never leave the server. If the file changes in Git after you start a
 draft, the editor warns you, so you don't overwrite someone else's change unknowingly.
 
-Committing drafts, safe push and Git history ship in v0.5.0; see the [roadmap](plans/MVP_PLAN.md).
+Set your **Git identity** under Settings → Account before the first commit. After a successful push, drafts stay
+on the server until you discard them — fetch the repository if the remote moved ahead.
 
 ## 5. Files outside stacks
 

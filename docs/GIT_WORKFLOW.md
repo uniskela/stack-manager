@@ -48,7 +48,7 @@ Edit → Validate → Commit → Push → (optional) Deploy → (optional) Watch
 
 ## Implemented provider foundation (PR #4)
 
-The low-level `GitProvider` supports `inspectBranch`, `commit`, `push`, and `getCommit` for all three smart-HTTP adapters. `GitWorkflowService` provides the application/API layer below. The final Changes UI is separate work.
+The low-level `GitProvider` supports `inspectBranch`, `commit`, `push`, and `getCommit` for all three smart-HTTP adapters. `GitWorkflowService` provides the application/API layer. The Changes tab commits selected drafts and can push or retry a retained commit.
 
 ## Application API contract (v0.5.0)
 

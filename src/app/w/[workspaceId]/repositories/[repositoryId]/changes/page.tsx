@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import { getContainer } from '@/server/container';
 import { ChangesView } from '@/ui/source/changes-view';
-import { NotFetched, repositorySourceApi } from '../../../../../_lib/repository-source';
+import { requireSession } from '@/app/_lib/session';
+import { NotFetched, repositorySourceApi } from '@/app/_lib/repository-source';
 
 export const metadata: Metadata = { title: 'Changes' };
 
@@ -12,18 +13,26 @@ export default async function RepositoryChangesPage({
   params: Promise<{ workspaceId: string; repositoryId: string }>;
 }) {
   const { workspaceId, repositoryId } = await params;
-  const { repositories, source } = getContainer();
+  const session = await requireSession();
+  const { repositories, source, auth } = getContainer();
   const repo = await repositories.get(workspaceId, repositoryId);
   if (!repo.headSha) return <NotFetched />;
-  const changes = await source.changes(workspaceId, repositoryId, '');
+  const [changes, identity] = await Promise.all([
+    source.changes(workspaceId, repositoryId, ''),
+    auth.getGitIdentity(session.user.id),
+  ]);
   return (
     <div className="wide-page">
       <ChangesView
+        key={changes.map((c) => c.path).join('\0')}
         workspaceId={workspaceId}
+        repositoryId={repositoryId}
         apiBase={repositorySourceApi(workspaceId, repositoryId)}
         rootPath=""
         changes={changes}
         editorHref={`/w/${workspaceId}/repositories/${repositoryId}/files`}
+        branch={repo.defaultBranch}
+        gitIdentity={identity}
       />
     </div>
   );
