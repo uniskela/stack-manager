@@ -43,6 +43,7 @@ when you change it. To run a build of your checkout instead, add the override:
 | `STACK_MANAGER_SESSION_TTL_HOURS` | no | `168` | Sliding session lifetime |
 | `STACK_MANAGER_LOG_LEVEL` | no | `info` | `debug` \| `info` \| `warn` \| `error` |
 | `STACK_MANAGER_WORKER_ENABLED` | no | `true` | Disable the in-process job worker (diagnostics only) |
+| `STACK_MANAGER_GIT_AUTHOR_NAME` / `STACK_MANAGER_GIT_AUTHOR_EMAIL` | no | — | Set both for draft commits. A printable name and valid email are required; missing identity blocks commits, not source reads. Push needs a Git credential with write access |
 
 The process **refuses to start** (exit code 1) when a required value is missing or malformed, e.g. an
 encryption key that does not decode to 32 bytes. Error messages name the variable but never echo its value.

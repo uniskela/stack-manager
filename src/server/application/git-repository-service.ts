@@ -15,6 +15,7 @@ import type { Logger } from '@/server/observability/logger';
 import type { GitProviderRegistry } from '@/server/providers/git/registry';
 import {
   GitOperationError,
+  type GitBranchInput,
   type GitHttpAuth,
   type GitProvider,
   type RemoteProbe,
@@ -282,6 +283,28 @@ export class GitRepositoryService {
       return null;
     }
     return { connection: conn, cloneDir, commitSha: conn.headSha };
+  }
+
+  /** Scoped, host-policy checked provider access; plaintext auth exists only inside the callback. */
+  async withGitAccess<T>(
+    workspaceId: string,
+    id: string,
+    run: (provider: GitProvider, input: GitBranchInput) => Promise<T>,
+  ): Promise<T> {
+    const conn = await this.#find(workspaceId, id);
+    await this.#assertHost(conn.remoteUrl);
+    const provider = this.providers.get(conn.gitProviderType);
+    const input = {
+      cloneDir: this.#cloneDir(conn),
+      branch: conn.defaultBranch,
+      remoteUrl: conn.remoteUrl,
+    };
+    const invoke = (auth: GitHttpAuth | null) => run(provider, { ...input, auth });
+    return conn.credentialId
+      ? this.credentials.withPlaintext(workspaceId, conn.credentialId, (token, cred) =>
+          invoke({ username: cred.meta.username || provider.defaultUsername(), token }),
+        )
+      : invoke(null);
   }
 
   async requestSync(workspaceId: string, id: string, actorUserId: string): Promise<RepositoryView> {

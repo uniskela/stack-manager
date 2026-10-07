@@ -70,6 +70,13 @@
       "kind": "doc"
     },
     {
+      "source": "docs/GIT_WORKFLOW.md",
+      "slug": "git-workflow",
+      "title": "Git workflow and API",
+      "group": "Project",
+      "kind": "doc"
+    },
+    {
       "source": "docs/ARCHITECTURE.md",
       "slug": "architecture",
       "title": "Architecture",

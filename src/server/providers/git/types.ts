@@ -75,13 +75,7 @@ export interface GitBranchInput {
   signal?: AbortSignal;
 }
 
-export interface GitBranchState {
-  branch: string;
-  localHeadSha: string;
-  remoteHeadSha: string;
-  ahead: number;
-  behind: number;
-}
+export type GitBranchState = import('@/shared/git-workflow').GitWorkflowState;
 
 export interface GitFileChange {
   /** Canonical repo-relative path; secret paths, symlinks and submodules are refused. */

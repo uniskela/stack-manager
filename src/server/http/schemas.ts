@@ -54,3 +54,15 @@ export const DraftSaveSchema = z
 
 /** JSON escaping can roughly double text; the service enforces the real 1 MiB content limit. */
 export const DRAFT_BODY_LIMIT = 3 * 1024 * 1024;
+
+export const GitCommitSchema = z
+  .object({
+    paths: z.array(z.string().min(1).max(1024)).min(1).max(100),
+    message: z.string().min(1).max(8192),
+    push: z.boolean().optional(),
+    acknowledgeWarnings: z.boolean().optional(),
+  })
+  .strict();
+
+const objectId = z.string().regex(/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/);
+export const GitPushSchema = z.object({ commitSha: objectId, expectedRemoteSha: objectId }).strict();

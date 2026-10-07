@@ -10,13 +10,16 @@ Edit → Validate → Commit → Push → (optional) Deploy → (optional) Watch
 
 - Edits are stored in SQLite `source_drafts`, keyed by repository and path. Database drafts remain the canonical uncommitted state; normal editing never dirties the Git clone.
 - Source reads use Git objects at the last synced commit. A draft is outdated when its `baseBlobSha` differs from the current tree entry (or a new path now exists).
-- The provider accepts only explicitly selected changes and never deletes or updates drafts, even after commit or push succeeds. The later application workflow owns draft reconciliation.
+- The provider accepts only explicitly selected changes and never deletes or updates drafts. `GitWorkflowService` validates selected database snapshots and orchestrates commit and optional push. It checks draft base blobs against the retained local head, including earlier unpushed commits.
+- v0.5.0 preserves **all** drafts after success and failure, including edits saved concurrently with a commit. After a successful push, fetch the repository and review/discard committed drafts manually. An already committed draft can remain visible or be marked outdated; do not repeat the commit to retry a push. Automatic cleanup needs an atomic comparison against the exact committed draft snapshot and is deferred.
 - Unsaved browser buffers warn on navigation; PR #8 adds offline support.
 
 ## Validation before commit
 
-- YAML/Compose validation errors block commit by default (override requires explicit confirm)
-- Soft warnings: runtime unhealthy, Git↔runtime image drift, missing secret metadata keys
+- The existing `problemsFor` pipeline runs on exactly the selected contents: Compose checks for known Compose filenames and registered stack Compose paths, YAML/JSON syntax checks otherwise. Unselected drafts are excluded.
+- Errors always block commits in v0.5.0; there is no error override.
+- Warnings (including hard-coded secret warnings) require `acknowledgeWarnings: true`. A successful override records `git.commit_validation_overridden`. Informational findings do not block.
+- Responses carry path, location, severity and stable problem codes. Parser messages can quote source values, so they are omitted; the editor can display detailed local validation.
 - Warnings never auto-rewrite source
 
 ## Diff review
@@ -28,24 +31,83 @@ Edit → Validate → Commit → Push → (optional) Deploy → (optional) Watch
 ## Commit
 
 - Message required
-- Author from authenticated user profile / configured git identity
+- Both `STACK_MANAGER_GIT_AUTHOR_NAME` and `STACK_MANAGER_GIT_AUTHOR_EMAIL` configure the author and committer. The current admin profile has no email field; no identity is guessed from it or inherited from host Git config. If neither variable is set, reads and drafts work, but commits return `git_identity_missing`. An incomplete/invalid pair fails startup without echoing values.
 - Create the commit in an isolated temporary worktree; retain its object in the local clone.
 
 ## Push
 
 - Push to tracked branch
-- On rejection (non-fast-forward): block, fetch, show conflict protection UI — no silent force push
+- Before pushing, fetch and compare the expected remote SHA and ancestry. On rejection or a remote change, return structured state, retain the local commit and every draft, and permit a separate push retry only after manual review.
 - Force push: not offered in MVP
 
 ## Conflict protection
 
 - Detect remote ahead
-- Offer rebase/merge strategies appropriate to self-hosted single-operator MVP (document chosen default in PR #4)
+- v0.5.0 requires manual reconciliation outside the app. Fetch is available through the existing repository sync route; branch inspection also fetches remote refs without changing the source snapshot. Neither operation merges, rebases, moves the retained local head, or deletes drafts.
 - Block when remote commits would be lost. No hard reset, force push, or automatic merge/rebase is implemented.
 
 ## Implemented provider foundation (PR #4)
 
-The low-level `GitProvider` now supports `inspectBranch`, `commit`, `push`, and `getCommit` for all three smart-HTTP adapters. The final commit/push UI and application orchestration are separate work.
+The low-level `GitProvider` supports `inspectBranch`, `commit`, `push`, and `getCommit` for all three smart-HTTP adapters. `GitWorkflowService` provides the application/API layer below. The final Changes UI is separate work.
+
+## Application API contract (v0.5.0)
+
+Base: `/api/workspaces/{workspaceId}/repositories/{repositoryId}/git`.
+All routes require an active admin session and a workspace-scoped repository. POSTs use the existing same-origin/JSON rules. The current single-operator admin can access all workspaces; a repository under another workspace id is a 404. These APIs never accept source content, an author identity, raw Git commands, or force options.
+
+| Route | Input | Purpose |
+| --- | --- | --- |
+| `GET /git` | — | Fetch/inspect retained local and remote heads; no draft or source-snapshot changes |
+| `POST /git/commit` | `{ "paths": ["apps/wiki/compose.yaml"], "message": "Update wiki", "push": false, "acknowledgeWarnings": false }` | Commit precisely these server-side drafts, optionally push |
+| `POST /git/push` | `{ "commitSha": "<retained SHA>", "expectedRemoteSha": "<reviewed remote SHA>" }` | Push/retry the retained commit without committing drafts again |
+
+Commit selections must contain 1–100 unique, canonical, non-secret paths with existing drafts. Messages must be nonblank, NUL-free and at most 8,192 characters / 32 KiB UTF-8. Requests reject unknown fields and use the standard 64 KiB body limit. Push ids are full SHA-1 or SHA-256 object ids.
+
+Every workflow response has this shape (TypeScript definitions: `src/shared/git-workflow.ts`):
+
+```json
+{
+  "status": "commit_succeeded",
+  "repositoryId": "repository-id",
+  "branch": "main",
+  "operation": "commit",
+  "commitSha": "<new SHA>",
+  "expectedRemoteSha": "<reviewed remote SHA>",
+  "state": {
+    "branch": "main",
+    "localHeadSha": "<last inspected local SHA>",
+    "remoteHeadSha": "<last inspected remote SHA>",
+    "ahead": 0,
+    "behind": 0
+  },
+  "problems": [],
+  "outdatedPaths": [],
+  "draftsPreserved": true
+}
+```
+
+`state` is the last successful inspection, nullable when inspection failed. It can precede the returned commit or push; refresh `GET /git` to display current heads. On conflict/rejection, the service refreshes it best-effort. `expectedRemoteSha` retains the reviewed remote head separately from that refreshed state; it is null for inspection or if commit inspection failed. `commitSha` identifies the successful commit made by this request, or the explicit SHA of a push request; it remains present when a subsequent push fails. A commit failure before publication has `commitSha: null`. Never infer commit success from HTTP success alone: a combined request can return 409/502 **with a successful retained commit**.
+
+| HTTP | `status` | UI action |
+| --- | --- | --- |
+| 200 | `ready` | Show inspected heads; this does not prove push permission |
+| 200 | `commit_succeeded` | Show commit; offer a separate push |
+| 200 | `push_succeeded` | Show pushed commit; fetch and review remaining drafts |
+| 422 | `validation_blocked` | Correct selected files; errors cannot be overridden |
+| 422 | `warnings_unacknowledged` | Show warnings, request explicit acknowledgement, then resubmit |
+| 409 | `draft_outdated` | Review `outdatedPaths` against the current local tree |
+| 409 | `git_identity_missing` | Configure the author name/email and restart |
+| 409 | `remote_changed` | Show heads/ahead/behind; fetch and reconcile manually |
+| 409 | `branch_changed` | Local head changed or the selected commit was superseded; refresh/review |
+| 409 | `push_rejected` | Remote refused the push; review permissions/policy; retained work can be retried |
+| 409 | `repository_busy` | Another Git operation owns the lock; retry when it finishes |
+| 502 | `git_operation_failed` | Show operation and safe `reason`; preserve/review retained commit and drafts |
+
+Git failures additionally include `reason`: `auth`, `not_found`, `network`, `timeout`, `invalid`, `conflict`, `busy`, `rejected`, or `unknown`. No provider exception text is returned or audited. Validation problems use `{ path, line, column, severity, code }`, where `code` is `source_error`, `source_warning`, `source_info`, or `hardcoded-secret`. The editor uses the same validation pipeline for details.
+
+Malformed selection/body and access/precondition errors keep the existing `{ "error": { "code", "message", "fields" } }` envelope: 400 `validation_failed`, 401 `unauthenticated`, 403 `forbidden`, 404 `not_found`, 409 `not_synced`, plus the wrapper's media-type/body-size errors. Clients must handle this envelope as well as workflow outcomes without parsing messages.
+
+Audit uses `git.commit`, `git.push`, `git.push_rejected` and `git.commit_validation_overridden`, with ids, branch, SHA, file/warning counts and affected registered stack ids where available. Draft contents, commit messages, identities, remote URLs and credentials are omitted.
 
 A commit operation:
 
