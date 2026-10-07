@@ -30,7 +30,6 @@ beforeEach(async () => {
   server.commitFiles(REPO, 'main', { 'README.md': '# Stacks\n', 'stack.yaml': COMPOSE });
   h = await createHarness({
     overrides: gitServerOverrides(server),
-    env: { STACK_MANAGER_GIT_AUTHOR_NAME: AUTHOR.name, STACK_MANAGER_GIT_AUTHOR_EMAIL: AUTHOR.email },
   });
   const admin = await call(setup.POST, {
     method: 'POST',
@@ -38,6 +37,7 @@ beforeEach(async () => {
   });
   cookie = cookieFrom(admin);
   actorUserId = admin.json.user.id;
+  await h.container.auth.updateGitIdentity(actorUserId, AUTHOR);
   workspaceId = (await h.container.workspaces.create({ name: 'Homelab' }, actorUserId)).id;
   repositoryId = (
     await h.container.repositories.create(
@@ -306,7 +306,7 @@ describe('draft commit and safe push workflow', () => {
 
   it('reports missing identity without creating a commit', async () => {
     await save();
-    h.config.gitAuthor = null;
+    await h.container.repos.users.updateGitIdentity(actorUserId, null, new Date());
     const result = await commit();
     expect(result.status).toBe(409);
     expect(result.json.status).toBe('git_identity_missing');

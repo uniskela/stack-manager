@@ -16,7 +16,7 @@ Setup can only happen once. After that, `/setup` redirects to sign-in.
 After sign-in, the sidebar lists **Dashboard**, **Stacks**, **Repositories** and **Settings** (in that order). The
 **Dashboard** is your workspace home: a quick overview and the main path to connect a repository when the workspace
 is empty. **Settings** has **General**, **Credentials**, **Activity** and **Account** tabs for workspace options,
-saved tokens, the audit log and your password and sessions.
+saved tokens, the audit log, your Git author identity, password and sessions.
 
 ## 2. Connect a repository
 

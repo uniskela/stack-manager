@@ -20,6 +20,10 @@ export const users = sqliteTable(
     username: text('username').notNull(),
     passwordHash: text('password_hash').notNull(),
     role: text('role', { enum: ['admin'] }).notNull(),
+    /** Author name for commits created by Stack Manager; null until the user configures it. */
+    gitAuthorName: text('git_author_name'),
+    /** Author email for commits created by Stack Manager; null until the user configures it. */
+    gitAuthorEmail: text('git_author_email'),
     createdAt: ts('created_at').notNull(),
     updatedAt: ts('updated_at').notNull(),
     lastLoginAt: ts('last_login_at'),

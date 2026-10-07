@@ -7,7 +7,14 @@ import {
   RateLimitedError,
   ValidationError,
 } from '@/server/domain/errors';
-import { normalizeUsername, type Session, type User } from '@/server/domain/user';
+import {
+  gitAuthorIdentityOf,
+  normalizeUsername,
+  parseGitAuthorIdentity,
+  type GitAuthorIdentity,
+  type Session,
+  type User,
+} from '@/server/domain/user';
 import {
   hashPassword,
   PASSWORD_MAX_LENGTH,
@@ -96,6 +103,8 @@ export class AuthService {
       username,
       passwordHash: await hashPassword(password),
       role: 'admin',
+      gitAuthorName: null,
+      gitAuthorEmail: null,
       createdAt: now,
       lastLoginAt: now,
       disabledAt: null,
@@ -229,6 +238,29 @@ export class AuthService {
       entityId: userId,
       knownSecrets: [currentPassword, password],
     });
+  }
+
+  async getGitIdentity(userId: string): Promise<GitAuthorIdentity | null> {
+    const user = await this.users.findById(userId);
+    if (!user) throw new AuthenticationError();
+    return gitAuthorIdentityOf(user);
+  }
+
+  async updateGitIdentity(
+    userId: string,
+    input: { name: unknown; email: unknown },
+  ): Promise<GitAuthorIdentity> {
+    const user = await this.users.findById(userId);
+    if (!user) throw new AuthenticationError();
+    const identity = parseGitAuthorIdentity(input);
+    await this.users.updateGitIdentity(userId, identity, this.clock.now());
+    await this.audit.record({
+      action: 'auth.git_identity_updated',
+      actorUserId: userId,
+      entityType: 'user',
+      entityId: userId,
+    });
+    return identity;
   }
 
   async listSessions(

@@ -20,31 +20,6 @@ describe('loadConfig (fail closed)', () => {
     expect(cfg.databasePath).toBe('/tmp/sm/stack-manager.sqlite');
     expect(cfg.reposDir).toBe('/tmp/sm/repos');
     expect(cfg.allowPrivateNetworks).toBe(false);
-    expect(cfg.gitAuthor).toBeNull();
-  });
-
-  it('resolves a configured Git identity', () => {
-    expect(
-      loadConfig(
-        env({
-          STACK_MANAGER_GIT_AUTHOR_NAME: ' Operator ',
-          STACK_MANAGER_GIT_AUTHOR_EMAIL: ' operator@example.invalid ',
-        }),
-      ).gitAuthor,
-    ).toEqual({ name: 'Operator', email: 'operator@example.invalid' });
-  });
-
-  it.each([
-    { STACK_MANAGER_GIT_AUTHOR_NAME: 'Operator' },
-    { STACK_MANAGER_GIT_AUTHOR_EMAIL: 'operator@example.invalid' },
-    {
-      STACK_MANAGER_GIT_AUTHOR_NAME: 'Bad\nName',
-      STACK_MANAGER_GIT_AUTHOR_EMAIL: 'operator@example.invalid',
-    },
-    { STACK_MANAGER_GIT_AUTHOR_NAME: 'Operator', STACK_MANAGER_GIT_AUTHOR_EMAIL: 'invalid-value' },
-  ])('rejects malformed or incomplete Git identity without echoing values', (over) => {
-    expect(() => loadConfig(env(over))).toThrow(ConfigError);
-    expect(() => loadConfig(env(over))).not.toThrow('invalid-value');
   });
 
   it.each([

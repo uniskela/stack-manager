@@ -6,7 +6,7 @@ import { Alert } from './primitives/alert';
 export function Field(props: {
   label: string;
   name: string;
-  type?: 'text' | 'password' | 'url';
+  type?: 'text' | 'password' | 'url' | 'email';
   value: string;
   onChange: (value: string) => void;
   hint?: React.ReactNode;

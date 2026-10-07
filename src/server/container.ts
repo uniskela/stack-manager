@@ -138,7 +138,6 @@ export function createContainer(config: AppConfig, overrides: ContainerOverrides
       repos.users,
       reader,
       audit,
-      config,
     );
 
     const syncLogger = logger.child({ component: 'stacks' });
