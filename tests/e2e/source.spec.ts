@@ -24,7 +24,7 @@ test('stack pages render and are accessible', async ({ page }) => {
   await expect(page.getByRole('navigation', { name: 'Stack' })).toBeVisible();
   await expectAccessible(page);
 
-  for (const tab of ['Docs', 'Environment', 'Changes', 'Settings']) {
+  for (const tab of ['Docs', 'Environment', 'Changes', 'History', 'Settings']) {
     await page
       .getByRole('navigation', { name: 'Stack' })
       .getByRole('link', { name: new RegExp(tab) })
@@ -184,16 +184,147 @@ test('edit, save a draft, review and discard it', async ({ page }) => {
   await page.keyboard.press('ControlOrMeta+s');
   await expect(page.locator('.editor-toolbar').getByText('Draft', { exact: true })).toBeVisible();
 
+  await expect(page.getByRole('link', { name: /drafts?, open Changes/ })).toBeVisible();
+  await expect(
+    page.getByRole('navigation', { name: 'Stack' }).getByRole('link', { name: /Changes/ }),
+  ).toContainText(/1/);
+
+  // Leave the editor so the g c chord is not swallowed by CodeMirror.
   await page
     .getByRole('navigation', { name: 'Stack' })
-    .getByRole('link', { name: /Changes/ })
-    .click();
+    .getByRole('link', { name: /History/ })
+    .focus();
+  await page.keyboard.press('g');
+  await page.keyboard.press('c');
+  await expect(page).toHaveURL(/\/changes$/);
   await expect(page.locator('.diff')).toContainText('# edited by e2e');
   await expectAccessible(page);
 
   await page.getByRole('button', { name: 'Discard…' }).click();
   await page.getByRole('button', { name: 'Discard draft' }).click();
   await expect(page.getByRole('heading', { name: 'No draft changes' })).toBeVisible();
+  await expect(page.getByRole('link', { name: /drafts?, open Changes/ })).toHaveCount(0);
+  await expect(
+    page.getByRole('navigation', { name: 'Stack' }).getByRole('link', { name: /^Changes$/ }),
+  ).toBeVisible();
+});
+
+test('stack history lists commits, opens detail, and handles empty/load-more', async ({ page }) => {
+  const { workspaceId, stackId } = sample();
+  const historyPath = `/api/workspaces/${workspaceId}/stacks/${stackId}/history`;
+  const filePath = SAMPLE_ROOT ? `${SAMPLE_ROOT}/compose.yaml` : 'compose.yaml';
+  const headSha = 'a'.repeat(40);
+  const commit = (sha: string, subject: string, authoredAt: string) => ({
+    sha,
+    shortSha: sha.slice(0, 7),
+    parents: [] as string[],
+    subject,
+    message: `${subject}\n`,
+    author: { name: 'Operator', email: 'op@example.invalid' },
+    authoredAt,
+    committedAt: authoredAt,
+    files: [{ path: filePath, status: 'modified' as const }],
+    filesTruncated: false,
+  });
+
+  const historyRoute = (url: URL) => url.pathname === historyPath || url.pathname.startsWith(`${historyPath}/`);
+
+  await page.route(historyRoute, async (route) => {
+    const url = new URL(route.request().url());
+    const sha = url.pathname.slice(historyPath.length + 1);
+    if (sha.length === 40) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          repositoryId: 'repo',
+          rootPath: SAMPLE_ROOT,
+          headSha,
+          commit: {
+            ...commit(sha, 'First page commit', '2026-10-02T12:00:00+00:00'),
+            diffBaseSha: null,
+            files: [
+              {
+                path: filePath,
+                status: 'modified',
+                locked: null,
+                hunks: [
+                  {
+                    oldStart: 1,
+                    oldLines: 1,
+                    newStart: 1,
+                    newLines: 1,
+                    lines: ['-image: old', '+image: new'],
+                  },
+                ],
+              },
+            ],
+          },
+        }),
+      });
+      return;
+    }
+    if (url.searchParams.get('cursor')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          repositoryId: 'repo',
+          rootPath: SAMPLE_ROOT,
+          headSha,
+          commits: [commit('b'.repeat(40), 'Second page commit', '2026-10-01T12:00:00+00:00')],
+          nextCursor: null,
+          historyLimitReached: false,
+        }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        repositoryId: 'repo',
+        rootPath: SAMPLE_ROOT,
+        headSha,
+        commits: [commit(headSha, 'First page commit', '2026-10-02T12:00:00+00:00')],
+        nextCursor: 'cursor-page-2',
+        historyLimitReached: false,
+      }),
+    });
+  });
+
+  await page.goto(`${stackUrl()}/history`);
+  const list = page.getByRole('list', { name: 'Stack history' });
+  await expect(list.getByRole('button', { name: /First page commit/ })).toBeVisible();
+  await expectAccessible(page);
+
+  await list.getByRole('button', { name: /First page commit/ }).click();
+  await expect(page.getByRole('region', { name: 'Commit details' })).toBeVisible();
+  await expect(page.locator('.diff')).toContainText('image: new');
+  await expectAccessible(page);
+
+  await page.getByRole('button', { name: 'Load more' }).click();
+  await expect(list.getByRole('button', { name: /Second page commit/ })).toBeVisible();
+
+  await page.unroute(historyRoute);
+  await page.route(historyRoute, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        repositoryId: 'repo',
+        rootPath: SAMPLE_ROOT,
+        headSha,
+        commits: [],
+        nextCursor: null,
+        historyLimitReached: false,
+      }),
+    });
+  });
+  await page.goto(`${stackUrl()}/history`);
+  await expect(page.getByRole('heading', { name: 'No commits for this stack' })).toBeVisible();
+  await expect(page.getByText('No commits touching this stack were found.')).toBeVisible();
+  await expectAccessible(page);
 });
 
 test('mobile: the explorer opens as an overlay', async ({ page }) => {

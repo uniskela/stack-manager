@@ -27,15 +27,16 @@ Signed-in operators work inside a workspace. Primary sidebar navigation (desktop
 
 **Header:** stack name + optional runtime strip (health, container count, image, last refresh)
 
-**Tabs:** Compose | Files | Docs | Environment | Secrets | Changes | Deployments
+**Tabs:** Editor | Docs | Environment | Changes | History | Settings (Secrets and Deployments arrive later)
 
 No primary nav items for Containers / Images / Networks / Volumes.
 
 Repository pages have **Overview**, **Files**, **Docs** and **Changes** tabs: the same editor, docs and review
 views scoped to the whole repository, for files outside any stack (root README, `docs/`, shared `.env.example`).
 
-Implemented in PR #3: **Editor** (explorer, tabs, problems, status bar), **Docs**, **Environment**, **Changes** and
-**Settings** tabs. Secrets and Deployments arrive with PR #6 and PR #5.
+Implemented: **Editor**, **Docs**, **Environment**, **Changes**, **History** (stack-scoped commits at the
+fetched snapshot) and **Settings**. Draft counts appear on the Changes tab and stack header when work is outstanding.
+Secrets and Deployments arrive with PR #6 and PR #5.
 
 ## Desktop
 
