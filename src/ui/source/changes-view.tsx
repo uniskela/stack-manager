@@ -262,10 +262,11 @@ export function ChangesView(props: {
     if (result || error) alertRef.current?.focus();
   }, [result, error]);
 
-  // If every previously selected path was discarded, treat the current draft set as selected.
+  // Empty `selected` means the user cleared the selection. Non-empty but all-stale means refresh.
   const selectedChanges = useMemo(() => {
     const picked = props.changes.filter((c) => selected.has(c.path));
-    return picked.length > 0 ? picked : props.changes;
+    if (picked.length > 0 || selected.size === 0) return picked;
+    return props.changes;
   }, [props.changes, selected]);
   const selectedPaths = useMemo(() => new Set(selectedChanges.map((c) => c.path)), [selectedChanges]);
   const clientProblems = useMemo(
@@ -299,10 +300,8 @@ export function ChangesView(props: {
 
   const toggle = (path: string) => {
     setSelected((prev) => {
-      const base = props.changes.some((c) => prev.has(c.path))
-        ? prev
-        : new Set(props.changes.map((c) => c.path));
-      const next = new Set(base);
+      const hasCurrent = props.changes.some((c) => prev.has(c.path));
+      const next = !hasCurrent && prev.size > 0 ? new Set(props.changes.map((c) => c.path)) : new Set(prev);
       if (next.has(path)) next.delete(path);
       else next.add(path);
       return next;
@@ -391,7 +390,7 @@ export function ChangesView(props: {
     }
   };
 
-  if (props.changes.length === 0) {
+  if (props.changes.length === 0 && !retained) {
     return (
       <EmptyState icon={GitCompareArrows} title="No draft changes">
         Edits you save in the Editor or Docs appear here for review before they are committed.
@@ -407,11 +406,17 @@ export function ChangesView(props: {
   return (
     <div className="stack changes-view">
       <div className="changes-summary" role="status">
-        <strong>
-          {props.changes.length} draft{props.changes.length === 1 ? '' : 's'}
-        </strong>
-        {' · '}
-        {selectedChanges.length} selected for commit
+        {props.changes.length === 0 ? (
+          <strong>No drafts left</strong>
+        ) : (
+          <>
+            <strong>
+              {props.changes.length} draft{props.changes.length === 1 ? '' : 's'}
+            </strong>
+            {' · '}
+            {selectedChanges.length} selected for commit
+          </>
+        )}
         {outdatedSelected.length ? (
           <>
             {' · '}
@@ -478,99 +483,39 @@ export function ChangesView(props: {
       <section className="card commit-panel" aria-label="Commit changes">
         <div className="change-head">
           <div>
-            <strong>Commit</strong>
+            <strong>{props.changes.length === 0 && retained ? 'Push retained commit' : 'Commit'}</strong>
             <div className="fine-print">
-              {selectedChanges.length} file{selectedChanges.length === 1 ? '' : 's'} · branch{' '}
-              <span className="mono">{props.branch}</span>
-              {props.gitIdentity ? (
+              {props.changes.length === 0 && retained ? (
                 <>
-                  {' '}
-                  · author{' '}
-                  <span className="mono">
-                    {props.gitIdentity.name} &lt;{props.gitIdentity.email}&gt;
-                  </span>
+                  Local commit <span className="mono">{shortSha(retained.commitSha)}</span> · branch{' '}
+                  <span className="mono">{retained.branch}</span>
                 </>
-              ) : null}
+              ) : (
+                <>
+                  {selectedChanges.length} file{selectedChanges.length === 1 ? '' : 's'} · branch{' '}
+                  <span className="mono">{props.branch}</span>
+                  {props.gitIdentity ? (
+                    <>
+                      {' '}
+                      · author{' '}
+                      <span className="mono">
+                        {props.gitIdentity.name} &lt;{props.gitIdentity.email}&gt;
+                      </span>
+                    </>
+                  ) : null}
+                </>
+              )}
             </div>
           </div>
         </div>
-        <form
-          className="form commit-form"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (canCommit) void commit(false);
-          }}
-        >
-          <div className="field">
-            <label htmlFor={messageId}>Commit message</label>
-            <textarea
-              id={messageId}
-              name="commitMessage"
-              rows={3}
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              required
-              disabled={!props.gitIdentity || busy !== null}
-              spellCheck
-              maxLength={8192}
-            />
-          </div>
-          {blockingErrors.length ? (
-            <Alert tone="error" title="Validation blocked">
-              <ul className="problem-list">
-                {blockingErrors.map((p, i) => {
-                  const rel = relativeTo(props.rootPath, p.path) || p.path;
-                  return (
-                    <li key={`${p.path}:${p.line}:${i}`}>
-                      <Link href={`${props.editorHref}?file=${encodeURIComponent(rel)}`}>{rel}</Link>
-                      {p.line > 0 ? `:${p.line}` : ''} — {problemLabel(p)}
-                    </li>
-                  );
-                })}
-              </ul>
-            </Alert>
-          ) : null}
-          {outdatedSelected.length ? (
-            <Alert tone="warn" title="Outdated drafts selected">
-              Remove them from the selection or open each file, review the upstream change, and save a fresh
-              draft before committing.
-            </Alert>
-          ) : null}
-          {showWarningAck && !blockingErrors.length ? (
-            <label className="check-row">
-              <input
-                type="checkbox"
-                checked={acknowledgeWarnings}
-                onChange={(e) => setAcknowledgeWarnings(e.target.checked)}
-                disabled={busy !== null}
-              />
-              <span>
-                <span className="title">Commit despite warnings</span>
-                <span className="fine-print">
-                  Required when the server reports warnings (including hard-coded secrets).
-                </span>
-              </span>
-            </label>
-          ) : null}
-          <div className="actions commit-actions">
-            <Button
-              variant="primary"
-              type="submit"
-              loading={busy === 'commit'}
-              disabled={!canCommit || needsWarningAck}
-            >
-              Commit
-            </Button>
-            <Button
-              type="button"
-              loading={busy === 'commit-push'}
-              disabled={!canCommit || needsWarningAck}
-              onClick={() => void commit(true)}
-            >
-              Commit &amp; Push
-            </Button>
-            {retained ? (
+        {props.changes.length === 0 && retained ? (
+          <div className="form commit-form">
+            <p className="fine-print">
+              Drafts for this change set were discarded. The retained commit is still available to push.
+            </p>
+            <div className="actions commit-actions">
               <Button
+                variant="primary"
                 type="button"
                 loading={busy === 'push'}
                 disabled={busy !== null}
@@ -578,9 +523,97 @@ export function ChangesView(props: {
               >
                 Push {shortSha(retained.commitSha)}
               </Button>
-            ) : null}
+            </div>
           </div>
-        </form>
+        ) : (
+          <form
+            className="form commit-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (canCommit) void commit(false);
+            }}
+          >
+            <div className="field">
+              <label htmlFor={messageId}>Commit message</label>
+              <textarea
+                id={messageId}
+                name="commitMessage"
+                rows={3}
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                required
+                disabled={!props.gitIdentity || busy !== null}
+                spellCheck
+                maxLength={8192}
+              />
+            </div>
+            {blockingErrors.length ? (
+              <Alert tone="error" title="Validation blocked">
+                <ul className="problem-list">
+                  {blockingErrors.map((p, i) => {
+                    const rel = relativeTo(props.rootPath, p.path) || p.path;
+                    return (
+                      <li key={`${p.path}:${p.line}:${i}`}>
+                        <Link href={`${props.editorHref}?file=${encodeURIComponent(rel)}`}>{rel}</Link>
+                        {p.line > 0 ? `:${p.line}` : ''} — {problemLabel(p)}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </Alert>
+            ) : null}
+            {outdatedSelected.length ? (
+              <Alert tone="warn" title="Outdated drafts selected">
+                Remove them from the selection or open each file, review the upstream change, and save a fresh
+                draft before committing.
+              </Alert>
+            ) : null}
+            {showWarningAck && !blockingErrors.length ? (
+              <label className="check-row">
+                <input
+                  type="checkbox"
+                  checked={acknowledgeWarnings}
+                  onChange={(e) => setAcknowledgeWarnings(e.target.checked)}
+                  disabled={busy !== null}
+                />
+                <span>
+                  <span className="title">Commit despite warnings</span>
+                  <span className="fine-print">
+                    Required when the server reports warnings (including hard-coded secrets).
+                  </span>
+                </span>
+              </label>
+            ) : null}
+            <div className="actions commit-actions">
+              <Button
+                variant="primary"
+                type="submit"
+                loading={busy === 'commit'}
+                disabled={!canCommit || needsWarningAck}
+              >
+                Commit
+              </Button>
+              <Button
+                type="button"
+                loading={busy === 'commit-push'}
+                disabled={!canCommit || needsWarningAck}
+                onClick={() => void commit(true)}
+              >
+                Commit &amp; Push
+              </Button>
+              {retained ? (
+                <Button
+                  type="button"
+                  loading={busy === 'push'}
+                  disabled={busy !== null}
+                  onClick={() => void pushRetained()}
+                >
+                  Push {shortSha(retained.commitSha)}
+                </Button>
+              ) : null}
+            </div>
+          </form>
+        )}
       </section>
 
       {props.changes.map((c) => {
