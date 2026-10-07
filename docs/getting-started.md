@@ -89,7 +89,8 @@ can't be opened or edited.
 
 ### Drafts
 
-Drafts are stored in stack-manager's database and stay on the server until you commit them. If the file changes in
+Drafts are stored in stack-manager's database and stay on the server until you discard them, even after they are
+committed and pushed. Once you've checked the pushed result, discard the drafts you no longer need. If the file changes in
 Git after you start a draft, the editor marks it **Changed upstream** and it can't be committed. That way you can't
 overwrite someone else's change by accident. Saving again doesn't fix this: copy what you need, discard the draft and
 make the edit again on the current version.
@@ -109,8 +110,10 @@ make the edit again on the current version.
 
 Stack Manager pushes only to the repository's tracked branch and **never force pushes**. If someone else pushed
 first, you'll see *"The remote branch changed since your copy was last updated."* Nothing is overwritten, and your
-drafts and any local commit are kept. Fetch, review, and commit again. A failed or refused push never discards your
-work either. See [Git workflow](GIT_WORKFLOW.md) for what each message means and how to recover.
+drafts and any local commit are kept. If you hadn't committed yet, fetch, review your drafts and commit again. If
+you already have a local commit that wasn't pushed, follow
+[Recovering an unpushed local commit](GIT_WORKFLOW.md#recovering-an-unpushed-local-commit) instead. A failed or
+refused push never discards your work either. See [Git workflow](GIT_WORKFLOW.md) for what each message means.
 
 ## 6. Files outside stacks
 
@@ -126,6 +129,6 @@ whole repository. The repository page has tabs for them:
 
 ## 7. Keep it up to date
 
-Use **Fetch now** on the repository page to pull the latest commits from your Git server. The editor, docs,
-environment and history views always read from the fetched commit, plus your drafts. Fetching never changes or
-deletes drafts.
+Use **Fetch now** on the repository page to pull the latest commits from your Git server. The editor, docs and
+environment views read from the fetched commit plus your drafts. History lists only the commits in the fetched
+repository; drafts and unpushed commits don't appear there. Fetching never changes or deletes drafts.
