@@ -20,7 +20,7 @@ export default async function StackChangesPage({
   ]);
   return (
     <ChangesView
-      key={changes.map((c) => c.path).join('\0')}
+      key={stack.repository.id}
       workspaceId={workspaceId}
       repositoryId={stack.repository.id}
       apiBase={`/api/workspaces/${workspaceId}/stacks/${stackId}`}

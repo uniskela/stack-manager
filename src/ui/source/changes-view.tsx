@@ -262,10 +262,12 @@ export function ChangesView(props: {
     if (result || error) alertRef.current?.focus();
   }, [result, error]);
 
-  const selectedChanges = useMemo(
-    () => props.changes.filter((c) => selected.has(c.path)),
-    [props.changes, selected],
-  );
+  // If every previously selected path was discarded, treat the current draft set as selected.
+  const selectedChanges = useMemo(() => {
+    const picked = props.changes.filter((c) => selected.has(c.path));
+    return picked.length > 0 ? picked : props.changes;
+  }, [props.changes, selected]);
+  const selectedPaths = useMemo(() => new Set(selectedChanges.map((c) => c.path)), [selectedChanges]);
   const clientProblems = useMemo(
     () =>
       selectedChanges.flatMap((c) =>
@@ -297,7 +299,10 @@ export function ChangesView(props: {
 
   const toggle = (path: string) => {
     setSelected((prev) => {
-      const next = new Set(prev);
+      const base = props.changes.some((c) => prev.has(c.path))
+        ? prev
+        : new Set(props.changes.map((c) => c.path));
+      const next = new Set(base);
       if (next.has(path)) next.delete(path);
       else next.add(path);
       return next;
@@ -323,6 +328,11 @@ export function ChangesView(props: {
     setError(null);
     try {
       await api(`${props.apiBase}/drafts?path=${encodeURIComponent(path)}`, { method: 'DELETE' });
+      setSelected((prev) => {
+        const next = new Set(prev);
+        next.delete(path);
+        return next;
+      });
       router.refresh();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not reach the server.');
@@ -575,7 +585,7 @@ export function ChangesView(props: {
 
       {props.changes.map((c) => {
         const rel = relativeTo(props.rootPath, c.path) || c.path;
-        const checked = selected.has(c.path);
+        const checked = selectedPaths.has(c.path);
         return (
           <section key={c.path} className="card flush" aria-label={`Changes to ${rel}`}>
             <div className="change-head">

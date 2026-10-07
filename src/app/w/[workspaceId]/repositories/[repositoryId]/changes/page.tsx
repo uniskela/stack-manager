@@ -24,7 +24,7 @@ export default async function RepositoryChangesPage({
   return (
     <div className="wide-page">
       <ChangesView
-        key={changes.map((c) => c.path).join('\0')}
+        key={repositoryId}
         workspaceId={workspaceId}
         repositoryId={repositoryId}
         apiBase={repositorySourceApi(workspaceId, repositoryId)}

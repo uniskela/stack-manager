@@ -19,14 +19,29 @@ export default defineConfig({
     {
       name: 'desktop',
       testMatch: /\.spec\.ts/,
+      // Draft-mutating Git workflow tests share the sample stack; run them after source/shell.
+      testIgnore: /changes-commit\.spec\.ts/,
       dependencies: ['onboarding'],
       use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 860 } },
     },
     {
       name: 'mobile',
       testMatch: /\.spec\.ts/,
+      testIgnore: /changes-commit\.spec\.ts/,
       dependencies: ['onboarding'],
       // Pixel 7 is Chromium-based, so no WebKit download is needed.
+      use: { ...devices['Pixel 7'] },
+    },
+    {
+      name: 'git-workflow',
+      testMatch: /changes-commit\.spec\.ts/,
+      dependencies: ['desktop', 'mobile'],
+      use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 860 } },
+    },
+    {
+      name: 'git-workflow-mobile',
+      testMatch: /changes-commit\.spec\.ts/,
+      dependencies: ['git-workflow'],
       use: { ...devices['Pixel 7'] },
     },
   ],

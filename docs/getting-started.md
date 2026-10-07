@@ -22,8 +22,8 @@ saved tokens, the audit log, your Git author identity, password and sessions.
 
 stack-manager works with GitHub, Gitea and Forgejo over HTTPS.
 
-1. Create an access token on your Git server for the repository. Read access is enough for now; write access will be
-   needed once committing from stack-manager is available.
+1. Create an access token on your Git server for the repository. Read access is enough to browse and draft; write
+   access is needed to push commits from the **Changes** tab.
 2. In stack-manager, choose **Connect repository** and fill in:
    - **Git provider** and the **HTTPS clone URL**. Never put the token in the URL.
    - **Access token** (or a saved credential), plus a **username** only if your server requires one with the token.
