@@ -169,7 +169,8 @@ function WorkflowAlert(props: {
   if (result.status === 'remote_changed') {
     return (
       <Alert tone="warn" role="alert" title="The remote branch changed since your copy was last updated.">
-        Nothing was overwritten and your drafts are still safe. Fetch the latest changes before trying again.
+        Nothing was overwritten and your drafts are still safe. Fetching only refreshes remote refs; it does
+        not reconcile a retained commit. Manual reconciliation must happen outside this app.
         {result.commitSha ? <span> Local commit {shortSha(result.commitSha)} is retained.</span> : null}
         <div className="actions">
           <ButtonLink href={props.repositoryHref}>Open repository to fetch</ButtonLink>
@@ -243,7 +244,8 @@ export function ChangesView(props: {
   const alertRef = useRef<HTMLDivElement>(null);
   const [selected, setSelected] = useState(() => new Set(props.changes.map((c) => c.path)));
   const [message, setMessage] = useState('');
-  const [acknowledgeWarnings, setAcknowledgeWarnings] = useState(false);
+  /** Scope string for which selection the warning acknowledgement applies; null when unchecked. */
+  const [warningAckScope, setWarningAckScope] = useState<string | null>(null);
   const [busy, setBusy] = useState<'discard' | 'commit' | 'commit-push' | 'push' | null>(null);
   const [discardPath, setDiscardPath] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -269,6 +271,15 @@ export function ChangesView(props: {
     return props.changes;
   }, [props.changes, selected]);
   const selectedPaths = useMemo(() => new Set(selectedChanges.map((c) => c.path)), [selectedChanges]);
+  const selectionScope = useMemo(
+    () =>
+      selectedChanges
+        .map((c) => `${c.path}:${c.updatedAt}`)
+        .sort()
+        .join('\0'),
+    [selectedChanges],
+  );
+  const acknowledgeWarnings = warningAckScope !== null && warningAckScope === selectionScope;
   const clientProblems = useMemo(
     () =>
       selectedChanges.flatMap((c) =>
@@ -318,7 +329,7 @@ export function ChangesView(props: {
       });
     }
     if (next.status === 'push_succeeded') setRetained(null);
-    if (next.status === 'warnings_unacknowledged') setAcknowledgeWarnings(false);
+    if (next.status === 'warnings_unacknowledged') setWarningAckScope(null);
   };
 
   const discard = async (path: string) => {
@@ -358,7 +369,7 @@ export function ChangesView(props: {
       applyResult(next);
       if (next.status === 'commit_succeeded' || next.status === 'push_succeeded') {
         setMessage('');
-        setAcknowledgeWarnings(false);
+        setWarningAckScope(null);
       }
       router.refresh();
     } catch (err) {
@@ -573,7 +584,7 @@ export function ChangesView(props: {
                 <input
                   type="checkbox"
                   checked={acknowledgeWarnings}
-                  onChange={(e) => setAcknowledgeWarnings(e.target.checked)}
+                  onChange={(e) => setWarningAckScope(e.target.checked ? selectionScope : null)}
                   disabled={busy !== null}
                 />
                 <span>
