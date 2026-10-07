@@ -21,6 +21,11 @@ export interface UserRepository {
   createFirstAdmin(user: UserWithPasswordHash): Promise<User | null>;
   recordLogin(id: string, at: Date): Promise<void>;
   updatePasswordHash(id: string, passwordHash: string, updatedAt: Date): Promise<void>;
+  updateGitIdentity(
+    id: string,
+    identity: { name: string; email: string } | null,
+    updatedAt: Date,
+  ): Promise<void>;
 }
 
 export interface SessionRepository {

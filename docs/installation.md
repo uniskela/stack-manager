@@ -43,9 +43,10 @@ Optional settings you are likely to want:
 - `STACK_MANAGER_SETUP_TOKEN`: required during first-run setup, so nobody else can claim a fresh instance
 - `STACK_MANAGER_ALLOW_PRIVATE_NETWORKS=true`: needed when your Gitea or Forgejo runs on your LAN (e.g. `192.168.x.x`)
 - `STACK_MANAGER_COOKIE_SECURE=false`: only for testing over plain HTTP on localhost
-- `STACK_MANAGER_GIT_AUTHOR_NAME` and `STACK_MANAGER_GIT_AUTHOR_EMAIL`: set both to enable the draft commit API.
-  They identify the author and committer; they do not grant repository permissions. The final Changes commit/push
-  UI is separate work. See the [Git workflow API contract](GIT_WORKFLOW.md#application-api-contract-v050).
+
+After sign-in, set your Git author name and email under **Settings → Account**. Commits created by Stack Manager
+use that identity; they do not grant repository permissions. See the
+[Git workflow API contract](GIT_WORKFLOW.md#application-api-contract-v050).
 
 Every variable is described in the [self-hosting reference](SELF_HOSTING.md#configuration).
 

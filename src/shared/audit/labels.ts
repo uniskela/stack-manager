@@ -6,6 +6,7 @@ const LABELS: Record<string, string> = {
   'auth.logout': 'Signed out',
   'auth.password_changed': 'Password changed',
   'auth.password_change_failed': 'Password change failed',
+  'auth.git_identity_updated': 'Git identity updated',
   'workspace.create': 'Workspace created',
   'workspace.update': 'Workspace updated',
   'credential.create': 'Credential added',

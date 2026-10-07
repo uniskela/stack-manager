@@ -22,7 +22,6 @@ export interface AppConfig {
   trustedProxyHops: number;
   logLevel: LogLevel;
   workerEnabled: boolean;
-  gitAuthor: { name: string; email: string } | null;
 }
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
@@ -127,22 +126,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     throw new ConfigError('STACK_MANAGER_SETUP_TOKEN must be at least 16 characters when set.');
   }
 
-  const name = env.STACK_MANAGER_GIT_AUTHOR_NAME?.trim() || '';
-  const email = env.STACK_MANAGER_GIT_AUTHOR_EMAIL?.trim() || '';
-  if (
-    (name || email) &&
-    (!name ||
-      !email ||
-      /[\u0000-\u001f\u007f<>]/.test(name + email) ||
-      name.length > 200 ||
-      email.length > 254 ||
-      !z.email().safeParse(email).success)
-  ) {
-    throw new ConfigError(
-      'Set STACK_MANAGER_GIT_AUTHOR_NAME and STACK_MANAGER_GIT_AUTHOR_EMAIL to a printable name and valid email.',
-    );
-  }
-
   return {
     dataDir,
     databasePath: path.join(dataDir, 'stack-manager.sqlite'),
@@ -157,6 +140,5 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     trustedProxyHops: o.STACK_MANAGER_TRUSTED_PROXY_HOPS,
     logLevel: o.STACK_MANAGER_LOG_LEVEL,
     workerEnabled: o.STACK_MANAGER_WORKER_ENABLED,
-    gitAuthor: name && email ? { name, email } : null,
   };
 }

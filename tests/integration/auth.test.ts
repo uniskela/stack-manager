@@ -3,6 +3,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as login from '@/app/api/auth/login/route';
 import * as logout from '@/app/api/auth/logout/route';
+import * as gitIdentityRoute from '@/app/api/auth/git-identity/route';
 import * as passwordRoute from '@/app/api/auth/password/route';
 import * as sessionsRoute from '@/app/api/auth/sessions/route';
 import * as sessionById from '@/app/api/auth/sessions/[sessionId]/route';
@@ -230,6 +231,7 @@ describe('sessions', () => {
 
 describe('account', () => {
   const NEW_PASSWORD = 'fresh horse battery staple';
+  const IDENTITY = { name: 'Stack Operator', email: 'operator@example.invalid' };
 
   async function secondSessionCookie() {
     const res = await call(login.POST, {
@@ -240,6 +242,99 @@ describe('account', () => {
     expect(res.status).toBe(200);
     return cookieFrom(res);
   }
+
+  it('starts with unset Git identity and supports create and update', async () => {
+    const cookie = await setupAdmin();
+    const unset = await call(gitIdentityRoute.GET, { cookie });
+    expect(unset.status).toBe(200);
+    expect(unset.json).toEqual({ identity: null });
+    expect(JSON.stringify(unset.json)).not.toMatch(/password|hash|session/i);
+
+    const created = await call(gitIdentityRoute.PUT, {
+      method: 'PUT',
+      cookie,
+      body: IDENTITY,
+    });
+    expect(created.status).toBe(200);
+    expect(created.json).toEqual({ identity: IDENTITY });
+    expect(
+      await h.container.auth.getGitIdentity((await call(sessionRoute.GET, { cookie })).json.user.id),
+    ).toEqual(IDENTITY);
+
+    const updated = await call(gitIdentityRoute.PUT, {
+      method: 'PUT',
+      cookie,
+      body: { name: ' Renamed ', email: ' renamed@example.invalid ' },
+    });
+    expect(updated.status).toBe(200);
+    expect(updated.json.identity).toEqual({ name: 'Renamed', email: 'renamed@example.invalid' });
+    expect((await call(gitIdentityRoute.GET, { cookie })).json.identity).toEqual({
+      name: 'Renamed',
+      email: 'renamed@example.invalid',
+    });
+
+    const audit = await h.container.audit.list({ limit: 20 });
+    expect(audit.some((a) => a.action === 'auth.git_identity_updated')).toBe(true);
+  });
+
+  it('rejects invalid Git identity name and email', async () => {
+    const cookie = await setupAdmin();
+    const missingName = await call(gitIdentityRoute.PUT, {
+      method: 'PUT',
+      cookie,
+      body: { name: '  ', email: IDENTITY.email },
+    });
+    expect(missingName.status).toBe(400);
+    expect(missingName.json.error.fields.name).toBeTruthy();
+
+    const badEmail = await call(gitIdentityRoute.PUT, {
+      method: 'PUT',
+      cookie,
+      body: { name: IDENTITY.name, email: 'not-an-email' },
+    });
+    expect(badEmail.status).toBe(400);
+    expect(badEmail.json.error.fields.email).toBeTruthy();
+    expect(JSON.stringify(badEmail.json)).not.toContain('not-an-email');
+
+    expect((await call(gitIdentityRoute.GET, { cookie })).json.identity).toBeNull();
+  });
+
+  it('keeps Git identity scoped to the authenticated user', async () => {
+    const cookie = await setupAdmin();
+    const adminId = (await call(sessionRoute.GET, { cookie })).json.user.id;
+    await h.container.auth.updateGitIdentity(adminId, IDENTITY);
+
+    const otherId = '00000000-0000-4000-8000-000000000099';
+    const db = openSqlite(path.join(h.dataDir, 'stack-manager.sqlite'));
+    db.db
+      .insert(users)
+      .values({
+        id: otherId,
+        username: 'other',
+        passwordHash: '$argon2id$v=19$m=65536,t=3,p=1$placeholder$hash',
+        role: 'admin',
+        gitAuthorName: null,
+        gitAuthorEmail: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        lastLoginAt: null,
+        disabledAt: null,
+      })
+      .run();
+    db.close();
+
+    await h.container.auth.updateGitIdentity(otherId, {
+      name: 'Other Operator',
+      email: 'other@example.invalid',
+    });
+
+    expect(await h.container.auth.getGitIdentity(adminId)).toEqual(IDENTITY);
+    expect(await h.container.auth.getGitIdentity(otherId)).toEqual({
+      name: 'Other Operator',
+      email: 'other@example.invalid',
+    });
+    expect((await call(gitIdentityRoute.GET, { cookie })).json.identity).toEqual(IDENTITY);
+  });
 
   it('changes password, revokes other sessions, keeps current, and audits without leaking secrets', async () => {
     const cookieA = await setupAdmin();

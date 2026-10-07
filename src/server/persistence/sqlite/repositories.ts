@@ -39,6 +39,8 @@ const toUser = (r: UserRow): User => ({
   id: r.id,
   username: r.username,
   role: r.role,
+  gitAuthorName: r.gitAuthorName,
+  gitAuthorEmail: r.gitAuthorEmail,
   createdAt: r.createdAt,
   lastLoginAt: r.lastLoginAt,
   disabledAt: r.disabledAt,
@@ -81,6 +83,18 @@ class SqliteUserRepository implements UserRepository {
 
   async updatePasswordHash(id: string, passwordHash: string, updatedAt: Date) {
     this.db.update(users).set({ passwordHash, updatedAt }).where(eq(users.id, id)).run();
+  }
+
+  async updateGitIdentity(id: string, identity: { name: string; email: string } | null, updatedAt: Date) {
+    this.db
+      .update(users)
+      .set({
+        gitAuthorName: identity?.name ?? null,
+        gitAuthorEmail: identity?.email ?? null,
+        updatedAt,
+      })
+      .where(eq(users.id, id))
+      .run();
   }
 }
 

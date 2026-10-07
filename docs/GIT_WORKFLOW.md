@@ -31,7 +31,7 @@ Edit → Validate → Commit → Push → (optional) Deploy → (optional) Watch
 ## Commit
 
 - Message required
-- Both `STACK_MANAGER_GIT_AUTHOR_NAME` and `STACK_MANAGER_GIT_AUTHOR_EMAIL` configure the author and committer. The current admin profile has no email field; no identity is guessed from it or inherited from host Git config. If neither variable is set, reads and drafts work, but commits return `git_identity_missing`. An incomplete/invalid pair fails startup without echoing values.
+- The signed-in user's Account settings Git identity (name and email) is the author and committer. No identity is guessed from the username, Git credentials, tokens, or host Git config. If unset, reads and drafts work, but commits return `git_identity_missing`.
 - Create the commit in an isolated temporary worktree; retain its object in the local clone.
 
 ## Push
@@ -96,7 +96,7 @@ Every workflow response has this shape (TypeScript definitions: `src/shared/git-
 | 422 | `validation_blocked` | Correct selected files; errors cannot be overridden |
 | 422 | `warnings_unacknowledged` | Show warnings, request explicit acknowledgement, then resubmit |
 | 409 | `draft_outdated` | Review `outdatedPaths` against the current local tree |
-| 409 | `git_identity_missing` | Configure the author name/email and restart |
+| 409 | `git_identity_missing` | Set Git identity under Settings → Account |
 | 409 | `remote_changed` | Show heads/ahead/behind; fetch and reconcile manually |
 | 409 | `branch_changed` | Local head changed or the selected commit was superseded; refresh/review |
 | 409 | `push_rejected` | Remote refused the push; review permissions/policy; retained work can be retried |

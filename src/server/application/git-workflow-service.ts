@@ -1,9 +1,9 @@
 import type { AuditAction } from '@/server/domain/audit';
 import { ConflictError, ForbiddenError, ValidationError } from '@/server/domain/errors';
+import { gitAuthorIdentityOf } from '@/server/domain/user';
 import {
   GitOperationError,
   type GitBranchInput,
-  type GitIdentity,
   type GitProvider,
   type SourceTreeReader,
 } from '@/server/providers/git/types';
@@ -23,7 +23,6 @@ export class GitWorkflowService {
     private readonly users: UserRepository,
     private readonly reader: SourceTreeReader,
     private readonly audit: AuditService,
-    private readonly options: { gitAuthor: GitIdentity | null },
   ) {}
 
   inspect(workspaceId: string, repositoryId: string, actorUserId: string): Promise<GitWorkflowResult> {
@@ -100,7 +99,8 @@ export class GitWorkflowService {
         result.status = 'warnings_unacknowledged';
         return;
       }
-      const author = this.options.gitAuthor;
+      const actor = await this.users.findById(actorUserId);
+      const author = actor ? gitAuthorIdentityOf(actor) : null;
       if (!author) {
         result.status = 'git_identity_missing';
         return;

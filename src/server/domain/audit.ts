@@ -5,6 +5,7 @@ export type AuditAction =
   | 'auth.logout'
   | 'auth.password_changed'
   | 'auth.password_change_failed'
+  | 'auth.git_identity_updated'
   | 'workspace.create'
   | 'workspace.update'
   | 'credential.create'
