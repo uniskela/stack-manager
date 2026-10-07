@@ -254,6 +254,13 @@ export class GitMutations {
     );
   }
 
+  private async isAncestor(dir: string, ancestor: string, descendant: string): Promise<boolean> {
+    const { stdout } = await this.git.run(['merge-base', ancestor, descendant], { cwd: dir }).catch(() => ({
+      stdout: '',
+    }));
+    return stdout.trim() === ancestor;
+  }
+
   private async fetchState(input: GitBranchInput): Promise<GitBranchState> {
     const dir = input.cloneDir;
     const { stdout: cached } = await this.git.run(
@@ -275,7 +282,16 @@ export class GitMutations {
       { cwd: dir },
     );
     const remoteHeadSha = remote.trim();
-    const localHeadSha = (await this.retainedHead(dir, input.branch)) ?? cached.trim();
+    const retained = await this.retainedHead(dir, input.branch);
+    let localHeadSha = retained ?? cached.trim();
+    // A pushed retained head is no longer local work: once a fetch has seen newer remote commits on top
+    // of it, continue from the fetched head (as without a retained commit) instead of blocking forever.
+    if (
+      retained &&
+      (await this.isAncestor(dir, retained, remoteHeadSha)) &&
+      !(await this.isAncestor(dir, cached.trim(), retained))
+    )
+      localHeadSha = cached.trim();
     const { stdout } = await this.git.run(
       ['rev-list', '--left-right', '--count', `${localHeadSha}...${remoteHeadSha}`],
       { cwd: dir },
