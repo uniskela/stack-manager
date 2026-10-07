@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GitCli, type GitRunOptions } from '@/server/providers/git/git-cli';
 import { HttpGitProvider } from '@/server/providers/git/http-git-provider';
 import { BUILTIN_GIT_PROVIDERS } from '@/server/providers/git/registry';
@@ -93,7 +93,9 @@ async function changedPaths(sha: string) {
 async function assertCleanedUp() {
   expect((await fs.readdir(reposDir)).filter((name) => name.startsWith('.mutation-'))).toEqual([]);
   const { stdout } = await git.run(['worktree', 'list', '--porcelain'], { cwd: cloneDir });
-  expect(stdout.split('\n').filter((line) => line.startsWith('worktree '))).toEqual([`worktree ${cloneDir}`]);
+  expect(stdout.split('\n').filter((line) => line.startsWith('worktree '))).toEqual([
+    `worktree ${await fs.realpath(cloneDir)}`,
+  ]);
 }
 
 async function assertCloneUsable() {
@@ -103,6 +105,27 @@ async function assertCloneUsable() {
 }
 
 describe('isolated Git commits', () => {
+  it('releases the repository lock even if closing its handle fails', async () => {
+    const open = fs.open.bind(fs);
+    const spy = vi.spyOn(fs, 'open').mockImplementationOnce(async (...args) => {
+      const handle = await open(...args);
+      const close = handle.close.bind(handle);
+      handle.close = async () => {
+        await close();
+        throw new Error('Injected close failure.');
+      };
+      return handle;
+    });
+    try {
+      await expect(provider.inspectBranch(connection())).rejects.toThrow('Injected close failure');
+    } finally {
+      spy.mockRestore();
+    }
+    expect((await provider.inspectBranch(connection())).remoteHeadSha).toBe(headSha);
+    await assertCleanedUp();
+    await assertCloneUsable();
+  });
+
   it('returns only commit metadata and refuses Git directory indirection', async () => {
     await expect(provider.getCommit(cloneDir, composeBlobSha)).rejects.toMatchObject({ kind: 'invalid' });
     const metadata = path.join(cloneDir, '.git');
@@ -266,7 +289,7 @@ describe('isolated Git commits', () => {
           changes: [{ path: file, content: 'changed\n', baseBlobSha: null }],
         }),
         file,
-      ).rejects.toThrow();
+      ).rejects.toMatchObject({ kind: 'invalid' });
     }
     const linkBlob = (await git.run(['rev-parse', `${headSha}:link-out`], { cwd: cloneDir })).stdout.trim();
     await expect(
@@ -274,8 +297,10 @@ describe('isolated Git commits', () => {
         ...commitInput(),
         changes: [{ path: 'link-out', content: 'changed', baseBlobSha: linkBlob }],
       }),
-    ).rejects.toThrow();
-    await expect(provider.commit({ ...commitInput(), changes: [draft(), draft()] })).rejects.toThrow();
+    ).rejects.toMatchObject({ kind: 'invalid' });
+    await expect(provider.commit({ ...commitInput(), changes: [draft(), draft()] })).rejects.toMatchObject({
+      kind: 'invalid',
+    });
     await assertCleanedUp();
     await assertCloneUsable();
   });
@@ -496,14 +521,14 @@ describe('remote protection and safe pushes', () => {
 
   it('refuses pushing arbitrary or superseded commits and invalid remotes before the push', async () => {
     const local = await provider.commit(commitInput());
-    await expect(provider.push(pushInput(headSha))).rejects.toThrow();
-    await expect(provider.push(pushInput('0'.repeat(40)))).rejects.toThrow();
+    await expect(provider.push(pushInput(headSha))).rejects.toMatchObject({ kind: 'conflict' });
+    await expect(provider.push(pushInput('0'.repeat(40)))).rejects.toMatchObject({ kind: 'conflict' });
     await expect(
       provider.push({ ...pushInput(local.sha), remoteUrl: `https://bot:${TOKEN}@git.test/${REPO}` }),
-    ).rejects.toThrow();
+    ).rejects.toMatchObject({ kind: 'invalid' });
     await expect(
       provider.push({ ...pushInput(local.sha), remoteUrl: `http://git.test/${REPO}` }),
-    ).rejects.toThrow();
+    ).rejects.toMatchObject({ kind: 'invalid' });
     expect(git.calls.some((args) => args.includes('push'))).toBe(false);
     await assertCleanedUp();
     await assertCloneUsable();

@@ -46,7 +46,10 @@ export async function withRepositoryLock<T>(
   try {
     return await operation(canonical);
   } finally {
-    await lock.close();
-    await fs.unlink(lockPath);
+    try {
+      await lock.close();
+    } finally {
+      await fs.unlink(lockPath);
+    }
   }
 }

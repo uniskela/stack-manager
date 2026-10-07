@@ -57,11 +57,14 @@ export class GitMutations {
     if (!input.changes.length) throw new GitOperationError('invalid', 'Select at least one file change.');
     const paths = new Set<string>();
     for (const change of input.changes) {
-      if (
-        normalizeRepoPath(change.path) !== change.path ||
-        isSecretPath(change.path) ||
-        paths.has(change.path)
-      ) {
+      try {
+        if (
+          normalizeRepoPath(change.path) !== change.path ||
+          isSecretPath(change.path) ||
+          paths.has(change.path)
+        )
+          throw new Error('Invalid change path.');
+      } catch {
         throw new GitOperationError('invalid', 'Changes require unique, canonical, non-secret file paths.');
       }
       paths.add(change.path);
@@ -302,10 +305,13 @@ function assertSha(sha: string): void {
 }
 
 function validateInput(input: GitBranchInput): void {
-  if (
-    normalizeRemoteUrl(input.remoteUrl) !== input.remoteUrl ||
-    validateBranchName(input.branch) !== input.branch
-  ) {
+  try {
+    if (
+      normalizeRemoteUrl(input.remoteUrl) !== input.remoteUrl ||
+      validateBranchName(input.branch) !== input.branch
+    )
+      throw new Error('Invalid Git input.');
+  } catch {
     throw new GitOperationError('invalid', 'A canonical remote URL and branch are required.');
   }
 }

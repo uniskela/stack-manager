@@ -66,7 +66,7 @@ One repository webhook → stack-manager:
 - Never log remote URLs with embedded tokens
 - Support read-only vs write scopes; UI should explain required scopes for commit/push vs webhook-only
 
-## Implementation status (PR #4 foundation)
+## Implementation status (Git workflow foundation)
 
 - `GitProvider` (`src/server/providers/git/types.ts`) currently exposes the foundation subset:
   `testConnection` (via `git ls-remote --symref`), `syncClone` (atomic clone into a temp dir then rename, or
@@ -75,7 +75,7 @@ One repository webhook → stack-manager:
 - `github`, `gitea` and `forgejo` are registered; they share one smart-HTTP implementation using the `git`
   binary (the forge API is not needed yet). The core validates provider types against the registry and never
   branches on a forge name. GitLab can be added as another descriptor/adapter.
-- Remotes are HTTPS only in PR #2; SSH remotes (keys + host-key pinning) are deferred.
+- Remotes are HTTPS only; SSH remotes (keys + host-key pinning) are deferred.
 - Tokens are sent as HTTP Basic auth (`username` from credential metadata, default `x-access-token`, which
   GitHub, Gitea and Forgejo accept with a token as the password).
 - `webhookCredentialId` exists in the schema and stays null until PR #5.
