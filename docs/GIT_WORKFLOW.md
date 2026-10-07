@@ -126,10 +126,100 @@ Push is an explicit operation with a known retained commit SHA and an expected r
 
 Locks use exclusive owner-only files and fail closed (`busy`) across provider instances/processes sharing the data volume. Normal completion/failure releases the lock after worktree cleanup. A process/host crash can leave `.lock-<repository id>` and `.mutation-*` state: stop all app processes using the data directory before manually removing a confirmed stale lock or its owned worktree. There is no timeout-based lock stealing or automatic pruning; crash recovery and merge/rebase resolution belong to later orchestration.
 
-## Stack-scoped history
+## Stack-scoped history API (v0.5.0)
 
-- List commits touching stack paths
-- Link commit → files → deploy events
+All four read-only routes require an active admin session and workspace-scoped access:
+
+| Route | Scope |
+| --- | --- |
+| `GET /api/workspaces/{workspaceId}/stacks/{stackId}/history` | The registered stack's repository-relative `rootPath` and descendants |
+| `GET /api/workspaces/{workspaceId}/stacks/{stackId}/history/{sha}` | Relevant changed files and structured line diffs for one commit |
+| `GET /api/workspaces/{workspaceId}/repositories/{repositoryId}/history` | The whole repository, including files outside stacks |
+| `GET /api/workspaces/{workspaceId}/repositories/{repositoryId}/history/{sha}` | Repository-wide commit detail using the same implementation |
+
+History uses actual paths, independent of the stack's display name or slug. An empty stack root
+covers the whole repository, including nested stacks. A shared commit appears in each affected stack;
+its file list and diff contain only that route's scope. Documentation changes count. Deployment
+include/exclude/dependency rules are not part of this API; those rules are not yet persisted on stacks.
+
+History reads the database's **last fetched SHA**, without fetching, moving refs or reading the working
+tree. Retained unpushed commits and drafts become part of this history only after push and fetch.
+Traversal includes reachable branch commits; merge changes compare against the first parent.
+Initial commits compare against the empty tree. Renames deliberately appear as deletion/addition at
+the old/new paths, including moves across stack boundaries; history does not follow a file's old name.
+
+List query parameters: `limit` (integer 1–50, default 20) and `cursor` (opaque `nextCursor` from the
+previous response). Unknown or duplicate parameters are rejected. Pass the cursor unchanged; omit
+`limit` on subsequent pages or keep the same value. A cursor is bound to repository, root, page size
+and head SHA, so new fetches do not shift an in-progress page sequence. If the anchor is no longer
+reachable after a rewritten history, start again on 409 `history_changed`.
+
+Response types are in `src/shared/git-history.ts`. Lists return:
+
+```json
+{
+  "repositoryId": "repository-id",
+  "rootPath": "apps/wiki",
+  "headSha": "<fetched SHA>",
+  "commits": [{
+    "sha": "<full SHA>",
+    "shortSha": "<first 7 characters>",
+    "parents": ["<parent SHA>"],
+    "subject": "Update wiki",
+    "message": "Update wiki\n\nFull commit body\n",
+    "author": { "name": "Operator", "email": "operator@example.invalid" },
+    "authoredAt": "2026-10-07T12:00:00+00:00",
+    "committedAt": "2026-10-07T12:00:00+00:00",
+    "files": [{ "path": "apps/wiki/compose.yaml", "status": "modified" }],
+    "filesTruncated": false
+  }],
+  "nextCursor": null,
+  "historyLimitReached": false
+}
+```
+
+An empty history returns `commits: []`, `nextCursor: null`. Commits are in Git's newest-first traversal
+order. File status is `added`, `modified`, `deleted` or `type_changed`. Paths stay repository-relative.
+Timestamps are ISO 8601 strings; messages and identities are plain text, **never HTML**.
+
+Details return `{ repositoryId, rootPath, headSha, commit }`. `commit` has the same metadata,
+`filesTruncated`, and `diffBaseSha` (first parent or null). Each file adds `locked` and `hunks`:
+
+```json
+{
+  "path": "apps/wiki/compose.yaml",
+  "status": "modified",
+  "locked": null,
+  "hunks": [{
+    "oldStart": 1, "oldLines": 1, "newStart": 1, "newLines": 1,
+    "lines": ["-image: wiki:1", "+image: wiki:2"]
+  }]
+}
+```
+
+Hunks have three lines of context. Lines use the standard unified-diff prefixes (`+`, `-`, space,
+with `\ No newline at end of file` markers where needed). An empty hunk array means no textual
+changes (for example, executable mode only). `hunks: null` means unavailable content, with `locked`
+set to `secret`, `symlink`, `submodule`, `binary`, `too_large`, `diff_limit` or `unsupported_path`.
+Git filenames unsupported by the editor (for example, newline or trailing-space names) remain
+visible as JSON metadata but their contents are locked. Secret filenames may
+appear in history but their contents never enter the diff reader. Binary detection matches the
+editor's NUL-byte rule. Changes are read from Git objects through the existing source-reader port;
+no raw Git patches or stderr are exposed.
+
+Limits: 50 commits/page, maximum cursor offset 10,000, 100 returned files/commit
+(`filesTruncated: true` when more exist), 256 KiB per blob side and 1 MiB of total blob reads/detail.
+Diff computation is bounded to 50 ms and 10,000 edits per file; exhausted diffs return `diff_limit`.
+At the pagination ceiling, `nextCursor` is null and `historyLimitReached` is true even if more commits
+exist. Git commands have a 30-second timeout and bounded output; metadata over 64 KiB or more than
+500 relevant changed files fails closed with 502 `git_history_failed`.
+
+Errors use the existing `{ "error": { "code", "message", "fields" } }` envelope:
+400 `validation_failed` for invalid pages/cursors or non-full SHAs; 401 `unauthenticated`;
+403 `forbidden`; 404 `not_found` when a resource or commit is missing or outside the fetched
+history/scope; 409 `not_synced` before fetch; 409 `history_changed` for stale anchors;
+502 `git_history_failed` for bounded or failed Git reads. Error messages never include Git output.
+Commit/deployment correlation remains later work.
 
 ## Optional branch / PR architecture
 

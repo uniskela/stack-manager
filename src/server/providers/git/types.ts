@@ -146,3 +146,31 @@ export interface SourceTreeReader {
   /** Blob contents decoded as UTF-8. */
   readBlob(cloneDir: string, blobSha: string): Promise<string>;
 }
+
+export interface HistoryObject {
+  objectSha: string;
+  kind: 'file' | 'symlink' | 'submodule';
+}
+
+export interface HistoryFileChange {
+  path: string;
+  /** Renames are represented as a deletion and an addition. */
+  status: 'added' | 'modified' | 'deleted' | 'type_changed';
+  before: HistoryObject | null;
+  after: HistoryObject | null;
+}
+
+/** Bounded, read-only history of a retained commit and its reachable ancestors. */
+export interface HistoryReader {
+  listCommits(
+    cloneDir: string,
+    headSha: string,
+    root: string,
+    page: { limit: number; offset: number },
+  ): Promise<{ shas: string[]; hasMore: boolean }>;
+  readCommit(cloneDir: string, sha: string): Promise<GitCommitMetadata>;
+  /** Changes relative to the first parent, or the empty tree for an initial commit. */
+  changedFiles(cloneDir: string, sha: string, root: string): Promise<HistoryFileChange[]>;
+  isAncestor(cloneDir: string, sha: string, headSha: string): Promise<boolean>;
+  objectSize(cloneDir: string, objectSha: string): Promise<number>;
+}
