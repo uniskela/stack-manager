@@ -362,6 +362,8 @@ test('repository page pages through Compose folders and adds them all', async ({
 });
 
 test('repository Files, Docs and Changes tabs cover files outside stacks', async ({ page }) => {
+  // Three tabs × light/dark axe is close to the default 30s budget under parallel load.
+  test.setTimeout(60_000);
   const base = `/w/${sample().workspaceId}/repositories/${sample().repositoryId}`;
   const tabs = page.getByRole('navigation', { name: 'Repository' });
 
