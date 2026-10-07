@@ -227,7 +227,8 @@ test('stack history lists commits, opens detail, and handles empty/load-more', a
     filesTruncated: false,
   });
 
-  const historyRoute = (url: URL) => url.pathname === historyPath || url.pathname.startsWith(`${historyPath}/`);
+  const historyRoute = (url: URL) =>
+    url.pathname === historyPath || url.pathname.startsWith(`${historyPath}/`);
 
   await page.route(historyRoute, async (route) => {
     const url = new URL(route.request().url());
