@@ -46,6 +46,8 @@ export interface GitWorkflowResult {
   operation: 'inspect' | 'commit' | 'push';
   /** A successful commit made by this request (or the explicit SHA in a push request). */
   commitSha: string | null;
+  /** Remote head reviewed for this commit/push, retained separately from refreshed conflict state. */
+  expectedRemoteSha: string | null;
   /** Last successfully inspected heads; consult operation/status before using them for a push. */
   state: GitWorkflowState | null;
   problems: GitWorkflowProblem[];

@@ -154,6 +154,23 @@ describe('draft commit and safe push workflow', () => {
     expect((await push(result.json.commitSha, result.json.commitSha)).json.status).toBe('push_succeeded');
   });
 
+  it('reports a changed remote SHA even when the remote contains the retained local head', async () => {
+    await save();
+    const committed = await commit();
+    expect((await push(committed.json.commitSha)).json.status).toBe('push_succeeded');
+    const result = await push(committed.json.commitSha);
+    expect(result.status).toBe(409);
+    expect(result.json).toMatchObject({
+      status: 'remote_changed',
+      commitSha: committed.json.commitSha,
+      expectedRemoteSha: headSha,
+      state: { localHeadSha: committed.json.commitSha, remoteHeadSha: committed.json.commitSha, behind: 0 },
+    });
+    expect(
+      (await h.container.audit.list({ workspaceId })).find((a) => a.action === 'git.push_rejected'),
+    ).toMatchObject({ meta: { reason: 'remote_changed' } });
+  });
+
   it('preserves a newer draft saved while the selected snapshot is being committed', async () => {
     await save();
     const original = provider().commit.bind(provider());

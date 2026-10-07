@@ -8,7 +8,7 @@ import {
   type SourceTreeReader,
 } from '@/server/providers/git/types';
 import type { GitCommitRequest, GitPushRequest, GitWorkflowResult } from '@/shared/git-workflow';
-import { isSecretPath, normalizeRepoPath } from '@/shared/source/paths';
+import { isSecretPath, isWithin, normalizeRepoPath } from '@/shared/source/paths';
 import { problemsFor } from '@/shared/source/problems';
 import type { AuditService } from './audit-service';
 import type { GitRepositoryService } from './git-repository-service';
@@ -52,6 +52,7 @@ export class GitWorkflowService {
       });
 
       result.state = await provider.inspectBranch(input);
+      result.expectedRemoteSha = result.state.remoteHeadSha;
       const entries = new Map(
         (await this.reader.listTree(input.cloneDir, result.state.localHeadSha)).map((entry) => [
           entry.path,
@@ -118,13 +119,7 @@ export class GitWorkflowService {
       const meta = {
         changedFileCount: selected.length,
         stackIds: stacks
-          .filter((stack) =>
-            selected.some(
-              (draft) =>
-                draft.path === stack.rootPath ||
-                draft.path.startsWith(stack.rootPath ? `${stack.rootPath}/` : ''),
-            ),
-          )
+          .filter((stack) => selected.some((draft) => isWithin(stack.rootPath, draft.path)))
           .map((stack) => stack.id),
       };
       await this.#audit('git.commit', workspaceId, actorUserId, result, meta);
@@ -162,7 +157,7 @@ export class GitWorkflowService {
       async (provider, input, result) => {
         await this.#push(provider, input, request, result, workspaceId, actorUserId);
       },
-      request.commitSha,
+      request,
     );
   }
 
@@ -175,6 +170,7 @@ export class GitWorkflowService {
     actorUserId: string,
   ) {
     result.operation = 'push';
+    result.expectedRemoteSha = request.expectedRemoteSha;
     // Provider re-fetches, checks the expected remote SHA and ancestry, and sends an ordinary push.
     await provider.push({ ...input, ...request });
     result.status = 'push_succeeded';
@@ -186,7 +182,7 @@ export class GitWorkflowService {
     repositoryId: string,
     actorUserId: string,
     run: (provider: GitProvider, input: GitBranchInput, result: GitWorkflowResult) => Promise<void>,
-    commitSha: string | null = null,
+    pushRequest?: GitPushRequest,
   ): Promise<GitWorkflowResult> {
     const user = await this.users.findById(actorUserId);
     // The current product has one admin role, with access to all workspaces; repository lookup is scoped.
@@ -197,8 +193,9 @@ export class GitWorkflowService {
       status: 'ready',
       repositoryId,
       branch: source.connection.defaultBranch,
-      operation: commitSha ? 'push' : 'inspect',
-      commitSha,
+      operation: pushRequest ? 'push' : 'inspect',
+      commitSha: pushRequest?.commitSha ?? null,
+      expectedRemoteSha: pushRequest?.expectedRemoteSha ?? null,
       state: null,
       problems: [],
       outdatedPaths: [],
@@ -227,7 +224,10 @@ export class GitWorkflowService {
           : reason === 'rejected'
             ? 'push_rejected'
             : reason === 'conflict'
-              ? result.state?.behind
+              ? result.state &&
+                (result.state.behind > 0 ||
+                  (result.expectedRemoteSha !== null &&
+                    result.state.remoteHeadSha !== result.expectedRemoteSha))
                 ? 'remote_changed'
                 : 'branch_changed'
               : 'git_operation_failed';

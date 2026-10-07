@@ -72,6 +72,7 @@ Every workflow response has this shape (TypeScript definitions: `src/shared/git-
   "branch": "main",
   "operation": "commit",
   "commitSha": "<new SHA>",
+  "expectedRemoteSha": "<reviewed remote SHA>",
   "state": {
     "branch": "main",
     "localHeadSha": "<last inspected local SHA>",
@@ -85,7 +86,7 @@ Every workflow response has this shape (TypeScript definitions: `src/shared/git-
 }
 ```
 
-`state` is the last successful inspection, nullable when inspection failed. It can precede the returned commit or push; refresh `GET /git` to display current heads. On conflict/rejection, the service refreshes it best-effort. `commitSha` identifies the successful commit made by this request, or the explicit SHA of a push request; it remains present when a subsequent push fails. A commit failure before publication has `commitSha: null`. Never infer commit success from HTTP success alone: a combined request can return 409/502 **with a successful retained commit**.
+`state` is the last successful inspection, nullable when inspection failed. It can precede the returned commit or push; refresh `GET /git` to display current heads. On conflict/rejection, the service refreshes it best-effort. `expectedRemoteSha` retains the reviewed remote head separately from that refreshed state; it is null for inspection or if commit inspection failed. `commitSha` identifies the successful commit made by this request, or the explicit SHA of a push request; it remains present when a subsequent push fails. A commit failure before publication has `commitSha: null`. Never infer commit success from HTTP success alone: a combined request can return 409/502 **with a successful retained commit**.
 
 | HTTP | `status` | UI action |
 | --- | --- | --- |
