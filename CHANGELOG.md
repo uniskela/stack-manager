@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.5.0](https://github.com/uniskela/stack-manager/compare/v0.4.0...v0.5.0) (2026-10-07)
+
+
+### Features
+
+* add commit and push workflow to Changes ([#35](https://github.com/uniskela/stack-manager/issues/35)) ([3ed4734](https://github.com/uniskela/stack-manager/commit/3ed4734b069c4af117afce14986150656d5715cd))
+* add draft commit and safe push workflow ([#31](https://github.com/uniskela/stack-manager/issues/31)) ([a4daf5d](https://github.com/uniskela/stack-manager/commit/a4daf5d7b004f46c8e978cdcd6da70ba873387aa))
+* add Git author identity settings ([#34](https://github.com/uniskela/stack-manager/issues/34)) ([aa740b0](https://github.com/uniskela/stack-manager/commit/aa740b07df6a4385c099f3d39bcf4ceef5d49feb))
+* add safe Git mutation foundation ([#29](https://github.com/uniskela/stack-manager/issues/29)) ([26d688f](https://github.com/uniskela/stack-manager/commit/26d688f4a442ae01aa73cb18fe84e134e9576914))
+* add stack history and change indicators ([#36](https://github.com/uniskela/stack-manager/issues/36)) ([57fb19d](https://github.com/uniskela/stack-manager/commit/57fb19d257d0832a683101951f5f7c1e9bb770c6))
+* add stack-scoped Git history API ([#32](https://github.com/uniskela/stack-manager/issues/32)) ([d7f872d](https://github.com/uniskela/stack-manager/commit/d7f872d29540ee3f6770b1d6c908612c298b3c9c))
+
+
+### Bug Fixes
+
+* stop the Git workflow getting stuck after a push or page reload ([#37](https://github.com/uniskela/stack-manager/issues/37)) ([ae0adb1](https://github.com/uniskela/stack-manager/commit/ae0adb1f3ae9187287ee493dbe294d42e74e96e7))
+
+
+### Documentation
+
+* prepare v0.5.0 Git workflow release ([#38](https://github.com/uniskela/stack-manager/issues/38)) ([b240abe](https://github.com/uniskela/stack-manager/commit/b240abed002172188b426759af50171b236762ec))
+
 ## [0.4.0](https://github.com/uniskela/stack-manager/compare/v0.3.0...v0.4.0) (2026-09-30)
 
 
