@@ -338,5 +338,4 @@ test('mobile: changes commit layout and accessibility', async ({ page }) => {
   await expectWorkPreserved(page);
   await expect(page).toHaveTitle(/Changes/);
   await expectAccessible(page);
-}
-);
+});
