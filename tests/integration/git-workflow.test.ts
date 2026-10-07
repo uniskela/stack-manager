@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -169,6 +170,27 @@ describe('draft commit and safe push workflow', () => {
     expect(
       (await h.container.audit.list({ workspaceId })).find((a) => a.action === 'git.push_rejected'),
     ).toMatchObject({ meta: { reason: 'remote_changed' } });
+  });
+
+  it('continues committing after a pushed commit is built upon elsewhere', async () => {
+    await save();
+    const pushed = await commit({ paths: ['compose.yaml'], message: 'First', push: true });
+    expect(pushed.json.status).toBe('push_succeeded');
+    // Someone else pushes on top of the published commit (for example from a laptop).
+    execFileSync('git', ['pull', '-q', '--ff-only', 'origin', 'main'], {
+      cwd: path.join(server.root, `.work-${REPO}`),
+      env: { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' },
+    });
+    const remote = server.commit(REPO, 'main', 'README.md', '# Remote\n');
+    await save('notes.md', '# Notes\n');
+    const changed = await commit({ paths: ['notes.md'], message: 'Notes' });
+    expect(changed.json).toMatchObject({ status: 'remote_changed', state: { remoteHeadSha: remote } });
+
+    await h.container.repositories.sync(repositoryId);
+    const next = await commit({ paths: ['notes.md'], message: 'Notes' });
+    expect(next.json.status).toBe('commit_succeeded');
+    expect(await git(['rev-parse', `${next.json.commitSha}^`])).toBe(remote + '\n');
+    expect((await push(next.json.commitSha, remote)).json.status).toBe('push_succeeded');
   });
 
   it('preserves a newer draft saved while the selected snapshot is being committed', async () => {
