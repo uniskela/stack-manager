@@ -28,6 +28,18 @@ function Diff({ before, after }: { before: string; after: string }) {
   return <UnifiedDiff hunks={patch.hunks} />;
 }
 
+const FAILURE_REASON: Record<NonNullable<GitWorkflowResult['reason']>, string> = {
+  auth: 'The Git server did not accept the saved credential. Check that the token is valid and can write to this repository.',
+  not_found: 'The repository or branch could not be found on the Git server.',
+  network: 'Stack Manager could not reach the Git server.',
+  timeout: 'The Git server took too long to respond.',
+  invalid: 'The Git server or local copy returned something unexpected.',
+  conflict: 'The branch changed while this was running.',
+  busy: 'Another Git operation was running.',
+  rejected: 'The Git server refused the change.',
+  unknown: 'Something went wrong while talking to Git.',
+};
+
 function problemLabel(problem: GitWorkflowProblem) {
   if (problem.code === 'hardcoded-secret') return 'Hard-coded secret';
   if (problem.severity === 'error') return 'Error';
@@ -52,14 +64,15 @@ function WorkflowAlert(props: {
   if (result.status === 'push_succeeded' && result.commitSha) {
     return (
       <Alert tone="ok" role="status" title={`Pushed ${shortSha(result.commitSha)} to ${result.branch}.`}>
-        Drafts are still on this server — review or discard them after you confirm the remote looks right.
+        Your drafts are still on this server. Fetch the repository to see the commit in History, then discard
+        the drafts you no longer need.
       </Alert>
     );
   }
   if (result.status === 'commit_succeeded' && result.commitSha) {
     return (
       <Alert tone="ok" role="status" title={`Committed as ${shortSha(result.commitSha)}.`}>
-        Drafts remain until you discard them. You can push this commit when ready.
+        It hasn&apos;t been pushed yet. Your drafts stay here until you discard them.
       </Alert>
     );
   }
@@ -101,7 +114,8 @@ function WorkflowAlert(props: {
   if (result.status === 'git_identity_missing') {
     return (
       <Alert tone="warn" role="alert" title="Git identity required to commit">
-        Set your name and email under Account settings before committing. Reads and drafts still work.
+        Set your name and email under Account settings before committing. You can still browse files and save
+        drafts.
         <div className="actions">
           <ButtonLink href={props.identityHref} variant="primary">
             Open Git identity settings
@@ -113,8 +127,9 @@ function WorkflowAlert(props: {
   if (result.status === 'draft_outdated') {
     return (
       <Alert tone="error" role="alert" title="Some drafts are out of date">
-        These files changed upstream since the draft was started. Open them, review, and save again before
-        committing:{' '}
+        These files changed after the draft was started, either on the remote or in a commit you already made
+        here. Saving again keeps the old starting point, so copy what you need, discard the draft and make the
+        edit again on the current version:{' '}
         {result.outdatedPaths.map((path, i) => (
           <span key={path}>
             {i > 0 ? ', ' : ''}
@@ -128,40 +143,52 @@ function WorkflowAlert(props: {
   if (result.status === 'remote_changed') {
     return (
       <Alert tone="warn" role="alert" title="The remote branch changed since your copy was last updated.">
-        Nothing was overwritten and your drafts are still safe. Fetching only refreshes remote refs; it does
-        not reconcile a retained commit. Manual reconciliation must happen outside this app.
-        {result.commitSha ? <span> Local commit {shortSha(result.commitSha)} is retained.</span> : null}
+        Nothing was overwritten and your drafts are still safe. Stack Manager never force pushes.
+        {result.state && result.state.ahead > 0 ? (
+          <span>
+            {' '}
+            {result.commitSha
+              ? `Local commit ${shortSha(result.commitSha)} was not pushed.`
+              : `${result.state.ahead} local commit${result.state.ahead === 1 ? ' was' : 's were'} not pushed.`}{' '}
+            Stack Manager can&apos;t merge or rebase yet, so this work needs to be brought across by hand. The
+            Git workflow guide explains how.
+          </span>
+        ) : (
+          <span> Fetch the repository, review your drafts against the new version, then commit again.</span>
+        )}
         <div className="actions">
           <ButtonLink href={props.repositoryHref}>Open repository to fetch</ButtonLink>
         </div>
-        {result.reason ? (
-          <p className="fine-print">Technical detail: {result.reason} (non-fast-forward).</p>
+        {result.state && result.state.behind > 0 ? (
+          <p className="fine-print">
+            Technical detail: the remote has {result.state.behind} commit
+            {result.state.behind === 1 ? '' : 's'} your copy doesn&apos;t, so a push would not be a
+            fast-forward.
+          </p>
         ) : null}
       </Alert>
     );
   }
   if (result.status === 'push_rejected') {
     return (
-      <Alert tone="error" role="alert" title="The remote refused this push.">
-        Nothing was overwritten and your drafts are still safe
+      <Alert tone="error" role="alert" title="The Git server refused the push.">
+        This usually means the access token can&apos;t write to this branch, or a branch protection rule
+        blocks direct pushes. Nothing was overwritten and your drafts are still safe.
         {result.commitSha ? (
           <span>
             {' '}
-            — local commit {shortSha(result.commitSha)} is retained for retry after you review permissions or
-            policy.
+            Local commit {shortSha(result.commitSha)} is kept, so you can push it again once that&apos;s
+            fixed.
           </span>
-        ) : (
-          '.'
-        )}
-        {result.reason ? <p className="fine-print">Technical detail: {result.reason}.</p> : null}
+        ) : null}
       </Alert>
     );
   }
   if (result.status === 'branch_changed') {
     return (
-      <Alert tone="warn" role="alert" title="The local branch moved since this operation started.">
-        Nothing was overwritten and your drafts are still safe. Refresh and review before trying again.
-        {result.commitSha ? <span> Local commit {shortSha(result.commitSha)} is retained.</span> : null}
+      <Alert tone="warn" role="alert" title="The branch changed while this was running.">
+        Another commit was made here, or this commit is no longer the latest one. Nothing was overwritten and
+        your drafts are still safe. Refresh the page and review before trying again.
       </Alert>
     );
   }
@@ -175,9 +202,10 @@ function WorkflowAlert(props: {
   if (result.status === 'git_operation_failed') {
     return (
       <Alert tone="error" role="alert" title="The Git operation could not be completed">
-        Your drafts are still safe
-        {result.commitSha ? <span> and local commit {shortSha(result.commitSha)} is retained.</span> : '.'}
-        {result.reason ? <p className="fine-print">Reason: {result.reason}.</p> : null}
+        {result.reason ? `${FAILURE_REASON[result.reason]} ` : ''}Nothing was overwritten and your drafts are
+        still safe
+        {result.commitSha ? <span>; local commit {shortSha(result.commitSha)} is kept.</span> : '.'}
+        {result.reason ? <p className="fine-print">Technical detail: {result.reason}.</p> : null}
       </Alert>
     );
   }
@@ -421,7 +449,8 @@ export function ChangesView(props: {
 
       {!props.gitIdentity ? (
         <Alert tone="warn" title="Git identity required to commit">
-          Set your name and email under Account settings before committing. Reads and drafts still work.
+          Set your name and email under Account settings before committing. You can still browse files and
+          save drafts.
           <div className="actions">
             <ButtonLink href={identityHref} variant="primary">
               Open Git identity settings
@@ -453,7 +482,7 @@ export function ChangesView(props: {
         result.status !== 'draft_outdated' &&
         result.status !== 'git_identity_missing' ? (
           <Alert tone="ok" role="status">
-            Committed as {shortSha(result.commitSha)}. Your drafts are still on this server.
+            Committed as {shortSha(result.commitSha)}, but not pushed. Your drafts are still on this server.
           </Alert>
         ) : null}
       </div>
@@ -461,7 +490,7 @@ export function ChangesView(props: {
       <section className="card commit-panel" aria-label="Commit changes">
         <div className="change-head">
           <div>
-            <strong>{props.changes.length === 0 && retained ? 'Push retained commit' : 'Commit'}</strong>
+            <strong>{props.changes.length === 0 && retained ? 'Push local commit' : 'Commit'}</strong>
             <div className="fine-print">
               {props.changes.length === 0 && retained ? (
                 <>
@@ -489,7 +518,7 @@ export function ChangesView(props: {
         {props.changes.length === 0 && retained ? (
           <div className="form commit-form">
             <p className="fine-print">
-              Drafts for this change set were discarded. The retained commit is still available to push.
+              The drafts were discarded, but this local commit is still waiting to be pushed.
             </p>
             <div className="actions commit-actions">
               <Button
@@ -547,8 +576,8 @@ export function ChangesView(props: {
             ) : null}
             {outdatedSelected.length ? (
               <Alert tone="warn" title="Outdated drafts selected">
-                Remove them from the selection or open each file, review the upstream change, and save a fresh
-                draft before committing.
+                These files changed after the draft was started. Unselect them, or copy what you need, discard
+                the draft and make the edit again on the current version.
               </Alert>
             ) : null}
             {showWarningAck && !blockingErrors.length ? (
@@ -562,7 +591,8 @@ export function ChangesView(props: {
                 <span>
                   <span className="title">Commit despite warnings</span>
                   <span className="fine-print">
-                    Required when the server reports warnings (including hard-coded secrets).
+                    Confirms you reviewed the warnings, including possible hard-coded secrets. Errors
+                    can&apos;t be overridden.
                   </span>
                 </span>
               </label>

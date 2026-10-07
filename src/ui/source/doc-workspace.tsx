@@ -210,7 +210,8 @@ export function DocWorkspace(props: {
             ) : null}
             {file.draft?.outdated ? (
               <Alert tone="warn" title="This page changed upstream">
-                The committed version was updated after this draft was started.
+                The committed version was updated after this draft was started, so it can&apos;t be committed.
+                Copy what you need, discard the draft and make the edit again on the current version.
               </Alert>
             ) : null}
             {mode === 'read' ? (

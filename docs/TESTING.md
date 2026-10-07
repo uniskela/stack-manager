@@ -23,7 +23,7 @@ Protect product boundary, credential safety, routing correctness, and editor/wor
 5. **Credentials API:** GET never returns secret material
 6. **SSRF:** blocked addresses rejected
 7. **Watch:** state machine transitions with mocked runtime snapshots
-8. **Git:** conflict when remote ahead (fixture repos)
+8. **Git:** conflict when remote ahead (fixture repos), no force push, drafts preserved on every failure
 
 ## Implemented in PR #2
 
@@ -45,6 +45,20 @@ Protect product boundary, credential safety, routing correctness, and editor/wor
   unit tests cover path rules and the Compose analyser. With `E2E_GIT_REMOTE` and `E2E_STACK_ROOT` set (CI uses
   `docker/awesome-compose` / `nginx-golang`, since the remote must be public), the
   Playwright suite also opens the editor, saves a draft, reviews the diff and checks every stack tab with axe.
+- **Git workflow (PR #4, v0.5.0):** integration tests run real commits and pushes against the local smart-HTTP
+  server:
+  - `git-mutations.test.ts`: provider isolation, locking, path refusal, ancestry checks and cleanup.
+  - `git-workflow.test.ts`: every workflow outcome (validation errors and warnings, outdated drafts, missing identity,
+    remote changes before and after a commit, real push rejection, infrastructure failures with secret scrubbing,
+    access control, and continuing after a pushed commit is built on elsewhere).
+  - `git-history*.test.ts`: history scoping, pagination, limits and locked content.
+  - `git-workflow-journey.test.ts`: the cross-service journeys. Draft → commit → push → fetch → stack history and
+    detail, audit with stack ids but no contents, a credential-rejected push that leaks no token and retries, and
+    the documented manual recovery of an unpushed commit.
+
+  Playwright (`changes-commit.spec.ts`, `git-workflow` projects) covers the Changes UI: missing identity, validation
+  links, a real local commit, mocked remote-changed and push-success responses, Push recovery for an earlier local
+  commit, and axe on desktop and mobile. `source.spec.ts` covers the History tab and draft indicators.
 
 ## CI
 

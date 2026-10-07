@@ -19,7 +19,11 @@ similar tool. stack-manager is the place where you **edit and review that source
 - **Docs:** read each stack's Markdown documentation next to its configuration.
 - **Environment:** see which variables a stack uses, whether `.env.example` documents them, which env files it
   expects and which values look like hard-coded secrets. Values are never shown.
-- **Changes:** review every draft as a diff against the fetched commit before it goes anywhere.
+- **Changes:** review every draft as a diff against the fetched commit, then commit the files you pick with your own
+  Git identity. Validation errors block a commit; warnings need your confirmation.
+- **Safe push:** push to the repository's tracked branch. Stack Manager never force pushes. If someone else pushed
+  first, it stops and tells you, and your drafts are always kept.
+- **History:** each stack lists the commits that touched it, with a diff of each change.
 
 Secret files such as `.env`, keys and certificates are never displayed or editable, and provider tokens are stored
 encrypted.
@@ -33,11 +37,11 @@ stack-manager looks after the Git source they are deployed from.
 ## Status
 
 stack-manager is in early development (0.x). Available today: sign-in, workspaces, encrypted credentials, repository
-connections, stacks, dashboard and settings, the editor with drafts, docs, the environment inventory and change review.
+connections, stacks, dashboard and settings, the editor with drafts, docs, the environment inventory, and the Git
+workflow (v0.5.0): change review, commit, safe push and stack history.
 
-Stack-scoped Git history is on each stack's History tab. Draft commit and safe push are on Changes. Next on the
-[roadmap](plans/MVP_PLAN.md):
-deploying only the stacks a commit changed (through Portainer and others), then optional read-only runtime feedback.
+Next on the [roadmap](plans/MVP_PLAN.md): deploying only the stacks a commit changed (through Portainer and others),
+then optional read-only runtime feedback.
 
 ## Documentation
 
@@ -45,6 +49,7 @@ deploying only the stacks a commit changed (through Portainer and others), then 
 
 - [Installation](installation.md): run the container with Docker Compose
 - [Getting started](getting-started.md): first run, connecting a repository, adding stacks and editing
+- [Git workflow](GIT_WORKFLOW.md): committing, pushing, what to do when the remote changed, and stack history
 
 **Deploy and operate**
 

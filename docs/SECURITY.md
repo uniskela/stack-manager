@@ -43,7 +43,9 @@ Assume: operator places stack-manager on a trusted homelab network behind auth a
 | CSRF | SameSite sessions + origin checks on mutating routes |
 | XSS in log viewer | Treat logs as untrusted text; strict encoding |
 | Path traversal in git file APIs | Repo paths normalised and scoped to the stack folder; `..`, `.git` and control characters rejected; content read from Git objects (symlinks are listed, never followed) |
-| Secret files in repositories | `.env*` (except templates), keys/keystores and `secrets/` paths are shown as locked; contents are never returned to the browser or stored as drafts |
+| Secret files in repositories | `.env*` (except templates), keys/keystores and `secrets/` paths are shown as locked; contents are never returned to the browser, stored as drafts, committed or shown in history diffs |
+| Lost remote work via push | Push sends one exact SHA-to-branch refspec after re-checking the expected remote head and ancestry; never force, mirror or tag push; no merge, rebase or reset |
+| Lost local work on Git failure | Commit and push never delete or rewrite drafts; failed or rejected pushes keep the local commit for review and retry |
 | XSS via repository Markdown | Rendered without raw HTML; unsafe URLs dropped; relative links mapped to stack routes; only https images, no referrer |
 
 ## Explicit non-features (security-relevant)
@@ -64,8 +66,10 @@ Assume: operator places stack-manager on a trusted homelab network behind auth a
 - [x] Container image scanning: Trivy gate on fixable HIGH/CRITICAL for PRs touching the image, weekly, and before
       every release publish; Dockerfile misconfiguration scan; runtime image ships without npm/npx/corepack/yarn
 - [x] Pinned GitHub Actions (commit SHAs) with Dependabot updates; release images carry SBOM + provenance
+- [x] Git workflow failure tests (PR #4): tokens, credential-bearing URLs and source values absent from responses,
+      logs and audit after commit/push/auth failures; secret paths refused for commit
 
-## Controls implemented in PR #2
+## Controls implemented in PR #2 and the Git workflow (PR #4)
 
 - **Git invocation:** `git` is spawned with an argv array (no shell), `--` before URLs, validated branch names
   (no leading `-`), a protocol allowlist (`https` only), hooks disabled, no system/global config, an isolated
@@ -75,6 +79,10 @@ Assume: operator places stack-manager on a trusted homelab network behind auth a
   Mutation operations disable signing, filesystem-monitor commands and automatic maintenance. Selected contents are hashed without clean filters; hooks never run.
 - **Git mutation:** detached temporary worktrees have isolated indexes and no checkout. Canonical selected paths are verified against Git objects; symlinks, submodules, secrets and file/directory collisions are refused.
   Expected local/remote heads, base blobs and ancestry are checked under a repository lock. Push uses an exact SHA-to-branch refspec with no force or mirror option. Cancellation does not cancel cleanup; provider operations never delete drafts.
+- **Git workflow responses and audit:** workflow results carry status, SHAs, branch state and a coarse `reason`
+  code only. Never provider exception text, stderr, remote URLs, commit messages, identities or draft contents.
+  Validation problems carry path, position, severity and a stable code; parser messages, which can quote source
+  values, are omitted. Commit authors come only from the signed-in user's saved Git identity.
 - **Remote URL policy:** HTTPS only; embedded credentials, query strings and traversal segments are rejected.
   Resolved addresses must not be loopback, link-local/metadata or multicast — including IPv4 embedded in IPv6
   (mapped, compatible, translated and NAT64 forms, dotted or hex); private ranges require

@@ -234,13 +234,17 @@ export function HistoryView({ apiBase, rootPath }: { apiBase: string; rootPath: 
   if (commits.length === 0) {
     return (
       <EmptyState icon={History} title="No commits for this stack">
-        No commits touching this stack were found.
+        No commits touching this stack were found at the last fetch. Commits you push appear here after the
+        repository is fetched again.
       </EmptyState>
     );
   }
 
   return (
     <div className="stack history-view">
+      <p className="fine-print">
+        Commits that touched this stack, as of the last fetch. Commits you push appear after the next fetch.
+      </p>
       {error ? (
         <Alert tone="error" role="alert">
           {error}
@@ -295,7 +299,11 @@ export function HistoryView({ apiBase, rootPath }: { apiBase: string; rootPath: 
           Load more
         </Button>
       ) : null}
-      {limitReached ? <p className="fine-print">History pagination limit reached for this fetch.</p> : null}
+      {limitReached ? (
+        <p className="fine-print">
+          Older commits are not listed here. Use your Git server to browse further back.
+        </p>
+      ) : null}
     </div>
   );
 }

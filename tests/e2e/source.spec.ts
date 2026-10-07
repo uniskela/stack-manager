@@ -324,7 +324,7 @@ test('stack history lists commits, opens detail, and handles empty/load-more', a
   });
   await page.goto(`${stackUrl()}/history`);
   await expect(page.getByRole('heading', { name: 'No commits for this stack' })).toBeVisible();
-  await expect(page.getByText('No commits touching this stack were found.')).toBeVisible();
+  await expect(page.getByText(/No commits touching this stack were found/)).toBeVisible();
   await expectAccessible(page);
 });
 

@@ -81,7 +81,7 @@ Each stack has these tabs:
 | **Docs** | Read the stack's Markdown files rendered (README first), follow links between them and edit them as drafts. |
 | **Environment** | Variables the Compose file references, whether `.env.example` documents them, env files it expects, and values that look like hard-coded secrets. Values are never shown. |
 | **Changes** | Every draft as a line-by-line diff against the fetched commit. Select files, commit with your Account Git identity, and push when ready. Discard drafts you don't want. |
-| **History** | Commits that touched this stack at the last fetched snapshot. Open a commit to inspect the scoped file diffs. |
+| **History** | Commits that touched this stack, as of the last fetch. Open a commit to see what changed in this stack's files. |
 | **Settings** | Rename the stack, change its Compose file or remove it (files and drafts are kept). |
 
 Files that look like secrets (`.env`, private keys, certificates, anything in a `secrets/` folder) are listed but
@@ -89,13 +89,33 @@ can't be opened or edited.
 
 ### Drafts
 
-Drafts are stored in stack-manager's database and never leave the server. If the file changes in Git after you start a
-draft, the editor warns you, so you don't overwrite someone else's change unknowingly.
+Drafts are stored in stack-manager's database and stay on the server until you discard them, even after they are
+committed and pushed. Once you've checked the pushed result, discard the drafts you no longer need. If the file changes in
+Git after you start a draft, the editor marks it **Changed upstream** and it can't be committed. That way you can't
+overwrite someone else's change by accident. Saving again doesn't fix this: copy what you need, discard the draft and
+make the edit again on the current version.
 
-Set your **Git identity** under Settings → Account before the first commit. After a successful push, drafts stay
-on the server until you discard them — fetch the repository if the remote moved ahead.
+## 5. Commit and push
 
-## 5. Files outside stacks
+1. Set your **Git identity** (name and email) under **Settings → Account**. Commits use exactly this identity.
+2. Open the stack's **Changes** tab, or the repository's **Changes** tab for every draft in the repository. A count
+   on the tab and a badge in the stack header show when drafts are waiting.
+3. Review each diff. Untick any draft you want to leave out of this commit.
+4. Fix any **errors** the validation shows (they always block the commit). If there are **warnings**, such as a value
+   that looks like a hard-coded secret, review them and tick **Commit despite warnings**.
+5. Write a commit message, then choose **Commit**, or **Commit & Push** to send it to your Git server straight away.
+   Pushing needs a token with write access.
+6. After pushing, choose **Fetch now** on the repository page. The commit then appears on the stack's **History**
+   tab. Discard the drafts you no longer need.
+
+Stack Manager pushes only to the repository's tracked branch and **never force pushes**. If someone else pushed
+first, you'll see *"The remote branch changed since your copy was last updated."* Nothing is overwritten, and your
+drafts and any local commit are kept. If you hadn't committed yet, fetch, review your drafts and commit again. If
+you already have a local commit that wasn't pushed, follow
+[Recovering an unpushed local commit](GIT_WORKFLOW.md#recovering-an-unpushed-local-commit) instead. A failed or
+refused push never discards your work either. See [Git workflow](GIT_WORKFLOW.md) for what each message means.
+
+## 6. Files outside stacks
 
 Not everything lives in a stack folder: a root `README.md`, a `docs/` folder or a shared `.env.example` belong to the
 whole repository. The repository page has tabs for them:
@@ -105,9 +125,10 @@ whole repository. The repository page has tabs for them:
 | **Overview** | Fetch status, stacks, branches and the credential. |
 | **Files** | The whole repository in the same editor as a stack, with the same draft and secret-file rules. |
 | **Docs** | Every Markdown file in the repository, grouped by folder, rendered and editable as drafts. |
-| **Changes** | Every draft in the repository, including the ones made inside stacks. |
+| **Changes** | Every draft in the repository, including the ones made inside stacks, with the same commit and push controls. |
 
-## 6. Keep it up to date
+## 7. Keep it up to date
 
-Use **Fetch now** on the repository page to pull the latest commits from your Git server. The editor, docs and environment
-views always read from the fetched commit plus your drafts.
+Use **Fetch now** on the repository page to pull the latest commits from your Git server. The editor, docs and
+environment views read from the fetched commit plus your drafts. History lists only the commits in the fetched
+repository; drafts and unpushed commits don't appear there. Fetching never changes or deletes drafts.

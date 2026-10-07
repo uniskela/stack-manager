@@ -10,7 +10,8 @@ are listed in [manifest.json](manifest.json) (see [../.github/docs-sync.md](../.
 | --- | --- |
 | [index.md](index.md) | Overview: what stack-manager does and does not do |
 | [installation.md](installation.md) | Docker Compose install, image tags, upgrades |
-| [getting-started.md](getting-started.md) | First run, repositories, stacks, editor and drafts |
+| [getting-started.md](getting-started.md) | First run, repositories, stacks, editor, drafts, commit and push |
+| [GIT_WORKFLOW.md](GIT_WORKFLOW.md) | Commit, safe push, remote changes, stack history; API reference |
 
 ## Product and architecture
 
@@ -36,7 +37,7 @@ are listed in [manifest.json](manifest.json) (see [../.github/docs-sync.md](../.
 | [providers/SECRET_PROVIDER.md](providers/SECRET_PROVIDER.md) | Secret metadata / references |
 | [STACK_DISCOVERY.md](STACK_DISCOVERY.md) | Repository → stack scopes |
 | [DEPLOYMENT_ROUTING.md](DEPLOYMENT_ROUTING.md) | Path relevance and push router |
-| [GIT_WORKFLOW.md](GIT_WORKFLOW.md) | Edit → validate → commit → push |
+| [GIT_WORKFLOW.md](GIT_WORKFLOW.md) | Edit → validate → commit → push → history (implemented in v0.5.0) |
 | [DEPLOYMENT_WATCH.md](DEPLOYMENT_WATCH.md) | CI-like deploy feedback |
 
 ## Operations and UX

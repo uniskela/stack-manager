@@ -1,10 +1,139 @@
-# Git editing, commit, and push workflow
+# Git workflow: drafts, commits, push and history
 
-## Happy path
+Stack Manager turns your edits into ordinary Git commits on the repository's tracked branch. It never force
+pushes, never merges or rebases on its own, and never deletes your drafts as part of a commit or push. The first
+half of this page is a guide to the **Changes** and **History** tabs. The second half is the technical reference
+and API contract.
 
 ```text
-Edit → Validate → Commit → Push → (optional) Deploy → (optional) Watch
+Edit → save draft → review Changes → validate → commit → push → fetch → History
 ```
+
+Deploying the stacks a commit touched, and watching the result, are later roadmap phases
+([roadmap](plans/MVP_PLAN.md)).
+
+## Before your first commit
+
+- **Git identity.** Set your author name and email under **Settings → Account**. Stack Manager uses exactly this
+  identity for commits. It never guesses one from your username, token or server settings. Without it you can still
+  browse and save drafts, but **Commit** stays disabled.
+- **Write access.** Pushing needs a token that can write to the repository. A read-only token is enough to browse,
+  draft and commit locally, but the push will be refused.
+
+## Draft to commit
+
+1. **Edit and save a draft.** In a stack's **Editor** or **Docs** tab, edit a file and choose **Save draft**
+   (Ctrl+S / ⌘S). Drafts are stored in Stack Manager's database. Your repository is not touched.
+2. **Review Changes.** The **Changes** tab shows every draft as a line-by-line diff against the fetched commit. The
+   stack's Changes tab lists drafts inside that stack. The repository's Changes tab lists every draft in the
+   repository, including files outside stacks. The tab shows a count when drafts are waiting, and the stack header
+   shows a draft badge.
+3. **Choose files.** Every draft starts selected. Untick any you want to leave out. Unselected drafts are not
+   validated or committed, and they stay as drafts. One commit can include up to 100 files.
+4. **Validation.** The selected contents are checked with the same rules as the editor:
+   - **Errors** (for example, invalid YAML or a broken Compose file) always block the commit. Use the file links to
+     jump back to the editor and fix them.
+   - **Warnings** (including values that look like hard-coded secrets) need you to tick
+     **Commit despite warnings** first. Stack Manager records that override in the activity log.
+   - Informational notes never block.
+5. **Write a commit message** and choose **Commit**, or **Commit & Push** to do both in one step.
+
+A successful commit is kept on the server as a local commit on the tracked branch, ready to push. Your drafts
+**stay on the server** after a commit and after a push. Once you have checked the result, discard the drafts you no
+longer need from the Changes tab.
+
+### Outdated drafts
+
+A draft remembers the version of the file it started from. If that file has changed since, on the remote or in a
+commit you already made here, the draft is **outdated** and can't be committed. The editor and Changes tab mark it
+**Changed upstream**.
+
+Saving the draft again does not move its starting point. To carry the edit forward, copy what you need from the
+draft, discard it, and make the edit again on the current version. You can also untick outdated drafts and commit
+the rest.
+
+## Push
+
+- Stack Manager pushes only to the repository's **tracked branch** (the default branch chosen when you connected it).
+- Before pushing, it fetches the branch and checks that the remote is exactly where it was when you committed, and
+  that your commit builds directly on it. Only then does it send an ordinary push.
+- It **never force pushes**, and there is no option to. If the remote has moved, the push is stopped before
+  anything is sent.
+- After a successful push, choose **Fetch now** on the repository page to see the commit in **History** and to
+  refresh the editor's view of the branch.
+
+If **Commit & Push** commits but the push doesn't go through, the commit is kept. The Changes tab then offers
+**Push** for that commit, so you don't have to commit the same drafts again. If you leave the tab before pushing,
+choose **Commit** again. Stack Manager reports that the drafts are already in a local commit and offers **Push**
+for it.
+
+## When the remote branch changed
+
+> The remote branch changed since your copy was last updated.
+
+This means someone (or another tool) pushed to the branch after Stack Manager last fetched it. Stack Manager stops
+rather than overwrite their work. Nothing was overwritten, and your drafts are still safe. In Git terms, the push
+would not be a fast-forward.
+
+- **If you haven't committed yet:** open the repository, choose **Fetch now**, then go back to Changes. Drafts for
+  files that changed remotely are now marked outdated (see above). Everything else can be committed on top of the
+  new remote version.
+- **If your commit was already pushed** and others pushed after it: fetch, and keep working. New commits build on
+  the latest remote version.
+- **If you have a local commit that was not pushed:** Stack Manager can't merge or rebase yet, so it keeps that
+  commit and won't create new commits on the branch until the commit is dealt with. Your drafts still hold the same
+  changes. See [Recovering an unpushed local commit](#recovering-an-unpushed-local-commit).
+
+## When a push fails
+
+Every failed Git operation leaves your drafts and any local commit exactly as they were. The Changes tab explains
+what happened in plain language, with the technical reason as supporting detail:
+
+| You see | What it usually means | What to do |
+| --- | --- | --- |
+| The Git server refused the push | The token can't write to this branch, or a branch protection rule blocks direct pushes | Fix the permission or rule, then choose **Push** again |
+| The Git server did not accept the saved credential | The token expired or was revoked | Replace it under **Settings → Credentials**, then push again |
+| Could not reach the Git server / took too long | Network or server trouble | Try again later |
+| Another Git operation is in progress | A fetch, commit or push is running for this repository | Wait a moment and try again |
+| The branch changed while this was running | Another commit was made here at the same time | Refresh the page and review |
+
+Error messages never include tokens, remote URLs or raw Git output.
+
+## Stack history
+
+Each stack's **History** tab lists the commits that touched the stack's folder, newest first, with subject, short
+SHA, author and time. Open a commit to see which files changed in this stack and a line-by-line diff of each.
+
+- History shows the repository **as of the last fetch**. A commit you just pushed appears after the next fetch.
+  Local commits that were never pushed don't appear.
+- A commit that touches several stacks appears in each one, showing only that stack's files.
+- Documentation changes count, as do commits made outside Stack Manager.
+- Secret files may be listed by name, but their contents are never shown. Binary, very large and symlinked files
+  are listed without a diff.
+- Renames show as a deletion at the old path and an addition at the new one.
+
+## Recovering an unpushed local commit
+
+If a local commit can't be pushed because the remote moved, Stack Manager keeps it and blocks new commits on that
+branch. This is deliberate: it never discards a commit on its own. An in-app way to drop the local commit is planned.
+Until then, an operator can remove it by hand.
+
+1. Make sure your drafts still hold the change. They are kept unless you discarded them. If not, note the commit
+   SHA shown in the Changes tab first.
+2. Find the repository id in the repository page's address (`/w/<workspace>/repositories/<repository-id>`).
+3. While no fetch, commit or push is running, remove the local commit reference:
+
+   ```bash
+   docker compose exec stack-manager \
+     git -C /data/repos/<repository-id> update-ref -d refs/stack-manager/heads/<branch>
+   ```
+
+   This only forgets the unpushed local commit. It doesn't change the remote, the fetched copy or your drafts.
+4. Choose **Fetch now**, review your drafts on the Changes tab and commit again.
+
+# Reference
+
+The rest of this page describes how the workflow is implemented and the API the Changes and History tabs use.
 
 ## Working tree / drafts
 
@@ -12,6 +141,7 @@ Edit → Validate → Commit → Push → (optional) Deploy → (optional) Watch
 - Source reads use Git objects at the last synced commit. A draft is outdated when its `baseBlobSha` differs from the current tree entry (or a new path now exists).
 - The provider accepts only explicitly selected changes and never deletes or updates drafts. `GitWorkflowService` validates selected database snapshots and orchestrates commit and optional push. It checks draft base blobs against the retained local head, including earlier unpushed commits.
 - v0.5.0 preserves **all** drafts after success and failure, including edits saved concurrently with a commit. After a successful push, fetch the repository and review/discard committed drafts manually. An already committed draft can remain visible or be marked outdated; do not repeat the commit to retry a push. Automatic cleanup needs an atomic comparison against the exact committed draft snapshot and is deferred.
+- Saving a draft keeps its original `baseBlobSha`, so re-saving an outdated draft does not make it committable. The operator discards it and edits the current version. A guided "update draft to the current version" flow is deferred.
 - Unsaved browser buffers warn on navigation; PR #8 adds offline support.
 
 ## Validation before commit
@@ -24,9 +154,9 @@ Edit → Validate → Commit → Push → (optional) Deploy → (optional) Watch
 
 ## Diff review
 
-- Stack-scoped diff (files under stack root + touched dependency paths)
-- Full repo diff available for power users
-- Line-level view for failure correlation later
+- Stack Changes: drafts under the stack's root folder, as unified diffs against each draft's base.
+- Repository Changes: every draft in the repository, including files outside stacks.
+- Deployment dependency paths (shared files outside a stack's folder) are not yet part of the stack scope; they arrive with deployment routing.
 
 ## Commit
 
@@ -36,19 +166,21 @@ Edit → Validate → Commit → Push → (optional) Deploy → (optional) Watch
 
 ## Push
 
-- Push to tracked branch
+- Push only to the repository's tracked (default) branch.
 - Before pushing, fetch and compare the expected remote SHA and ancestry. On rejection or a remote change, return structured state, retain the local commit and every draft, and permit a separate push retry only after manual review.
-- Force push: not offered in MVP
+- Force push is never used and is not offered.
+- After a successful push, the retained ref stays on the pushed commit. Once a fetch has seen newer remote commits on top of it, branch inspection continues from the fetched head, so other people can keep pushing to the branch without blocking Stack Manager.
 
 ## Conflict protection
 
 - Detect remote ahead
 - v0.5.0 requires manual reconciliation outside the app. Fetch is available through the existing repository sync route; branch inspection also fetches remote refs without changing the source snapshot. Neither operation merges, rebases, moves the retained local head, or deletes drafts.
+- An **unpushed** retained commit behind a moved remote blocks further commits on that branch until it is removed by hand (see [Recovering an unpushed local commit](#recovering-an-unpushed-local-commit)). An in-app discard action is a planned follow-up.
 - Block when remote commits would be lost. No hard reset, force push, or automatic merge/rebase is implemented.
 
-## Implemented provider foundation (PR #4)
+## Implementation overview (v0.5.0)
 
-The low-level `GitProvider` supports `inspectBranch`, `commit`, `push`, and `getCommit` for all three smart-HTTP adapters. `GitWorkflowService` provides the application/API layer. The Changes tab commits selected drafts and can push or retry a retained commit.
+The low-level `GitProvider` supports `inspectBranch`, `commit`, `push`, and `getCommit` for all three smart-HTTP adapters. `GitWorkflowService` provides the application/API layer. The Changes tab commits selected drafts and can push or retry a retained commit. The History tab reads the stack-scoped history API below.
 
 ## Application API contract (v0.5.0)
 
@@ -221,22 +353,24 @@ history/scope; 409 `not_synced` before fetch; 409 `history_changed` for stale an
 502 `git_history_failed` for bounded or failed Git reads. Error messages never include Git output.
 Commit/deployment correlation remains later work.
 
-## Optional branch / PR architecture
+## Branch / PR workflow (deferred)
 
-Where `GitProvider` capabilities allow:
+v0.5.0 commits and pushes directly to the tracked branch only. A forge branch and pull request flow was optional for
+this phase and did not ship. If added later, it would be capability-gated per `GitProvider`:
 
-- Create branch from draft
-- Open PR toward default branch
-- Deploy policy may require merge to default branch (configurable)
-
-MVP may ship commit-to-default-branch first; PR flow is optional enhancement inside PR #4 if timeboxed.
+- Create a branch from selected drafts
+- Open a PR toward the default branch
+- Deployment policy may require a merge to the default branch (configurable)
 
 ## Security
 
-- Do not commit `.env` with secrets; warn on matched secret file patterns
-- Pre-commit checklist for credential-looking strings (heuristic)
+- Secret-looking files (`.env*` except templates, keys, certificates, `secrets/`) can never be drafted, selected or committed; their contents never reach the browser, drafts, history diffs or commits.
+- Values that look like hard-coded secrets in Compose files are warnings that need explicit acknowledgement. The override is audited without the value.
+- Tokens are sent to `git` as a per-process HTTP header, never in remote URLs, argv, `.git/config`, logs, audit events or API responses. Workflow failures expose only a coarse `reason` code.
+- No force push, mirror push, tag push, hooks or commit signing. No merge, rebase or hard reset.
+- Failed or rejected Git operations never delete drafts or the retained local commit.
 
 ## Non-goals
 
-- Full IDE merge tool competing with VS Code
+- Full IDE merge tool competing with VS Code (an in-app conflict editor is not planned for v0.5.0)
 - Hosting the Git server

@@ -227,7 +227,8 @@ straightforward. Additions beyond the logical model above:
 - Committed content is read from Git objects of the fetched `origin/<branch>` commit, never from the working tree.
 - A draft is **outdated** when the committed blob at its path no longer matches `baseBlobSha`.
 - Secret-looking paths (`.env`, keys, `secrets/`) are never accepted as drafts, so no secret values are stored.
-- PR #4 turns drafts into commits (and deletes them once pushed), with conflict handling for outdated drafts.
+- The Git workflow (v0.5.0) commits selected drafts and pushes them, refusing outdated drafts. Drafts are never
+  deleted by a commit or push, successful or not; the operator discards them after reviewing the pushed result.
 
 ## Non-entities (explicitly out of core model)
 
