@@ -1,13 +1,19 @@
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { normalizeRemoteUrl, validateBranchName } from '@/server/domain/git-repository';
 import type { GitCli } from './git-cli';
+import { GitMutations } from './mutations';
+import { withRepositoryLock } from './repository-lock';
 import {
   GitOperationError,
   type GitHttpAuth,
   type GitProvider,
   type GitProviderDescriptor,
   type RemoteProbe,
+  type GitBranchInput,
+  type GitCommitInput,
+  type GitPushInput,
 } from './types';
 
 /**
@@ -17,11 +23,16 @@ import {
  * capabilities in later PRs.
  */
 export class HttpGitProvider implements GitProvider {
+  private readonly mutation: GitMutations;
+
   constructor(
     readonly descriptor: GitProviderDescriptor,
     private readonly git: GitCli,
     private readonly username = 'x-access-token',
-  ) {}
+    private readonly reposDir: string,
+  ) {
+    this.mutation = new GitMutations(git, reposDir);
+  }
 
   defaultUsername(): string {
     return this.username;
@@ -44,6 +55,21 @@ export class HttpGitProvider implements GitProvider {
   }
 
   async syncClone(input: {
+    remoteUrl: string;
+    branch: string;
+    targetDir: string;
+    auth: GitHttpAuth | null;
+    signal?: AbortSignal;
+  }): Promise<{ headSha: string; cloned: boolean }> {
+    normalizeRemoteUrl(input.remoteUrl);
+    validateBranchName(input.branch);
+    await fs.mkdir(this.reposDir, { recursive: true, mode: 0o700 });
+    return withRepositoryLock(this.reposDir, input.targetDir, (targetDir) =>
+      this.syncUnlocked({ ...input, targetDir }),
+    );
+  }
+
+  private async syncUnlocked(input: {
     remoteUrl: string;
     branch: string;
     targetDir: string;
@@ -83,6 +109,19 @@ export class HttpGitProvider implements GitProvider {
     }
     const headSha = await this.resolveRemoteBranch(targetDir, branch);
     return { headSha, cloned: !exists };
+  }
+
+  inspectBranch(input: GitBranchInput) {
+    return this.mutation.inspectBranch(input);
+  }
+  commit(input: GitCommitInput) {
+    return this.mutation.commit(input);
+  }
+  push(input: GitPushInput) {
+    return this.mutation.push(input);
+  }
+  getCommit(cloneDir: string, commitSha: string) {
+    return this.mutation.getCommit(cloneDir, commitSha);
   }
 
   async listBranches(cloneDir: string): Promise<string[]> {

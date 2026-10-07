@@ -66,12 +66,12 @@ One repository webhook → stack-manager:
 - Never log remote URLs with embedded tokens
 - Support read-only vs write scopes; UI should explain required scopes for commit/push vs webhook-only
 
-## Implementation status (PR #2)
+## Implementation status (PR #4 foundation)
 
 - `GitProvider` (`src/server/providers/git/types.ts`) currently exposes the foundation subset:
   `testConnection` (via `git ls-remote --symref`), `syncClone` (atomic clone into a temp dir then rename, or
-  fetch), `listBranches`, plus a `descriptor` with display metadata and `capabilities`. Commit/push (PR #4) and
-  webhook verification/parsing (PR #5) extend the interface.
+  fetch), `listBranches`, `inspectBranch`, `commit`, `push` and `getCommit`, plus a `descriptor` with display metadata and `capabilities`.
+  Webhook verification/parsing remains PR #5.
 - `github`, `gitea` and `forgejo` are registered; they share one smart-HTTP implementation using the `git`
   binary (the forge API is not needed yet). The core validates provider types against the registry and never
   branches on a forge name. GitLab can be added as another descriptor/adapter.
@@ -79,7 +79,10 @@ One repository webhook → stack-manager:
 - Tokens are sent as HTTP Basic auth (`username` from credential metadata, default `x-access-token`, which
   GitHub, Gitea and Forgejo accept with a token as the password).
 - `webhookCredentialId` exists in the schema and stays null until PR #5.
-- The local clone is a mirror for reading; working-tree/draft handling is decided in PR #4.
+- The local clone is a normal read clone, not a bare mirror. SQLite drafts remain canonical. Commits use detached temporary worktrees with isolated indexes and no checkout; pending heads are retained under private refs.
+- All mutation/fetch operations share an exclusive repository lock. Production adapters receive the allowed repositories directory from the composition root; mutation paths and Git metadata cannot escape it. Remote host policy remains the application caller's responsibility, as for sync; the provider additionally validates HTTPS URLs without embedded credentials.
+- Commit inputs map selected drafts to `{ path, content, baseBlobSha }` with an expected branch HEAD and author identity; `content: null` supports controlled deletion. Push requires an exact retained commit and expected remote SHA. Neither operation touches draft persistence.
+- See [Git workflow](../GIT_WORKFLOW.md#implemented-provider-foundation-pr-4) for remote protection, cleanup and crash-recovery limits.
 
 ## Non-goals
 

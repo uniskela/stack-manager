@@ -88,7 +88,7 @@ export function createContainer(config: AppConfig, overrides: ContainerOverrides
       allowedProtocols: overrides.gitAllowedProtocols ?? ['https'],
       extraConfig: overrides.gitExtraConfig,
     });
-    const gitProviders = createDefaultGitProviderRegistry(git);
+    const gitProviders = createDefaultGitProviderRegistry(git, config.reposDir);
 
     const audit = new AuditService(repos.audit, clock, newId, logger.child({ component: 'audit' }));
     const auth = new AuthService(repos.users, repos.sessions, audit, clock, newId, {

@@ -492,6 +492,44 @@ describe('source files', () => {
 });
 
 describe('drafts', () => {
+  it('commits a selected persisted draft while preserving all database drafts and the source snapshot', async () => {
+    const stackId = await liftlog();
+    const base = (await readFile(stackId, 'apps/liftlog/compose.yaml')).json.file;
+    await saveDraft(stackId, {
+      path: base.path,
+      content: LIFTLOG_COMPOSE + '# selected\n',
+      baseBlobSha: base.blobSha,
+    });
+    await saveDraft(stackId, {
+      path: 'apps/liftlog/docs/new.md',
+      content: '# Unselected\n',
+      baseBlobSha: null,
+    });
+    const drafts = await h.container.repos.drafts.list(repositoryId);
+    const selected = drafts.find((draft) => draft.path === base.path)!;
+    const source = (await h.container.repositories.localSource(workspaceId, repositoryId))!;
+    const committed = await h.container.gitProviders.get(source.connection.gitProviderType).commit({
+      cloneDir: source.cloneDir,
+      branch: source.connection.defaultBranch,
+      remoteUrl: source.connection.remoteUrl,
+      auth: null,
+      expectedHeadSha: source.commitSha,
+      changes: [selected],
+      author: { name: 'Operator', email: 'operator@example.invalid' },
+      message: 'Commit selected database draft',
+    });
+    expect(committed.parents).toEqual([source.commitSha]);
+    expect(await h.container.repos.drafts.list(repositoryId)).toEqual(drafts);
+    expect((await h.container.repositories.localSource(workspaceId, repositoryId))?.commitSha).toBe(
+      source.commitSha,
+    );
+    expect((await readFile(stackId, base.path)).json.file).toMatchObject({
+      content: LIFTLOG_COMPOSE,
+      draft: { content: selected.content, outdated: false },
+    });
+    expect(h.logs.join('\n')).not.toContain('# selected');
+  });
+
   it('saves, reads back, lists and discards a draft; identical content clears it', async () => {
     const stackId = await liftlog();
     const base = (await readFile(stackId, 'apps/liftlog/compose.yaml')).json.file;

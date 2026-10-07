@@ -71,6 +71,10 @@ export class GitCli {
       ['protocol.allow', 'never'],
       ...this.#allowedProtocols.split(':').map((p): [string, string] => [`protocol.${p}.allow`, 'always']),
       ['submodule.recurse', 'false'],
+      ['core.fsmonitor', 'false'],
+      ['commit.gpgSign', 'false'],
+      ['gc.auto', '0'],
+      ['maintenance.auto', 'false'],
       ['transfer.fsckObjects', 'true'],
       ...this.#extraConfig,
     ];
@@ -91,6 +95,7 @@ export class GitCli {
       GIT_CONFIG_GLOBAL: '/dev/null',
       GIT_ALLOW_PROTOCOL: this.#allowedProtocols,
       GIT_PROTOCOL_FROM_USER: '0',
+      GIT_NO_REPLACE_OBJECTS: '1',
       GIT_CONFIG_COUNT: String(config.length),
     };
     for (const key of PASSTHROUGH_ENV) {
@@ -149,7 +154,7 @@ export class GitCli {
             ),
           );
         }
-        reject(classifyGitFailure(stderr));
+        reject(classifyGitFailure(`${scrubString(stdout, { secrets })}\n${stderr}`));
       });
     });
   }
@@ -163,6 +168,12 @@ export function classifyGitFailure(stderr: string): GitOperationError {
     .slice(-3)
     .join(' ')
     .slice(0, 400);
+  if (/\[rejected\]|\[remote rejected\]|non-fast-forward|pre-receive hook declined/i.test(text)) {
+    return new GitOperationError(
+      'rejected',
+      'The remote rejected the push. Fetch and review the branch before retrying.',
+    );
+  }
   if (/remote branch .* not found/i.test(text)) {
     return new GitOperationError('invalid', 'That branch does not exist on the remote.');
   }

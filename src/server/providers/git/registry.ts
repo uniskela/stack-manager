@@ -55,8 +55,9 @@ export class GitProviderRegistry {
   }
 }
 
-export function createDefaultGitProviderRegistry(git: GitCli): GitProviderRegistry {
+export function createDefaultGitProviderRegistry(git: GitCli, reposDir: string): GitProviderRegistry {
   const registry = new GitProviderRegistry();
-  for (const descriptor of BUILTIN_GIT_PROVIDERS) registry.register(new HttpGitProvider(descriptor, git));
+  for (const descriptor of BUILTIN_GIT_PROVIDERS)
+    registry.register(new HttpGitProvider(descriptor, git, undefined, reposDir));
   return registry;
 }

@@ -1,7 +1,7 @@
 /**
  * GitProvider capability interface (docs/providers/GIT_PROVIDER.md).
  *
- * PR #2 implements the connection/clone/fetch/metadata subset. Commit/push (PR #4) and webhook
+ * Connection, source reads and isolated commit/push operations. Webhook
  * verification/parsing (PR #5) extend this interface later; `capabilities` advertises optional
  * forge features so core code never branches on a specific forge name.
  */
@@ -53,11 +53,76 @@ export interface GitProvider {
 
   /** Remote-tracking branch names in an existing clone. */
   listBranches(cloneDir: string): Promise<string[]>;
+
+  /** Fetches and compares the retained local mutation head with the tracked remote branch. */
+  inspectBranch(input: GitBranchInput): Promise<GitBranchState>;
+
+  /** Creates a commit in an isolated worktree; never edits or deletes database drafts. */
+  commit(input: GitCommitInput): Promise<GitCommitMetadata>;
+
+  /** Pushes exactly the retained commit, after checking the freshly fetched remote head. No force. */
+  push(input: GitPushInput): Promise<GitCommitMetadata>;
+
+  getCommit(cloneDir: string, commitSha: string): Promise<GitCommitMetadata>;
+}
+
+export interface GitBranchInput {
+  cloneDir: string;
+  branch: string;
+  /** Already host-policy checked by the application, as for syncClone. HTTPS without credentials. */
+  remoteUrl: string;
+  auth: GitHttpAuth | null;
+  signal?: AbortSignal;
+}
+
+export interface GitBranchState {
+  branch: string;
+  localHeadSha: string;
+  remoteHeadSha: string;
+  ahead: number;
+  behind: number;
+}
+
+export interface GitFileChange {
+  /** Canonical repo-relative path; secret paths, symlinks and submodules are refused. */
+  path: string;
+  /** null deletes an existing file. */
+  content: string | null;
+  /** Expected current blob; null requires the path to be absent. Mirrors SourceDraft.baseBlobSha. */
+  baseBlobSha: string | null;
+}
+
+export interface GitIdentity {
+  name: string;
+  email: string;
+}
+
+export interface GitCommitInput extends GitBranchInput {
+  expectedHeadSha: string;
+  changes: readonly GitFileChange[];
+  message: string;
+  author: GitIdentity;
+}
+
+export interface GitPushInput extends GitBranchInput {
+  commitSha: string;
+  expectedRemoteSha: string;
+}
+
+export interface GitCommitMetadata {
+  sha: string;
+  parents: string[];
+  message: string;
+  author: GitIdentity;
+  committer: GitIdentity;
+  authoredAt: string;
+  committedAt: string;
 }
 
 export class GitOperationError extends Error {
   constructor(
-    readonly kind: 'auth' | 'not_found' | 'network' | 'timeout' | 'invalid' | 'unknown',
+    readonly kind:
+      'auth' | 'not_found' | 'network' | 'timeout' | 'invalid' | 'conflict' | 'busy' | 'rejected' | 'unknown',
     message: string,
   ) {
     super(message);
