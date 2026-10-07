@@ -10,10 +10,14 @@ It is **not** a Portainer / Komodo / Arcane / Docker UI replacement. Those syste
 
 ## Status
 
-Early development (0.x). Available today: first-run setup, workspaces, encrypted credentials, Git repository
-connections (GitHub / Gitea / Forgejo over HTTPS), stacks, a VS Code-style editor with drafts and Compose validation,
-stack docs, an environment inventory and change review. Committing drafts to Git and deploying only the affected
-stacks come next; see the [roadmap](docs/plans/MVP_PLAN.md).
+Early development (0.x).
+
+**Already available:** first-run setup, workspaces, encrypted credentials, Git repository connections
+(GitHub / Gitea / Forgejo over HTTPS), stacks, dashboard, organised Stacks list, settings, a VS Code-style editor with
+drafts and Compose validation, stack docs, an environment inventory, and change review (diffs).
+
+**Coming in v0.5.0:** committing drafts, safe push, and Git history. Deployment routing (deploy only the stacks a
+commit changed) follows the Git workflow phase; see the [roadmap](docs/plans/MVP_PLAN.md).
 
 **Documentation:** [uniskela.com/docs/stack-manager](https://uniskela.com/docs/stack-manager/) (source in
 [docs/](docs/index.md)).

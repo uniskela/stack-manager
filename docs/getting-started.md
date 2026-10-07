@@ -91,7 +91,7 @@ can't be opened or edited.
 Drafts are stored in stack-manager's database and never leave the server. If the file changes in Git after you start a
 draft, the editor warns you, so you don't overwrite someone else's change unknowingly.
 
-Committing and pushing drafts to Git is the next feature on the [roadmap](plans/MVP_PLAN.md).
+Committing drafts, safe push and Git history ship in v0.5.0; see the [roadmap](plans/MVP_PLAN.md).
 
 ## 5. Files outside stacks
 
