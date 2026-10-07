@@ -1,8 +1,7 @@
 # Phased MVP implementation plan
 
-PR #1 (documentation), PR #2 (application foundation) and PR #3 (source workspace) are merged, including the later
-dashboard / organised Stacks / settings slice. **PR #4 (Git workflow) is the active phase.** Subsequent PRs implement
-the product. Boundaries may shift for strong technical reasons; avoid giant cross-cutting PRs.
+PR #1 (documentation), PR #2 (application foundation), PR #3 (source workspace) and PR #4 (Git workflow, released as
+v0.5.0) are complete. **PR #5 (deployment routing) is the next active phase.** Subsequent PRs implement the product. Boundaries may shift for strong technical reasons; avoid giant cross-cutting PRs.
 
 ## PR sequence
 
@@ -56,19 +55,27 @@ the product. Boundaries may shift for strong technical reasons; avoid giant cros
 - [x] Unit, integration and Playwright + axe tests (desktop/mobile, light/dark)
 - Deferred to PR #4: commit/push of drafts, conflict resolution, stack-scoped history. Deferred: `docker compose config` validation (needs a Docker binary), docs globs per stack, command palette
 
-## PR #4 exit criteria
+## PR #4 exit criteria (complete, v0.5.0)
 
-Server/API pieces already on `main` (PRs #29, #31, #32): isolated commit/push foundation, draft commit + safe push
-workflow APIs, and stack-scoped history. Remaining product work for this phase is the Changes UI and any follow-up
-hardening called out in [GIT_WORKFLOW.md](../GIT_WORKFLOW.md). Do not treat commit/push as user-complete until those
-UI paths ship; do not pull PR #5+ forward.
+Shipped across repository PRs #29, #31, #32, #34, #35, #36 and #37. User guide and API contract:
+[GIT_WORKFLOW.md](../GIT_WORKFLOW.md).
 
 - [x] Hardened Git mutation foundation (`inspectBranch` / `commit` / `push` / `getCommit`; no force push)
 - [x] Application commit + safe-push workflow API with validation gates and conflict protection
+- [x] Per-user Git author identity under Settings → Account; commits are blocked without it
 - [x] Stack-scoped (and repository) history API at the fetched source snapshot
-- [ ] Changes UI: select drafts, commit message, acknowledge warnings, commit and explicit push/retry
-- [ ] Optional forge branch/PR flow (timeboxed; flag if large)
-- Deferred: automatic draft cleanup after push, in-app merge/rebase, SSH remotes
+- [x] Changes UI: select drafts, commit message, acknowledge warnings, commit and explicit push/retry
+- [x] Stack History tab with commit detail and diffs; draft counts on the Changes tab and stack header
+- [x] Workflow-boundary tests: draft → commit → push → fetch → history, audit, credential-free failures
+- Not shipped (optional): forge branch/PR flow
+- Deferred: automatic draft cleanup after push, "update draft to the current version", in-app discard of an
+  unpushed local commit, in-app merge/rebase or conflict editor, SSH remotes
+
+## PR #5 (next): deployment routing
+
+Next active phase. Scope as in the table above: `DeploymentProvider` with Portainer and generic webhooks, a forge
+webhook receiver, relevance rules, selective deploy, idempotency and audit. Do not expand it into Portainer management
+UI.
 
 ## Dependency graph
 

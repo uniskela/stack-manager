@@ -210,7 +210,8 @@ test('remote-changed push keeps work and offers fetch', async ({ page }) => {
 
   await expect(page.getByText('The remote branch changed since your copy was last updated.')).toBeVisible();
   await expect(page.getByText(/drafts are still safe/i)).toBeVisible();
-  await expect(page.getByText(/does not reconcile a retained commit/i)).toBeVisible();
+  await expect(page.getByText(/never force pushes/i)).toBeVisible();
+  await expect(page.getByText(/aaaaaaa was not pushed/)).toBeVisible();
   await expect(page.getByRole('link', { name: 'Open repository to fetch' })).toBeVisible();
   await expectWorkPreserved(page);
   await expect(page).toHaveTitle(/Changes/);

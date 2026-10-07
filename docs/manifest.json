@@ -28,6 +28,13 @@
       "kind": "doc"
     },
     {
+      "source": "docs/GIT_WORKFLOW.md",
+      "slug": "git-workflow",
+      "title": "Git workflow: commit, push and history",
+      "group": "Start here",
+      "kind": "doc"
+    },
+    {
       "source": "docs/SELF_HOSTING.md",
       "slug": "self-hosting",
       "title": "Self-hosting reference",
@@ -66,13 +73,6 @@
       "source": "docs/STACK_DISCOVERY.md",
       "slug": "stack-discovery",
       "title": "Stack discovery",
-      "group": "Project",
-      "kind": "doc"
-    },
-    {
-      "source": "docs/GIT_WORKFLOW.md",
-      "slug": "git-workflow",
-      "title": "Git workflow and API",
       "group": "Project",
       "kind": "doc"
     },

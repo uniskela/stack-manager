@@ -198,7 +198,7 @@ export const stacks = sqliteTable(
   ],
 );
 
-/** PR #3: pending edits to repository files. PR #4 turns them into commits. */
+/** Pending edits to repository files; the Git workflow commits selected drafts without deleting them. */
 export const sourceDrafts = sqliteTable(
   'source_drafts',
   {

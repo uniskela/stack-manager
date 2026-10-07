@@ -10,21 +10,23 @@ export const BUILTIN_GIT_PROVIDERS: readonly GitProviderDescriptor[] = [
     displayName: 'GitHub',
     exampleUrl: 'https://github.com/your-org/compose-stacks.git',
     tokenHelp:
-      'Fine-grained token with Contents: read (read-only) or read and write (for commit/push later).',
+      'Fine-grained token with Contents: read (browse and draft) or read and write (also push commits).',
     capabilities: { pullRequests: false, commitStatuses: false, webhooks: false },
   },
   {
     type: 'gitea',
     displayName: 'Gitea',
     exampleUrl: 'https://gitea.example.com/your-org/compose-stacks.git',
-    tokenHelp: 'Access token with repository read scope (write scope for commit/push later).',
+    tokenHelp:
+      'Access token with repository read scope (browse and draft), plus write scope to push commits.',
     capabilities: { pullRequests: false, commitStatuses: false, webhooks: false },
   },
   {
     type: 'forgejo',
     displayName: 'Forgejo',
     exampleUrl: 'https://forgejo.example.com/your-org/compose-stacks.git',
-    tokenHelp: 'Access token with repository read scope (write scope for commit/push later).',
+    tokenHelp:
+      'Access token with repository read scope (browse and draft), plus write scope to push commits.',
     capabilities: { pullRequests: false, commitStatuses: false, webhooks: false },
   },
 ];

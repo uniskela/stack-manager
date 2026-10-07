@@ -7,7 +7,7 @@ access to the Docker socket.
 
 - Docker with the Compose plugin, on a linux/amd64 host
 - A Git repository with your Compose files on GitHub, Gitea or Forgejo, reachable over HTTPS
-- An access token for that repository (read access for source/drafts; write access for the push API)
+- An access token for that repository (read access to browse and draft; write access to push commits)
 - Ideally a reverse proxy that terminates TLS, such as Caddy, Traefik or Nginx Proxy Manager
 
 ## 1. Get the Compose file
@@ -45,8 +45,8 @@ Optional settings you are likely to want:
 - `STACK_MANAGER_COOKIE_SECURE=false`: only for testing over plain HTTP on localhost
 
 After sign-in, set your Git author name and email under **Settings → Account**. Commits created by Stack Manager
-use that identity; they do not grant repository permissions. See the
-[Git workflow API contract](GIT_WORKFLOW.md#application-api-contract-v050).
+use that identity; it does not grant repository permissions. See [Git workflow](GIT_WORKFLOW.md) for committing,
+pushing and history.
 
 Every variable is described in the [self-hosting reference](SELF_HOSTING.md#configuration).
 

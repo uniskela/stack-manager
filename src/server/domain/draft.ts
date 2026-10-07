@@ -1,6 +1,6 @@
 /**
- * An unsaved-to-Git edit of one repository file (PR #3). Drafts live in the database until PR #4 turns
- * them into commits. They are keyed by repository + path (not stack) because stacks may overlap.
+ * An unsaved-to-Git edit of one repository file. Drafts live in the database; the Git workflow commits
+ * selected drafts but never deletes them. They are keyed by repository + path (not stack) because stacks may overlap.
  */
 export interface SourceDraft {
   id: string;

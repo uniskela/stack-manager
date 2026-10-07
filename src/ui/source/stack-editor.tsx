@@ -85,7 +85,7 @@ function tabFromFile(file: FileView): Tab {
 
 /**
  * VS Code-style editor for one stack (or a whole repository): explorer, tabs, CodeMirror, live problems and a status bar.
- * Saving stores a draft on the server (PR #3); committing and pushing drafts arrives in PR #4.
+ * Saving stores a draft on the server; drafts are committed and pushed from the Changes tab.
  */
 export function StackEditor(props: StackEditorProps) {
   const router = useRouter();
@@ -449,8 +449,8 @@ export function StackEditor(props: StackEditorProps) {
         {active?.file?.draft?.outdated ? (
           <div className="editor-notice">
             <Alert tone="warn" title="This file changed upstream">
-              The committed version was updated after this draft was started. Review the draft before
-              committing.
+              The committed version was updated after this draft was started, so it can&apos;t be committed.
+              Copy what you need, discard the draft and make the edit again on the current version.
             </Alert>
           </div>
         ) : null}
@@ -460,7 +460,7 @@ export function StackEditor(props: StackEditorProps) {
             <div>
               <p>Select a file in the explorer to start editing.</p>
               <p className="fine-print">
-                Edits are saved as drafts. Commit and push arrive in the next update.
+                Edits are saved as drafts. Review, commit and push them on the Changes tab.
               </p>
             </div>
           </div>

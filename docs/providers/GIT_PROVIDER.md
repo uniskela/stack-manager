@@ -66,7 +66,7 @@ One repository webhook → stack-manager:
 - Never log remote URLs with embedded tokens
 - Support read-only vs write scopes; UI should explain required scopes for commit/push vs webhook-only
 
-## Implementation status (Git workflow foundation)
+## Implementation status (v0.5.0)
 
 - `GitProvider` (`src/server/providers/git/types.ts`) currently exposes the foundation subset:
   `testConnection` (via `git ls-remote --symref`), `syncClone` (atomic clone into a temp dir then rename, or
@@ -81,8 +81,12 @@ One repository webhook → stack-manager:
 - `webhookCredentialId` exists in the schema and stays null until PR #5.
 - The local clone is a normal read clone, not a bare mirror. SQLite drafts remain canonical. Commits use detached temporary worktrees with isolated indexes and no checkout; pending heads are retained under private refs.
 - All mutation/fetch operations share an exclusive repository lock. Production adapters receive the allowed repositories directory from the composition root; mutation paths and Git metadata cannot escape it. Remote host policy remains the application caller's responsibility, as for sync; the provider additionally validates HTTPS URLs without embedded credentials.
+- Push never uses force, mirror or tag options. Pushing requires write access in the token; the UI explains a refused
+  push without returning provider output.
+- Forge pull requests and commit statuses are not implemented (`capabilities.pullRequests` / `commitStatuses` are
+  `false`); the v0.5.0 workflow commits directly to the tracked branch.
 - Commit inputs map selected drafts to `{ path, content, baseBlobSha }` with an expected branch HEAD and author identity; `content: null` supports controlled deletion. Push requires an exact retained commit and expected remote SHA. Neither operation touches draft persistence.
-- See [Git workflow](../GIT_WORKFLOW.md#implemented-provider-foundation-pr-4) for remote protection, cleanup and crash-recovery limits.
+- See [Git workflow](../GIT_WORKFLOW.md#implementation-overview-v050) for remote protection, cleanup and crash-recovery limits.
 
 ## Non-goals
 

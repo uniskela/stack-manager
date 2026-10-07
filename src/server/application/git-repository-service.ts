@@ -67,7 +67,7 @@ export interface GitRepositoryServiceOptions {
 
 /**
  * Repository connections: validation, access tests, clone/fetch under the data directory and
- * branch metadata. Commit/push UX is PR #4; this service only keeps a local mirror current.
+ * branch metadata. Commit/push lives in GitWorkflowService; this service only keeps a local mirror current.
  */
 export class GitRepositoryService {
   constructor(

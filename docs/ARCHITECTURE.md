@@ -117,7 +117,7 @@ Self-hosted env examples (names indicative):
 
 No design around ephemeral serverless filesystem.
 
-## Code layout (implemented in PR #2)
+## Code layout (implemented in PR #2, extended through v0.5.0)
 
 ```text
 src/
@@ -126,16 +126,19 @@ src/
     api/…/route.ts          # every handler wrapped by defineRoute (auth default-deny, origin check, zod)
     styles/                 # tokens.css → base.css → components.css → shell.css (no inline styles; lint-enforced)
   shared/source/            # pure path rules, secret-file policy, Compose/YAML analysis (server + browser)
+  shared/git-*.ts           # Git workflow and history response contracts shared with the Changes/History UI
   ui/                       # UI components; may not import src/server/*
     primitives/             # Button, Alert, Section, PageHeader, Breadcrumbs, EmptyState, ConfirmButton, StatusPill
     shell/                  # signed-in app shell: sidebar (wide) / top bar + drawer (narrow)
-    source/                 # stack editor (CodeMirror 6), file tree, docs, changes, discovery
+    source/                 # stack editor (CodeMirror 6), file tree, docs, changes (commit/push), history, discovery
   server/
     config/                 # env parsing and validation
     domain/                 # entities, validation, errors — no framework/persistence imports
     application/            # services + persistence ports (ports.ts); depend on ports, not Drizzle
+                            #   (GitWorkflowService: draft commit/push; GitHistoryService: stack-scoped history)
     persistence/            # Drizzle schema; sqlite/ adapters implement the ports
-    providers/git/          # GitProvider capability interface, registry, hardened git CLI runner
+    providers/git/          # GitProvider interface, registry, hardened git CLI, isolated mutations, repository lock,
+                            #   history reader
     jobs/                   # lease-based in-process worker (ADR 0002)
     security/               # AES-256-GCM secret box, Argon2id, session tokens, redaction, path + network policy
     observability/          # structured JSON logger (redacted)

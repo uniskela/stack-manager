@@ -12,12 +12,17 @@ It is **not** a Portainer / Komodo / Arcane / Docker UI replacement. Those syste
 
 Early development (0.x).
 
-**Already available:** first-run setup, workspaces, encrypted credentials, Git repository connections
+**Available today:** first-run setup, workspaces, encrypted credentials, Git repository connections
 (GitHub / Gitea / Forgejo over HTTPS), stacks, dashboard, organised Stacks list, settings, a VS Code-style editor with
-drafts and Compose validation, stack docs, an environment inventory, and change review (diffs).
+drafts and Compose validation, stack docs and an environment inventory.
 
-**Coming in v0.5.0:** committing drafts, safe push, and Git history. Deployment routing (deploy only the stacks a
-commit changed) follows the Git workflow phase; see the [roadmap](docs/plans/MVP_PLAN.md).
+**New in v0.5.0, the Git workflow:** review drafts on the Changes tab, commit them with your own Git identity
+(validation errors block, warnings need acknowledgement), and push safely to the tracked branch. Stack Manager never
+force pushes, stops when the remote branch has changed, and keeps your drafts whatever happens. Each stack has a
+History tab with the commits and diffs that touched it. See [Git workflow](docs/GIT_WORKFLOW.md).
+
+**Next:** deployment routing, which deploys only the stacks a commit changed through Portainer or a generic
+webhook. See the [roadmap](docs/plans/MVP_PLAN.md).
 
 **Documentation:** [uniskela.com/docs/stack-manager](https://uniskela.com/docs/stack-manager/) (source in
 [docs/](docs/index.md)).
@@ -26,6 +31,7 @@ commit changed) follows the Git workflow phase; see the [roadmap](docs/plans/MVP
 | --- | --- |
 | [Installation](docs/installation.md) | Run the published container image with Docker Compose |
 | [Getting started](docs/getting-started.md) | First run, connecting a repository, stacks and the editor |
+| [Git workflow](docs/GIT_WORKFLOW.md) | Commit, push, remote changes and stack history |
 | [Self-hosting reference](docs/SELF_HOSTING.md) | Configuration, data directory, reverse proxy, upgrades |
 | [Product](docs/PRODUCT.md) / [Architecture](docs/ARCHITECTURE.md) | What it is (and is not), and how it is built |
 | [Docs index](docs/INDEX.md) | Every design, planning and operations document |
