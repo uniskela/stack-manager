@@ -1,6 +1,8 @@
 # Phased MVP implementation plan
 
-PR #1 (documentation) and PR #2 (application foundation) are merged. **PR #3 (source workspace) is the active phase.** Subsequent PRs implement the product. Boundaries may shift for strong technical reasons; avoid giant cross-cutting PRs.
+PR #1 (documentation), PR #2 (application foundation) and PR #3 (source workspace) are merged, including the later
+dashboard / organised Stacks / settings slice. **PR #4 (Git workflow) is the active phase.** Subsequent PRs implement
+the product. Boundaries may shift for strong technical reasons; avoid giant cross-cutting PRs.
 
 ## PR sequence
 
@@ -53,6 +55,20 @@ PR #1 (documentation) and PR #2 (application foundation) are merged. **PR #3 (so
 - [x] Changes tab: unified diff of drafts against their base, discard
 - [x] Unit, integration and Playwright + axe tests (desktop/mobile, light/dark)
 - Deferred to PR #4: commit/push of drafts, conflict resolution, stack-scoped history. Deferred: `docker compose config` validation (needs a Docker binary), docs globs per stack, command palette
+
+## PR #4 exit criteria
+
+Server/API pieces already on `main` (PRs #29, #31, #32): isolated commit/push foundation, draft commit + safe push
+workflow APIs, and stack-scoped history. Remaining product work for this phase is the Changes UI and any follow-up
+hardening called out in [GIT_WORKFLOW.md](../GIT_WORKFLOW.md). Do not treat commit/push as user-complete until those
+UI paths ship; do not pull PR #5+ forward.
+
+- [x] Hardened Git mutation foundation (`inspectBranch` / `commit` / `push` / `getCommit`; no force push)
+- [x] Application commit + safe-push workflow API with validation gates and conflict protection
+- [x] Stack-scoped (and repository) history API at the fetched source snapshot
+- [ ] Changes UI: select drafts, commit message, acknowledge warnings, commit and explicit push/retry
+- [ ] Optional forge branch/PR flow (timeboxed; flag if large)
+- Deferred: automatic draft cleanup after push, in-app merge/rebase, SSH remotes
 
 ## Dependency graph
 

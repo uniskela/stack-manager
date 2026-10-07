@@ -33,10 +33,10 @@ stack-manager looks after the Git source they are deployed from.
 ## Status
 
 stack-manager is in early development (0.x). Available today: sign-in, workspaces, encrypted credentials, repository
-connections, stacks, the editor with drafts, docs, the environment inventory and change review.
+connections, stacks, dashboard and settings, the editor with drafts, docs, the environment inventory and change review.
 
-Next on the [roadmap](plans/MVP_PLAN.md): committing and pushing drafts to Git, then deploying only the stacks a commit
-changed (through Portainer and others), with optional read-only runtime feedback.
+Coming in v0.5.0: committing drafts, safe push and Git history. After that on the [roadmap](plans/MVP_PLAN.md):
+deploying only the stacks a commit changed (through Portainer and others), then optional read-only runtime feedback.
 
 ## Documentation
 

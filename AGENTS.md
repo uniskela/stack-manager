@@ -10,9 +10,10 @@ This app manages Git-backed **source/configuration** for Compose stacks. It is *
 
 ## Current phase
 
-**PR #3 — source workspace** (stacks, discovery, file tree, CodeMirror editor, drafts, validation, docs,
-environment inventory, change review). PR #2 (foundation) is done. Next up: **PR #4 — Git workflow** (turn drafts
-into commits, push, conflict protection). Do not build features from later PRs ahead of their phase.
+**PR #4 — Git workflow** is the active product phase (commit, safe push, conflict protection, stack-scoped history,
+Changes UI). PR #2 (application foundation) and PR #3 (source workspace) are done, including the dashboard, organised
+Stacks list and settings split. Do not build deployment routing, secrets providers, runtime watch or PWA work ahead of
+their phases.
 
 See [docs/plans/MVP_PLAN.md](docs/plans/MVP_PLAN.md) and the code layout in
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#code-layout-implemented-in-pr-2).

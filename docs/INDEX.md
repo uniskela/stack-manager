@@ -23,6 +23,7 @@ are listed in [manifest.json](manifest.json) (see [../.github/docs-sync.md](../.
 | [plans/UI_UX_PLAN.md](plans/UI_UX_PLAN.md) | UI/UX review of PR #2 and phased improvement plan |
 | [plans/2026-09-30-dashboard-stacks-settings-design.md](plans/2026-09-30-dashboard-stacks-settings-design.md) | Dashboard home, organised stacks, settings split (slice A) |
 | [plans/2026-09-30-dashboard-stacks-settings-implementation.md](plans/2026-09-30-dashboard-stacks-settings-implementation.md) | Implementation plan for slice A (nav, dashboard, stacks, settings, account) |
+| [plans/2026-09-30-stacks-ui-audit-and-plan.md](plans/2026-09-30-stacks-ui-audit-and-plan.md) | Stacks list UX audit and S1–S5 plan (implemented) |
 
 ## Domain and providers
 
