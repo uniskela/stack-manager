@@ -7,6 +7,7 @@ import { AuthService } from '@/server/application/auth-service';
 import { CredentialService } from '@/server/application/credential-service';
 import { GitRepositoryService, REPOSITORY_SYNC_JOB } from '@/server/application/git-repository-service';
 import { GitWorkflowService } from '@/server/application/git-workflow-service';
+import { GitHistoryService } from '@/server/application/git-history-service';
 import { JobQueue } from '@/server/application/job-queue';
 import type { Repositories } from '@/server/application/ports';
 import { SourceService } from '@/server/application/source-service';
@@ -26,6 +27,7 @@ import { createSqliteRepositories } from '@/server/persistence/sqlite/repositori
 import { GitCli } from '@/server/providers/git/git-cli';
 import { createDefaultGitProviderRegistry, type GitProviderRegistry } from '@/server/providers/git/registry';
 import { GitSourceReader } from '@/server/providers/git/source-reader';
+import { GitHistoryReader } from '@/server/providers/git/history-reader';
 import type { Resolver } from '@/server/security/network-policy';
 import { SecretBox } from '@/server/security/secret-box';
 import { safeErrorMessage } from '@/server/security/redact';
@@ -48,6 +50,7 @@ export interface Container {
   stacks: StackService;
   source: SourceService;
   gitWorkflow: GitWorkflowService;
+  gitHistory: GitHistoryService;
   jobs: JobQueue;
   worker: JobWorker;
   ping(): boolean;
@@ -123,6 +126,11 @@ export function createContainer(config: AppConfig, overrides: ContainerOverrides
     const reader = new GitSourceReader(git);
     const stacks = new StackService(repos.stacks, repositories, reader, audit, clock, newId);
     const source = new SourceService(repositories, reader, repos.drafts, repos.stacks, audit, clock, newId);
+    const gitHistory = new GitHistoryService(
+      repositories,
+      new GitHistoryReader(git, config.reposDir),
+      reader,
+    );
     const gitWorkflow = new GitWorkflowService(
       repositories,
       repos.drafts,
@@ -183,6 +191,7 @@ export function createContainer(config: AppConfig, overrides: ContainerOverrides
       stacks,
       source,
       gitWorkflow,
+      gitHistory,
       jobs,
       worker,
       ping: () => pingSqlite(handle.db),
