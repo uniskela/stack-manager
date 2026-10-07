@@ -35,7 +35,8 @@ stack-manager looks after the Git source they are deployed from.
 stack-manager is in early development (0.x). Available today: sign-in, workspaces, encrypted credentials, repository
 connections, stacks, dashboard and settings, the editor with drafts, docs, the environment inventory and change review.
 
-Coming in v0.5.0: committing drafts, safe push and Git history. After that on the [roadmap](plans/MVP_PLAN.md):
+Stack-scoped Git history is on each stack's History tab. Draft commit and safe push are on Changes. Next on the
+[roadmap](plans/MVP_PLAN.md):
 deploying only the stacks a commit changed (through Portainer and others), then optional read-only runtime feedback.
 
 ## Documentation

@@ -81,6 +81,7 @@ Each stack has these tabs:
 | **Docs** | Read the stack's Markdown files rendered (README first), follow links between them and edit them as drafts. |
 | **Environment** | Variables the Compose file references, whether `.env.example` documents them, env files it expects, and values that look like hard-coded secrets. Values are never shown. |
 | **Changes** | Every draft as a line-by-line diff against the fetched commit. Select files, commit with your Account Git identity, and push when ready. Discard drafts you don't want. |
+| **History** | Commits that touched this stack at the last fetched snapshot. Open a commit to inspect the scoped file diffs. |
 | **Settings** | Rename the stack, change its Compose file or remove it (files and drafts are kept). |
 
 Files that look like secrets (`.env`, private keys, certificates, anything in a `secrets/` folder) are listed but

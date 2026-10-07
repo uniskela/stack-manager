@@ -1,4 +1,4 @@
-import { Folder, FolderGit2, GitBranch, GitCommitHorizontal, Hourglass } from 'lucide-react';
+import { Folder, FolderGit2, GitBranch, GitCommitHorizontal, Hourglass, PencilLine } from 'lucide-react';
 import Link from 'next/link';
 import { getContainer } from '@/server/container';
 import { EmptyState } from '@/ui/primitives/empty-state';
@@ -24,6 +24,7 @@ export default async function StackLayout({
     stacks.listForRepository(workspaceId, stack.repository.id),
   ]);
   const base = `/w/${workspaceId}/stacks/${stackId}`;
+  const draftLabel = `${drafts} draft${drafts === 1 ? '' : 's'}`;
 
   return (
     <div className="wide-page">
@@ -37,6 +38,18 @@ export default async function StackLayout({
             />
           }
           title={stack.name}
+          status={
+            drafts > 0 ? (
+              <Link
+                href={`${base}/changes`}
+                className="draft-badge"
+                aria-label={`${draftLabel}, open Changes`}
+              >
+                <PencilLine className="icon" aria-hidden="true" />
+                {draftLabel}
+              </Link>
+            ) : null
+          }
           actions={
             <StackSwitcher
               workspaceId={workspaceId}
