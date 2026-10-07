@@ -212,6 +212,9 @@ test('remote-changed push keeps work and offers fetch', async ({ page }) => {
   await expect(page.getByText(/drafts are still safe/i)).toBeVisible();
   await expect(page.getByText(/never force pushes/i)).toBeVisible();
   await expect(page.getByText(/aaaaaaa was not pushed/)).toBeVisible();
+  await expect(
+    page.getByText(/can't merge or rebase yet, so this work needs to be brought across by hand/i),
+  ).toBeVisible();
   await expect(page.getByRole('link', { name: 'Open repository to fetch' })).toBeVisible();
   await expectWorkPreserved(page);
   await expect(page).toHaveTitle(/Changes/);
@@ -335,4 +338,5 @@ test('mobile: changes commit layout and accessibility', async ({ page }) => {
   await expectWorkPreserved(page);
   await expect(page).toHaveTitle(/Changes/);
   await expectAccessible(page);
-});
+}
+);
