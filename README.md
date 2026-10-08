@@ -19,29 +19,29 @@ drafts and Compose validation, stack docs and an environment inventory.
 **New in v0.5.0, the Git workflow:** review drafts on the Changes tab, commit them with your own Git identity
 (validation errors block, warnings need acknowledgement), and push safely to the tracked branch. Stack Manager never
 force pushes, stops when the remote branch has changed, and keeps your drafts whatever happens. Each stack has a
-History tab with the commits and diffs that touched it. See [Git workflow](docs/GIT_WORKFLOW.md).
+History tab with the commits and diffs that touched it. See [Git workflow](docs/public/GIT_WORKFLOW.md).
 
 **Next:** deployment routing, which deploys only the stacks a commit changed through Portainer or a generic
-webhook. See the [roadmap](docs/plans/MVP_PLAN.md).
+webhook. See the [roadmap](docs/public/plans/MVP_PLAN.md).
 
 **Documentation:** [uniskela.com/docs/stack-manager](https://uniskela.com/docs/stack-manager/) (source in
-[docs/](docs/index.md)).
+[docs/](docs/public/index.md)).
 
 | Document | Purpose |
 | --- | --- |
-| [Installation](docs/installation.md) | Run the published container image with Docker Compose |
-| [Getting started](docs/getting-started.md) | First run, connecting a repository, stacks and the editor |
-| [Git workflow](docs/GIT_WORKFLOW.md) | Commit, push, remote changes and stack history |
-| [Self-hosting reference](docs/SELF_HOSTING.md) | Configuration, data directory, reverse proxy, upgrades |
-| [Product](docs/PRODUCT.md) / [Architecture](docs/ARCHITECTURE.md) | What it is (and is not), and how it is built |
-| [Docs index](docs/INDEX.md) | Every design, planning and operations document |
+| [Installation](docs/public/installation.md) | Run the published container image with Docker Compose |
+| [Getting started](docs/public/getting-started.md) | First run, connecting a repository, stacks and the editor |
+| [Git workflow](docs/public/GIT_WORKFLOW.md) | Commit, push, remote changes and stack history |
+| [Self-hosting reference](docs/public/SELF_HOSTING.md) | Configuration, data directory, reverse proxy, upgrades |
+| [Product](docs/public/PRODUCT.md) / [Architecture](docs/public/ARCHITECTURE.md) | What it is (and is not), and how it is built |
+| [Docs index](docs/internal/INDEX.md) | Every design, planning and operations document |
 
 
 ## Using this project with AI coding agents
 
 If you use Codex, Cursor, Claude Code, or another assistant with [Context7 MCP](https://context7.com/), you can ask it to consult Stack Manager's documentation before making changes. Context7 is optional and is separate from the application's Git and deployment integrations.
 
-> Use Context7 MCP to resolve the official documentation library for `uniskela/stack-manager` (expected ID: `/uniskela/stack-manager`), then retrieve guidance for installation, repository connections, the editor and Git workflow, environment inventory, self-hosting, and troubleshooting. Match the guidance to the Stack Manager version I'm running. If Context7 is unavailable, the lookup returns an error, the library is still indexing, or the library doesn't cover that version, consult the [maintained documentation](https://uniskela.com/docs/stack-manager/) and [source Markdown](docs/index.md) instead.
+> Use Context7 MCP to resolve the official documentation library for `uniskela/stack-manager` (expected ID: `/uniskela/stack-manager`), then retrieve guidance for installation, repository connections, the editor and Git workflow, environment inventory, self-hosting, and troubleshooting. Match the guidance to the Stack Manager version I'm running. If Context7 is unavailable, the lookup returns an error, the library is still indexing, or the library doesn't cover that version, consult the [maintained documentation](https://uniskela.com/docs/stack-manager/) and [source Markdown](docs/public/index.md) instead.
 
 ## Quick start (Docker Compose)
 
@@ -63,7 +63,7 @@ Put stack-manager behind a TLS-terminating reverse proxy and set `STACK_MANAGER_
 For plain-HTTP testing on localhost set `STACK_MANAGER_COOKIE_SECURE=false`.
 
 The container runs as a non-root user with a read-only root filesystem; all state lives in the `/data`
-volume. No Docker socket is mounted. See [docs/installation.md](docs/installation.md).
+volume. No Docker socket is mounted. See [docs/public/installation.md](docs/public/installation.md).
 
 ## Development
 

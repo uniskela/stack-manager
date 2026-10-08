@@ -516,9 +516,9 @@ Never return hashes/tokens. Session `id` in API responses is the **hashed** sess
 ### Task 8: Docs + e2e polish + final verification
 
 **Files:**
-- `docs/getting-started.md` / `docs/UX.md` — mention Dashboard home and settings tabs if user-facing
-- `docs/INDEX.md` — link this plan if not already
-- `docs/plans/2026-09-30-dashboard-stacks-settings-design.md` — status → implemented (when done)
+- `docs/public/getting-started.md` / `docs/internal/UX.md` — mention Dashboard home and settings tabs if user-facing
+- `docs/internal/INDEX.md` — link this plan if not already
+- `docs/internal/plans/2026-09-30-dashboard-stacks-settings-design.md` — status → implemented (when done)
 - `tests/e2e/shell.spec.ts` — full nav order assertion
 
 - [ ] **Step 1: Update docs for IA change**
@@ -560,7 +560,7 @@ await expect(nav.getByRole('link', { name: 'Settings' })).toBeVisible();
 
 ## Execution handoff
 
-Plan saved to `docs/plans/2026-09-30-dashboard-stacks-settings-implementation.md`.
+Plan saved to `docs/internal/plans/2026-09-30-dashboard-stacks-settings-implementation.md`.
 
 **Two execution options:**
 

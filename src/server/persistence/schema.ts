@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm';
 import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 /**
- * Physical schema for the PR #2 foundation entities and the PR #3 source workspace (docs/domain/DATA_MODEL.md).
+ * Physical schema for the PR #2 foundation entities and the PR #3 source workspace (docs/internal/domain/DATA_MODEL.md).
  *
  * Portability rules (keep a PostgreSQL port practical):
  * - ids are application-generated UUID strings, never autoincrement integers;
@@ -171,7 +171,7 @@ export const auditEvents = sqliteTable(
   ],
 );
 
-/** PR #3: explicit stacks inside a connected repository (docs/STACK_DISCOVERY.md). */
+/** PR #3: explicit stacks inside a connected repository (docs/public/STACK_DISCOVERY.md). */
 export const stacks = sqliteTable(
   'stacks',
   {

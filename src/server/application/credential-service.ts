@@ -32,7 +32,7 @@ export const credentialAad = (workspaceId: string, credentialId: string) =>
   `stack-manager:credential:v1:${workspaceId}:${credentialId}`;
 
 /**
- * Encrypted provider credentials (docs/AUTH_AND_CREDENTIALS.md).
+ * Encrypted provider credentials (docs/public/AUTH_AND_CREDENTIALS.md).
  *
  * Public methods return `CredentialView` only — metadata and a masked hint. Plaintext is available
  * solely through `withPlaintext`, which is used server-side for connection tests and Git operations.

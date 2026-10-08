@@ -14,7 +14,7 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  // Self-hosted, long-running Node server (see docs/adr/0004-modular-monolith.md).
+  // Self-hosted, long-running Node server (see docs/internal/adr/0004-modular-monolith.md).
   output: 'standalone',
   poweredByHeader: false,
   reactStrictMode: true,

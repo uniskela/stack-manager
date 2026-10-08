@@ -1,26 +1,33 @@
 # Documentation index
 
-Architecture, planning and operations docs for **stack-manager**. User documentation starts at [index.md](index.md)
-and is published at [uniskela.com/docs/stack-manager](https://uniskela.com/docs/stack-manager/); the pages it publishes
-are listed in [manifest.json](manifest.json) (see [../.github/docs-sync.md](../.github/docs-sync.md)).
+Architecture, planning and operations docs for **stack-manager**. User documentation lives in
+[public/](../public/index.md) and is published at
+[uniskela.com/docs/stack-manager](https://uniskela.com/docs/stack-manager/); the pages it publishes
+are listed in [manifest.json](../manifest.json) (see [docs-sync](../../.github/docs-sync.md)).
+
+| Tree | What belongs there |
+| --- | --- |
+| [public/](../public/index.md) | Setup, deployment, backups, security and other user-facing references |
+| internal/ (this file) | Implementation plans, architecture decisions and maintainer references |
+| [agents/](../agents/README.md) | Agent notes. Canonical instructions stay in [AGENTS.md](../../AGENTS.md) |
 
 ## User guide
 
 | Doc | Summary |
 | --- | --- |
-| [index.md](index.md) | Overview: what stack-manager does and does not do |
-| [installation.md](installation.md) | Docker Compose install, image tags, upgrades |
-| [getting-started.md](getting-started.md) | First run, repositories, stacks, editor, drafts, commit and push |
-| [GIT_WORKFLOW.md](GIT_WORKFLOW.md) | Commit, safe push, remote changes, stack history; API reference |
+| [index.md](../public/index.md) | Overview: what stack-manager does and does not do |
+| [installation.md](../public/installation.md) | Docker Compose install, image tags, upgrades |
+| [getting-started.md](../public/getting-started.md) | First run, repositories, stacks, editor, drafts, commit and push |
+| [GIT_WORKFLOW.md](../public/GIT_WORKFLOW.md) | Commit, safe push, remote changes, stack history; API reference |
 
 ## Product and architecture
 
 | Doc | Summary |
 | --- | --- |
-| [PRODUCT.md](PRODUCT.md) | Definition, hierarchy, non-goals, success criteria |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | Modular monolith, providers, request flows |
+| [PRODUCT.md](../public/PRODUCT.md) | Definition, hierarchy, non-goals, success criteria |
+| [ARCHITECTURE.md](../public/ARCHITECTURE.md) | Modular monolith, providers, request flows |
 | [PRIOR_ART.md](PRIOR_ART.md) | Portainer, Komodo, Arcane, Dockge, stackwise, etc. |
-| [plans/MVP_PLAN.md](plans/MVP_PLAN.md) | PR #2–#8 implementation sequence |
+| [plans/MVP_PLAN.md](../public/plans/MVP_PLAN.md) | Published roadmap: PR #2–#8 sequence |
 | [plans/UI_UX_PLAN.md](plans/UI_UX_PLAN.md) | UI/UX review of PR #2 and phased improvement plan |
 | [plans/2026-09-30-dashboard-stacks-settings-design.md](plans/2026-09-30-dashboard-stacks-settings-design.md) | Dashboard home, organised stacks, settings split (slice A) |
 | [plans/2026-09-30-dashboard-stacks-settings-implementation.md](plans/2026-09-30-dashboard-stacks-settings-implementation.md) | Implementation plan for slice A (nav, dashboard, stacks, settings, account) |
@@ -35,22 +42,22 @@ are listed in [manifest.json](manifest.json) (see [../.github/docs-sync.md](../.
 | [providers/DEPLOYMENT_PROVIDER.md](providers/DEPLOYMENT_PROVIDER.md) | Deploy-only providers |
 | [providers/RUNTIME_PROVIDER.md](providers/RUNTIME_PROVIDER.md) | Optional read-only runtime |
 | [providers/SECRET_PROVIDER.md](providers/SECRET_PROVIDER.md) | Secret metadata / references |
-| [STACK_DISCOVERY.md](STACK_DISCOVERY.md) | Repository → stack scopes |
+| [STACK_DISCOVERY.md](../public/STACK_DISCOVERY.md) | Repository → stack scopes |
 | [DEPLOYMENT_ROUTING.md](DEPLOYMENT_ROUTING.md) | Path relevance and push router |
-| [GIT_WORKFLOW.md](GIT_WORKFLOW.md) | Edit → validate → commit → push → history (implemented in v0.5.0) |
+| [GIT_WORKFLOW.md](../public/GIT_WORKFLOW.md) | Edit → validate → commit → push → history (implemented in v0.5.0) |
 | [DEPLOYMENT_WATCH.md](DEPLOYMENT_WATCH.md) | CI-like deploy feedback |
 
 ## Operations and UX
 
 | Doc | Summary |
 | --- | --- |
-| [SELF_HOSTING.md](SELF_HOSTING.md) | Configuration, data directory, Docker, upgrades |
-| [RELEASING.md](RELEASING.md) | CI workflows, Conventional Commits, Release Please, GHCR images |
-| [AUTH_AND_CREDENTIALS.md](AUTH_AND_CREDENTIALS.md) | Auth, encryption at rest |
-| [SECURITY.md](SECURITY.md) | Threat model and controls |
+| [SELF_HOSTING.md](../public/SELF_HOSTING.md) | Configuration, data directory, Docker, upgrades |
+| [RELEASING.md](../public/RELEASING.md) | CI workflows, Conventional Commits, Release Please, GHCR images |
+| [AUTH_AND_CREDENTIALS.md](../public/AUTH_AND_CREDENTIALS.md) | Auth, encryption at rest |
+| [SECURITY.md](../public/SECURITY.md) | Threat model and controls |
 | [UX.md](UX.md) | Desktop / mobile / PWA |
-| [BACKUP_RESTORE.md](BACKUP_RESTORE.md) | Backup and restore |
-| [TESTING.md](TESTING.md) | Testing strategy |
+| [BACKUP_RESTORE.md](../public/BACKUP_RESTORE.md) | Backup and restore |
+| [TESTING.md](../public/TESTING.md) | Testing strategy |
 
 ## Architecture decision records
 

@@ -1,6 +1,6 @@
 # UI/UX review and improvement plan
 
-Review of the UI shipped in PR #2 (application foundation), with a phased plan to make it **user friendly, efficient and professional** without breaking the product boundary ([PRODUCT.md](../PRODUCT.md), [ADR 0005](../adr/0005-product-boundary.md)) or pulling later-phase features forward ([MVP_PLAN.md](MVP_PLAN.md)).
+Review of the UI shipped in PR #2 (application foundation), with a phased plan to make it **user friendly, efficient and professional** without breaking the product boundary ([PRODUCT.md](../../public/PRODUCT.md), [ADR 0005](../adr/0005-product-boundary.md)) or pulling later-phase features forward ([MVP_PLAN.md](../../public/plans/MVP_PLAN.md)).
 
 Companion to [UX.md](../UX.md), which remains the source of truth for UX _principles_. This document covers the _current state_ and _concrete work_.
 

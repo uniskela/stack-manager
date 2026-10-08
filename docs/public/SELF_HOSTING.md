@@ -1,6 +1,6 @@
 # Self-hosting
 
-stack-manager ships as a single long-running Node.js container (see [adr/0004-modular-monolith.md](adr/0004-modular-monolith.md)).
+stack-manager ships as a single long-running Node.js container (see [adr/0004-modular-monolith.md](../internal/adr/0004-modular-monolith.md)).
 It needs no database server, no Redis and **no Docker socket**.
 
 ## Container image

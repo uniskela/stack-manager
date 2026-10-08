@@ -34,7 +34,7 @@ When connecting a repository:
 Each stack has:
 
 - `rootPath` — e.g. `apps/wiki`
-- Path policy globs for deploy relevance (see [DEPLOYMENT_ROUTING.md](DEPLOYMENT_ROUTING.md))
+- Path policy globs for deploy relevance (see [DEPLOYMENT_ROUTING.md](../internal/DEPLOYMENT_ROUTING.md))
 - Optional docs globs under root
 
 Scope matching for routing uses glob semantics (document library choice in PR #5, e.g. `picomatch` / `micromatch`).

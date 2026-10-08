@@ -4,7 +4,7 @@ import { slugify } from './workspace';
 
 /**
  * An explicit stack: a directory in a repository plus its primary Compose file
- * (docs/STACK_DISCOVERY.md). Identity is this record, never a folder-name heuristic.
+ * (docs/public/STACK_DISCOVERY.md). Identity is this record, never a folder-name heuristic.
  */
 export interface Stack {
   id: string;

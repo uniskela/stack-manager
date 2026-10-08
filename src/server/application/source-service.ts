@@ -26,7 +26,7 @@ const utf8Bytes = (s: string) => Buffer.byteLength(s, 'utf8');
  * Read access to committed repository content plus draft edits (PR #3). Everything is scoped to a
  * directory (`root`, the stack root) so a stack page can only see and edit its own files.
  *
- * Secret-looking files (docs/SECURITY.md) are listed but their contents are never returned and drafts
+ * Secret-looking files (docs/public/SECURITY.md) are listed but their contents are never returned and drafts
  * for them are refused. Committed content comes from Git objects, never the working tree.
  */
 export class SourceService {

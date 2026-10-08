@@ -131,7 +131,7 @@ export function StackEditor(props: StackEditorProps) {
     [problems],
   );
 
-  // Phones: soft-wrap on and the problems list collapsed, so the editor keeps most of the screen (docs/UX.md).
+  // Phones: soft-wrap on and the problems list collapsed, so the editor keeps most of the screen (docs/internal/UX.md).
   useEffect(() => {
     const narrow = window.matchMedia('(max-width: 900px)').matches;
     setWrap(narrow);

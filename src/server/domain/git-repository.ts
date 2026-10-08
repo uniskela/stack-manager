@@ -18,7 +18,7 @@ export interface GitRepositoryConnection {
   lastSyncError: string | null;
   headSha: string | null;
   lastFetchedAt: Date | null;
-  /** Register every Compose folder as a stack after each successful fetch (docs/STACK_DISCOVERY.md). */
+  /** Register every Compose folder as a stack after each successful fetch (docs/public/STACK_DISCOVERY.md). */
   autoAddStacks: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -28,7 +28,7 @@ export interface GitRepositoryConnection {
  * Validates and normalises a Git remote URL.
  *
  * PR #2 accepts HTTPS remotes only: credentials are sent as an HTTP header, so plaintext
- * `http://` and `git://` are rejected up-front (docs/SECURITY.md). SSH remotes are deferred until
+ * `http://` and `git://` are rejected up-front (docs/public/SECURITY.md). SSH remotes are deferred until
  * host-key management exists. Embedded credentials (`https://user:token@…`) are rejected so
  * tokens are never persisted in URLs, logs or `.git/config`.
  */
