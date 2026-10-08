@@ -55,3 +55,13 @@ jobs:
       contents: read
     uses: ./.github/workflows/notify-uniskela-docs.yml
     secrets: inherit
+
+  # Context7 docs indexing follows an actual Release Please release, not every push.
+  refresh-context7:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/context7-refresh.yml
+    secrets:
+      CONTEXT7_API_KEY: ${{ secrets.CONTEXT7_API_KEY }}
