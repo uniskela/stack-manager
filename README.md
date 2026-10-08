@@ -36,6 +36,13 @@ webhook. See the [roadmap](docs/plans/MVP_PLAN.md).
 | [Product](docs/PRODUCT.md) / [Architecture](docs/ARCHITECTURE.md) | What it is (and is not), and how it is built |
 | [Docs index](docs/INDEX.md) | Every design, planning and operations document |
 
+
+## Using this project with AI coding agents
+
+If you use Codex, Cursor, Claude Code, or another assistant with [Context7 MCP](https://context7.com/), you can ask it to consult Stack Manager's documentation before making changes. Context7 is optional and is separate from the application's Git and deployment integrations.
+
+> Use Context7 MCP to resolve the official documentation library for `uniskela/stack-manager` (expected ID: `/uniskela/stack-manager`), then retrieve guidance for installation, repository connections, the editor and Git workflow, environment inventory, self-hosting, and troubleshooting. Match the guidance to the Stack Manager version I'm running. If the library is still indexing or doesn't cover that version, consult the [maintained documentation](https://uniskela.com/docs/stack-manager/) and [source Markdown](docs/index.md) instead.
+
 ## Quick start (Docker Compose)
 
 ```bash
