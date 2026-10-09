@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.5.1](https://github.com/uniskela/stack-manager/compare/v0.5.0...v0.5.1) (2026-10-09)
+
+
+### Bug Fixes
+
+* **ci:** send docs notifications to uniskela/com ([#44](https://github.com/uniskela/stack-manager/issues/44)) ([3c35f28](https://github.com/uniskela/stack-manager/commit/3c35f288501fb8da6174fdfc2a2023dd0a87e393))
+
+
+### Documentation
+
+* add Context7 guidance for AI coding agents ([#39](https://github.com/uniskela/stack-manager/issues/39)) ([a06799f](https://github.com/uniskela/stack-manager/commit/a06799f40a3795f23d0ddc476d99b1d6405bbdc4))
+* separate public, internal and agent documentation ([#42](https://github.com/uniskela/stack-manager/issues/42)) ([83fe850](https://github.com/uniskela/stack-manager/commit/83fe850c381de44b7897067114c1f39a31617148))
+
 ## [0.5.0](https://github.com/uniskela/stack-manager/compare/v0.4.0...v0.5.0) (2026-10-07)
 
 
