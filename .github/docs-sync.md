@@ -4,8 +4,8 @@ stack-manager's user documentation is published at [uniskela.com/docs/stack-mana
 by `uniskela/.com`, the same way as adhd-hub and ts6-manager.
 
 - [`docs/manifest.json`](../docs/manifest.json) lists the pages to publish: `source` file, URL `slug`, sidebar `title`
-  and `group`. Design docs, ADRs and plans that are not listed stay on GitHub only; links to them fall back to GitHub
-  URLs on the site.
+  and `group`. Published pages live under `docs/public/`. `docs/internal/` (plans, architecture decisions) and
+  `docs/agents/` are not imported; links to them fall back to GitHub URLs on the site.
 - The `Notify Uniskela documentation` workflow sends an update notification after README/docs changes merge to
   `main` (and on each published release). It does not publish the website directly: `uniskela/.com` imports the
   content, runs its checks and proposes a draft PR for review.
@@ -27,5 +27,7 @@ Never put the App private key in repository files, PRs or chats.
 
 ## Adding a page
 
-Write it in `docs/`, link it from [`docs/index.md`](../docs/index.md) and add an entry to `docs/manifest.json`. Use
-relative links between docs so they work both on GitHub and on the site.
+Write it in `docs/public/`, link it from [`docs/public/index.md`](../docs/public/index.md) and add an entry to
+`docs/manifest.json`. The slug is the public URL and does not include `public`. Use relative links between docs so
+they work both on GitHub and on the site. Put implementation plans and architecture decisions in `docs/internal/`,
+and agent-only notes in `docs/agents/`.

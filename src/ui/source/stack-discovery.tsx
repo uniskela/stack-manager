@@ -27,7 +27,7 @@ export const STACKS_PAGE_SIZE = 25;
 const label = (s: Suggestion) => s.rootPath || '(repository root)';
 
 /**
- * Stacks of one repository (docs/STACK_DISCOVERY.md). Every folder with a Compose file is listed; with
+ * Stacks of one repository (docs/public/STACK_DISCOVERY.md). Every folder with a Compose file is listed; with
  * auto-add on (the default) they are registered after each fetch, otherwise the operator adds all of
  * them at once or picks some. Folders can also be added by path.
  */

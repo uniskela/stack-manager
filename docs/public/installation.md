@@ -12,7 +12,7 @@ access to the Docker socket.
 
 ## 1. Get the Compose file
 
-Download [`docker-compose.yml`](../docker-compose.yml) and [`.env.example`](../.env.example) into an empty folder, or
+Download [`docker-compose.yml`](../../docker-compose.yml) and [`.env.example`](../../.env.example) into an empty folder, or
 clone the repository:
 
 ```sh

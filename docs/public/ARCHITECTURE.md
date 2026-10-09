@@ -157,4 +157,4 @@ Next.js compiles `instrumentation.ts` and route bundles separately. The containe
 
 ## Stopping rule
 
-If implementation begins resembling a Docker host manager, re-read [PRODUCT.md](PRODUCT.md) and [adr/0005-product-boundary.md](adr/0005-product-boundary.md).
+If implementation begins resembling a Docker host manager, re-read [PRODUCT.md](PRODUCT.md) and [adr/0005-product-boundary.md](../internal/adr/0005-product-boundary.md).

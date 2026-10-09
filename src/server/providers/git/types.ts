@@ -1,5 +1,5 @@
 /**
- * GitProvider capability interface (docs/providers/GIT_PROVIDER.md).
+ * GitProvider capability interface (docs/internal/providers/GIT_PROVIDER.md).
  *
  * Connection, source reads and isolated commit/push operations. Webhook
  * verification/parsing (PR #5) extend this interface later; `capabilities` advertises optional

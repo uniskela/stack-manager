@@ -10,7 +10,7 @@ The Stacks page should be **clean**, **predictable to scan** (ordering you can r
 
 ## Method and limits
 
-Read `src/app/w/[workspaceId]/stacks/page.tsx`, `src/ui/stacks/organised-stacks.tsx`, `src/shared/stacks/group-stacks.ts`, the `.list`/`.list-row`/`.pill`/`.search-field` CSS, the stack layout/tabs, `StackService`, `docs/UX.md` and the earlier UI plans.
+Read `src/app/w/[workspaceId]/stacks/page.tsx`, `src/ui/stacks/organised-stacks.tsx`, `src/shared/stacks/group-stacks.ts`, the `.list`/`.list-row`/`.pill`/`.search-field` CSS, the stack layout/tabs, `StackService`, `docs/internal/UX.md` and the earlier UI plans.
 
 The first pass was read-only, so visual findings were inferred from markup and CSS. Step 0 then ran a production build with a seeded dataset and checked them against screenshots (results below).
 
@@ -231,8 +231,8 @@ monorepo paths, 8 drafts, one repository in `error` with no fetch), captured wit
 ### Phase S5 — Finish (docs/test)
 
 - Axe on `/stacks` at 390 px and 1280 px, light/dark, with filters open and with a chip row; check focus order and the live region.
-- Update `docs/UX.md` ("Stacks — organised inventory (groups, search, filters, sort)"), `docs/getting-started.md` (how to find a stack), and mark this plan's status. List nothing new in `docs/manifest.json` unless a new user-facing page appears.
-- Add this plan to `docs/INDEX.md` (note: that file currently has uncommitted changes in the working tree, so reconcile before editing).
+- Update `docs/internal/UX.md` ("Stacks — organised inventory (groups, search, filters, sort)"), `docs/public/getting-started.md` (how to find a stack), and mark this plan's status. List nothing new in `docs/manifest.json` unless a new user-facing page appears.
+- Add this plan to `docs/internal/INDEX.md` (note: that file currently has uncommitted changes in the working tree, so reconcile before editing).
 - `pnpm check` and `pnpm build` green; `pnpm test:e2e` with `E2E_GIT_REMOTE`/`E2E_STACK_ROOT` for the editor-dependent tests.
 
 **Done.**
@@ -240,9 +240,9 @@ monorepo paths, 8 drafts, one repository in `error` with no fetch), captured wit
 - Axe runs in e2e on `/stacks` in its default, no-match, collapsed-folder and filters-open states (the mobile
   disclosure included), at desktop and Pixel 7 sizes, light and dark. There is no chip row (see S3). The switcher
   header was checked separately (S4).
-- `docs/getting-started.md` gains a "Find a stack" section; `docs/UX.md` describes the new page and links here. No new
+- `docs/public/getting-started.md` gains a "Find a stack" section; `docs/internal/UX.md` describes the new page and links here. No new
   user-facing page, so `docs/manifest.json` is unchanged.
-- Not done: the `docs/INDEX.md` entry. That file has an unrelated uncommitted rewrite in the owner's working tree;
+- Not done: the `docs/internal/INDEX.md` entry. That file has an unrelated uncommitted rewrite in the owner's working tree;
   add this plan when that lands.
 
 ## Outcome against the success criteria

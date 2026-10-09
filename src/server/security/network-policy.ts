@@ -3,7 +3,7 @@ import net from 'node:net';
 import { ValidationError } from '@/server/domain/errors';
 
 /**
- * Outbound host policy for credential-bearing requests (SSRF control, docs/SECURITY.md).
+ * Outbound host policy for credential-bearing requests (SSRF control, docs/public/SECURITY.md).
  *
  * Always denied: loopback, unspecified, link-local (incl. cloud metadata 169.254.169.254),
  * multicast/reserved. Private ranges (RFC 1918, CGNAT, IPv6 ULA) are denied unless the operator

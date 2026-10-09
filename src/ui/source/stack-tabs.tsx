@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
-/** Stack page sections (docs/UX.md). Deployments, runtime and secrets join in later phases. */
+/** Stack page sections (docs/internal/UX.md). Deployments, runtime and secrets join in later phases. */
 export function StackTabs({ base, drafts }: { base: string; drafts: number }) {
   const pathname = usePathname();
   const router = useRouter();

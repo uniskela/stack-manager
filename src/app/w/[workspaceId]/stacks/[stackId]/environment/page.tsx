@@ -12,7 +12,7 @@ import { SectionTitle } from '@/ui/primitives/section';
 export const metadata: Metadata = { title: 'Environment' };
 
 /**
- * Environment inventory derived from source only (docs/STACK_DISCOVERY.md): variables referenced by the
+ * Environment inventory derived from source only (docs/public/STACK_DISCOVERY.md): variables referenced by the
  * Compose file, whether `.env.example` documents them, and env files the stack expects. Values are
  * never read; secret files are only listed.
  */

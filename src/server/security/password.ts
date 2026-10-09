@@ -1,7 +1,7 @@
 import { hash, verify, type Algorithm } from '@node-rs/argon2';
 
 /**
- * Argon2id password hashing (docs/AUTH_AND_CREDENTIALS.md).
+ * Argon2id password hashing (docs/public/AUTH_AND_CREDENTIALS.md).
  * Parameters exceed the OWASP minimum (m=19 MiB, t=2, p=1); a single-operator instance can afford it.
  */
 const PARAMS = {

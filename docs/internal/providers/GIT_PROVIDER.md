@@ -86,7 +86,7 @@ One repository webhook → stack-manager:
 - Forge pull requests and commit statuses are not implemented (`capabilities.pullRequests` / `commitStatuses` are
   `false`); the v0.5.0 workflow commits directly to the tracked branch.
 - Commit inputs map selected drafts to `{ path, content, baseBlobSha }` with an expected branch HEAD and author identity; `content: null` supports controlled deletion. Push requires an exact retained commit and expected remote SHA. Neither operation touches draft persistence.
-- See [Git workflow](../GIT_WORKFLOW.md#implementation-overview-v050) for remote protection, cleanup and crash-recovery limits.
+- See [Git workflow](../../public/GIT_WORKFLOW.md#implementation-overview-v050) for remote protection, cleanup and crash-recovery limits.
 
 ## Non-goals
 

@@ -61,7 +61,7 @@ const IGNORED_SEGMENTS = new Set([
 const MAX_SUGGESTIONS = 2000;
 
 /**
- * Explicit stacks inside connected repositories (docs/STACK_DISCOVERY.md). Discovery only suggests;
+ * Explicit stacks inside connected repositories (docs/public/STACK_DISCOVERY.md). Discovery only suggests;
  * stacks exist once the operator confirms them, and never imply deploy/runtime bindings.
  */
 export class StackService {

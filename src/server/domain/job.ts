@@ -19,7 +19,7 @@ export interface Job<P extends Record<string, unknown> = Record<string, unknown>
   finishedAt: Date | null;
 }
 
-/** Job lease/heartbeat constants (docs/adr/0002-persisted-jobs.md). */
+/** Job lease/heartbeat constants (docs/internal/adr/0002-persisted-jobs.md). */
 export const JOB_LEASE_TTL_MS = 60_000;
 export const JOB_HEARTBEAT_INTERVAL_MS = 10_000;
 export const JOB_POLL_INTERVAL_MS = 1_000;
