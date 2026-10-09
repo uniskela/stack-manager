@@ -1,5 +1,5 @@
 name: Notify Uniskela documentation
-# Tells uniskela/.com that README/docs changed so it can import them (see .github/docs-sync.md).
+# Tells uniskela/com that README/docs changed so it can import them (see .github/docs-sync.md).
 # Sends only the repository, commit and ref: no checkout, never runs on pull requests or forks.
 on:
   push:
