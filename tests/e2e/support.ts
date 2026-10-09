@@ -16,6 +16,9 @@ export const SAMPLE_ROOT = process.env.E2E_STACK_ROOT ?? '';
  * switching the scheme is instant and axe never measures a colour halfway through a transition.
  */
 export async function expectAccessible(page: Page) {
+  // A client-side navigation can show the new page's heading before Next.js commits its <title>, so wait for
+  // the settled title rather than let axe sample that gap (document-title). A page with no title still fails.
+  await expect(page).toHaveTitle(/\S/);
   for (const colorScheme of ['light', 'dark'] as const) {
     await page.emulateMedia({ colorScheme, reducedMotion: 'reduce' });
     const { violations } = await new AxeBuilder({ page })
