@@ -21,7 +21,7 @@ export async function boot(): Promise<void> {
     );
     process.exit(1);
   }
-  const { logger, config, auth, worker } = container;
+  const { logger, config, auth, worker, autoFetch } = container;
   logger.info('stack-manager ready', {
     dataDir: config.dataDir,
     keyVersion: config.encryption.keyVersion,
@@ -33,7 +33,10 @@ export async function boot(): Promise<void> {
       setupTokenRequired: auth.setupTokenRequired,
     });
   }
-  if (config.workerEnabled) worker.start();
+  if (config.workerEnabled) {
+    worker.start();
+    if (config.autoFetchEnabled) autoFetch.start();
+  }
 
   const purge = setInterval(() => {
     auth.purgeExpiredSessions().catch((error) => logger.error('session purge failed', { error }));

@@ -22,6 +22,8 @@ export interface AppConfig {
   trustedProxyHops: number;
   logLevel: LogLevel;
   workerEnabled: boolean;
+  autoFetchEnabled: boolean;
+  autoFetchIntervalMinutes: number;
 }
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
@@ -104,6 +106,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     STACK_MANAGER_TRUSTED_PROXY_HOPS: z.coerce.number().int().min(0).max(10).default(0),
     STACK_MANAGER_LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
     STACK_MANAGER_WORKER_ENABLED: bool('STACK_MANAGER_WORKER_ENABLED').default(true),
+    STACK_MANAGER_AUTO_FETCH_ENABLED: bool('STACK_MANAGER_AUTO_FETCH_ENABLED').default(true),
+    STACK_MANAGER_AUTO_FETCH_INTERVAL_MINUTES: z.coerce.number().int().min(5).max(1440).default(15),
     STACK_MANAGER_SESSION_TTL_HOURS: z.coerce
       .number()
       .int()
@@ -140,5 +144,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     trustedProxyHops: o.STACK_MANAGER_TRUSTED_PROXY_HOPS,
     logLevel: o.STACK_MANAGER_LOG_LEVEL,
     workerEnabled: o.STACK_MANAGER_WORKER_ENABLED,
+    autoFetchEnabled: o.STACK_MANAGER_AUTO_FETCH_ENABLED,
+    autoFetchIntervalMinutes: o.STACK_MANAGER_AUTO_FETCH_INTERVAL_MINUTES,
   };
 }

@@ -53,6 +53,18 @@ export default async function RepositoryPage({
           <dd>
             <LocalTime iso={repo.lastFetchedAt} />
           </dd>
+          <dt>Last sync attempt</dt>
+          <dd>
+            <LocalTime iso={repo.lastSyncAttemptAt} />
+          </dd>
+          <dt>Last revision change observed</dt>
+          <dd>
+            <LocalTime iso={repo.lastHeadChangedAt} />
+          </dd>
+          <dt>Last sync failure</dt>
+          <dd>
+            <LocalTime iso={repo.lastSyncFailedAt} />
+          </dd>
           <dt>Access</dt>
           <dd>
             {repo.credential

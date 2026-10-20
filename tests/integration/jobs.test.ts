@@ -192,6 +192,29 @@ describe('persisted jobs', () => {
     await expect(enqueue({ url: 'https://u:p@host/x' })).rejects.toThrow(/secret-like/);
   });
 
+  it('coalesces running follow-up requests and fences completion after lease loss', async () => {
+    const { job } = await enqueue({}, { dedupeKey: 'repo:1' });
+    await h.container.repos.jobs.claimNext('w1', h.clock.now(), JOB_LEASE_TTL_MS, ['test_job']);
+    for (let i = 0; i < 3; i++) {
+      const next = await enqueue({}, { dedupeKey: 'repo:1', followUpIfRunning: true });
+      expect(next).toMatchObject({ created: false, job: { id: job.id } });
+    }
+    expect(await h.container.repos.jobs.markSucceeded(job.id, 'stale-owner', h.clock.now())).toBe(false);
+    expect(await h.container.repos.jobs.markSucceeded(job.id, 'w1', h.clock.now())).toBe(true);
+    expect(await get(job.id)).toMatchObject({ status: 'pending', attempts: 0, finishedAt: null });
+    let runs = 0;
+    await worker('w2', async () => {
+      runs++;
+    }).runOnce();
+    expect(runs).toBe(1);
+    expect(
+      await worker('w2', async () => {
+        runs++;
+      }).runOnce(),
+    ).toBe(false);
+    expect((await get(job.id)).status).toBe('succeeded');
+  });
+
   it('records acceptance under the lease (deployment_trigger idempotency hook)', async () => {
     const { job } = await enqueue();
     await worker('w1', async (_j, ctx) => {

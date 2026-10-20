@@ -240,6 +240,11 @@ export class GitWorkflowService {
       else if (result.operation === 'commit')
         await this.#audit('git.commit', workspaceId, actorUserId, result, { reason });
     }
+    // The provider lock has been released. Never treat a refresh queue failure as
+    // a Git push failure or clear any retained drafts/commits.
+    if (result.status === 'push_succeeded') {
+      await this.repositories.schedulePostPushRefresh(repositoryId);
+    }
     return result;
   }
 

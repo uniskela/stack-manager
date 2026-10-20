@@ -17,7 +17,7 @@ export class JobQueue {
   async enqueue(
     type: string,
     payload: Record<string, unknown>,
-    options: { dedupeKey?: string; delayMs?: number; maxAttempts?: number } = {},
+    options: { dedupeKey?: string; delayMs?: number; maxAttempts?: number; followUpIfRunning?: boolean } = {},
   ): Promise<{ job: Job; created: boolean }> {
     if (JSON.stringify(redact(payload)) !== JSON.stringify(payload)) {
       throw new Error(`Job payload for "${type}" contains secret-like data; pass references instead.`);
@@ -30,6 +30,7 @@ export class JobQueue {
       runAfter: new Date(now.getTime() + (options.delayMs ?? 0)),
       maxAttempts: options.maxAttempts ?? JOB_DEFAULT_MAX_ATTEMPTS,
       dedupeKey: options.dedupeKey ?? null,
+      followUpIfRunning: options.followUpIfRunning,
       now,
     });
   }

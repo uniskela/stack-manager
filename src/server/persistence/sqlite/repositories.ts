@@ -317,7 +317,12 @@ class SqliteJobRepository implements JobRepository {
           .from(jobs)
           .where(and(eq(jobs.dedupeKey, input.dedupeKey), inArray(jobs.status, ['pending', 'running'])))
           .get();
-        if (active) return { job: toJob(active), created: false };
+        if (active) {
+          if (input.followUpIfRunning && active.status === 'running') {
+            tx.update(jobs).set({ followUpRequested: true }).where(eq(jobs.id, active.id)).run();
+          }
+          return { job: toJob(active), created: false };
+        }
       }
       const row: JobRow = {
         id: input.id,
@@ -333,6 +338,7 @@ class SqliteJobRepository implements JobRepository {
         heartbeatAt: null,
         acceptanceRecordedAt: null,
         dedupeKey: input.dedupeKey,
+        followUpRequested: false,
         createdAt: input.now,
         updatedAt: input.now,
         finishedAt: null,
@@ -375,6 +381,7 @@ class SqliteJobRepository implements JobRepository {
           leaseOwner: owner,
           leaseExpiresAt: new Date(now.getTime() + leaseTtlMs),
           heartbeatAt: now,
+          followUpRequested: false,
           updatedAt: now,
         })
         .where(and(eq(jobs.id, candidate.id), eq(jobs.status, 'pending')))
@@ -402,19 +409,27 @@ class SqliteJobRepository implements JobRepository {
   private static readonly clearLease = { leaseOwner: null, leaseExpiresAt: null, heartbeatAt: null } as const;
 
   async markSucceeded(id: string, owner: string, now: Date) {
-    return (
-      this.db
-        .update(jobs)
-        .set({
-          status: 'succeeded',
-          ...SqliteJobRepository.clearLease,
-          updatedAt: now,
-          finishedAt: now,
-          lastError: null,
-        })
-        .where(this.fenced(id, owner))
-        .run().changes === 1
-    );
+    return this.db.transaction((tx) => {
+      const row = tx.select().from(jobs).where(this.fenced(id, owner)).get();
+      if (!row) return false;
+      // A request made after claim needs another fetch; keep the same durable, unique job.
+      return (
+        tx
+          .update(jobs)
+          .set({
+            status: row.followUpRequested ? 'pending' : 'succeeded',
+            ...SqliteJobRepository.clearLease,
+            followUpRequested: false,
+            runAfter: row.followUpRequested ? now : row.runAfter,
+            attempts: row.followUpRequested ? 0 : row.attempts,
+            updatedAt: now,
+            finishedAt: row.followUpRequested ? null : now,
+            lastError: null,
+          })
+          .where(this.fenced(id, owner))
+          .run().changes === 1
+      );
+    });
   }
 
   async markRetry(id: string, owner: string, now: Date, error: string, runAfter: Date) {

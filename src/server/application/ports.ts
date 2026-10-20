@@ -89,6 +89,9 @@ export interface GitRepositoryConnectionRepository {
         | 'lastSyncError'
         | 'headSha'
         | 'lastFetchedAt'
+        | 'lastSyncAttemptAt'
+        | 'lastSyncFailedAt'
+        | 'lastHeadChangedAt'
         | 'autoAddStacks'
       >
     > & { updatedAt: Date },
@@ -103,6 +106,8 @@ export interface EnqueueJobInput {
   runAfter: Date;
   maxAttempts: number;
   dedupeKey: string | null;
+  /** Coalesce requests during execution into one durable rerun. Only for idempotent handlers. */
+  followUpIfRunning?: boolean;
   now: Date;
 }
 

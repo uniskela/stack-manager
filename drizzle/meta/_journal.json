@@ -29,6 +29,20 @@
       "when": 1791358820277,
       "tag": "0003_git_author_identity",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1792491124031,
+      "tag": "0004_sync-follow-up",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1792491194427,
+      "tag": "0005_sync-timestamps",
+      "breakpoints": true
     }
   ]
 }

@@ -8,6 +8,8 @@ import * as pushRoute from '@/app/api/workspaces/[workspaceId]/repositories/[rep
 import * as setup from '@/app/api/setup/route';
 import { GitCli } from '@/server/providers/git/git-cli';
 import { GitOperationError } from '@/server/providers/git/types';
+import { withRepositoryLock } from '@/server/providers/git/repository-lock';
+import { JOB_LEASE_TTL_MS, retryDelayMs } from '@/server/domain/job';
 import { createHarness, type TestHarness } from '../support/container';
 import { gitServerOverrides, startGitServer, type GitServer } from '../support/git-server';
 import { call, cookieFrom } from '../support/http';
@@ -96,6 +98,169 @@ async function git(args: string[]) {
 }
 
 describe('draft commit and safe push workflow', () => {
+  it('retries an interrupted fetch without changing the snapshot or drafts', async () => {
+    await h.container.worker.runOnce();
+    await save();
+    const before = await drafts();
+    h.clock.advance(16 * 60_000);
+    await h.container.autoFetch.runOnce();
+    const original = provider().syncClone.bind(provider());
+    vi.spyOn(provider(), 'syncClone').mockImplementationOnce((input) =>
+      original({ ...input, signal: AbortSignal.abort(new Error('interrupted fetch')) }),
+    );
+    expect(await h.container.worker.runOnce()).toBe(true);
+    const failed = await h.container.repositories.get(workspaceId, repositoryId);
+    expect(failed).toMatchObject({ syncStatus: 'error', headSha });
+    expect(failed.sync).toMatchObject({ status: 'pending', attempts: 1 });
+    expect(await drafts()).toEqual(before);
+    h.clock.advance(retryDelayMs(1));
+    expect(await h.container.worker.runOnce()).toBe(true);
+    expect((await h.container.repositories.get(workspaceId, repositoryId)).syncStatus).toBe('ready');
+    expect(await drafts()).toEqual(before);
+  });
+
+  it('coalesces manual fetches and concurrent scheduler ticks while preserving retained work', async () => {
+    await h.container.worker.runOnce();
+    await save();
+    const local = await commit();
+    expect(local.json.status).toBe('commit_succeeded');
+    const before = await drafts();
+    h.clock.advance(16 * 60_000);
+    const syncClone = vi.spyOn(provider(), 'syncClone');
+    await Promise.all([
+      h.container.autoFetch.runOnce(),
+      h.container.autoFetch.runOnce(),
+      h.container.repositories.requestSync(workspaceId, repositoryId, actorUserId),
+    ]);
+    expect(await h.container.worker.runOnce()).toBe(true);
+    expect(await h.container.worker.runOnce()).toBe(false);
+    expect(syncClone).toHaveBeenCalledTimes(1);
+    expect(await drafts()).toEqual(before);
+    const status = await call(statusRoute.GET, { cookie, params: params() });
+    expect(status.json.state).toMatchObject({ localHeadSha: local.json.commitSha, ahead: 1 });
+  });
+
+  it('backs off a locked repository, then retries with dedicated visible timestamps', async () => {
+    await h.container.worker.runOnce();
+    const first = await h.container.repositories.get(workspaceId, repositoryId);
+    h.clock.advance(16 * 60_000);
+    await h.container.autoFetch.runOnce();
+    const source = (await h.container.repositories.localSource(workspaceId, repositoryId))!;
+    await withRepositoryLock(h.config.reposDir, source.cloneDir, async () => {
+      expect(await h.container.worker.runOnce()).toBe(true);
+      await expect(
+        provider().syncClone({
+          remoteUrl: REMOTE,
+          branch: 'main',
+          targetDir: source.cloneDir,
+          auth: null,
+        }),
+      ).rejects.toMatchObject({ kind: 'busy' });
+    });
+    const failed = await h.container.repositories.get(workspaceId, repositoryId);
+    expect(failed).toMatchObject({ syncStatus: 'error', lastFetchedAt: first.lastFetchedAt });
+    expect(failed.lastSyncError).toMatch(/in progress/);
+    expect(failed.lastSyncAttemptAt).toBe(h.clock.now().toISOString());
+    expect(failed.lastSyncFailedAt).toBe(h.clock.now().toISOString());
+    expect(failed.sync).toMatchObject({ status: 'pending', attempts: 1 });
+    expect(await h.container.worker.runOnce()).toBe(false);
+    expect(await h.container.autoFetch.runOnce()).toBe(0);
+    h.clock.advance(retryDelayMs(1));
+    expect(await h.container.worker.runOnce()).toBe(true);
+    const recovered = await h.container.repositories.get(workspaceId, repositoryId);
+    expect(recovered).toMatchObject({
+      syncStatus: 'ready',
+      lastSyncError: null,
+      lastHeadChangedAt: first.lastHeadChangedAt,
+      lastSyncFailedAt: failed.lastSyncFailedAt,
+    });
+    expect(recovered.lastFetchedAt).toBe(h.clock.now().toISOString());
+  });
+
+  it.each(['pending', 'running'] as const)(
+    'recovers a %s sync and post-push request after restart',
+    async (state) => {
+      await h.container.worker.runOnce();
+      await save();
+      const before = await drafts();
+      const committed = await commit();
+      expect(committed.json.status).toBe('commit_succeeded');
+      h.clock.advance(16 * 60_000);
+      await h.container.autoFetch.runOnce();
+      if (state === 'running') {
+        await h.container.repos.jobs.claimNext('crashed-worker', h.clock.now(), JOB_LEASE_TTL_MS, [
+          'repository_sync',
+        ]);
+      }
+      const result = await push(committed.json.commitSha);
+      expect(result.json.status).toBe('push_succeeded');
+      const { dataDir, config } = h;
+      await h.container.close();
+      const restarted = await createHarness({ dataDir, config, overrides: gitServerOverrides(server) });
+      try {
+        restarted.clock.advance(17 * 60_000 + JOB_LEASE_TTL_MS);
+        if (state === 'running') {
+          expect(await restarted.container.worker.runOnce()).toBe(false);
+          restarted.clock.advance(retryDelayMs(1));
+        }
+        expect(await restarted.container.worker.runOnce()).toBe(true);
+        expect((await restarted.container.repositories.get(workspaceId, repositoryId)).headSha).toBe(
+          result.json.commitSha,
+        );
+        expect(await restarted.container.repos.drafts.list(repositoryId)).toEqual(before);
+        expect(await restarted.container.worker.runOnce()).toBe(false);
+      } finally {
+        await restarted.cleanup();
+      }
+    },
+  );
+
+  it('refreshes a push made after a running sync fetched its old snapshot', async () => {
+    // Drain the initial connection job before scheduling an older background fetch.
+    await h.container.worker.runOnce();
+    h.clock.advance(16 * 60_000);
+    expect(await h.container.autoFetch.runOnce()).toBe(1);
+    let fetched!: () => void;
+    let resume!: () => void;
+    const fetchedPromise = new Promise<void>((resolve) => {
+      fetched = resolve;
+    });
+    const resumePromise = new Promise<void>((resolve) => {
+      resume = resolve;
+    });
+    const original = provider().syncClone.bind(provider());
+    vi.spyOn(provider(), 'syncClone').mockImplementationOnce(async (input) => {
+      const result = await original(input);
+      fetched();
+      await resumePromise;
+      return result;
+    });
+    const running = h.container.worker.runOnce();
+    await fetchedPromise;
+    await Promise.all([
+      h.container.repositories.requestSync(workspaceId, repositoryId, actorUserId),
+      h.container.autoFetch.runOnce(),
+      h.container.autoFetch.runOnce(),
+    ]);
+    let pushedSha: string;
+    try {
+      await save();
+      const result = await commit({ paths: ['compose.yaml'], message: 'Push during fetch', push: true });
+      expect(result.json.status).toBe('push_succeeded');
+      pushedSha = result.json.commitSha;
+      // Repeated notifications must still leave only one durable follow-up.
+      await h.container.repositories.schedulePostPushRefresh(repositoryId);
+    } finally {
+      resume();
+      await running;
+    }
+    expect((await h.container.repositories.get(workspaceId, repositoryId)).headSha).toBe(headSha);
+    expect(await h.container.worker.runOnce()).toBe(true);
+    expect((await h.container.repositories.get(workspaceId, repositoryId)).headSha).toBe(pushedSha!);
+    expect(await h.container.worker.runOnce()).toBe(false);
+    expect(await drafts()).toHaveLength(1);
+  });
+
   it('commits selected drafts with the configured identity and preserves unselected work', async () => {
     await save();
     await save('README.md', '# Unselected\n');

@@ -49,6 +49,9 @@ export interface RepositoryView {
   lastSyncError: string | null;
   headSha: string | null;
   lastFetchedAt: string | null;
+  lastSyncAttemptAt: string | null;
+  lastSyncFailedAt: string | null;
+  lastHeadChangedAt: string | null;
   autoAddStacks: boolean;
   createdAt: string;
   sync: { status: Job['status']; attempts: number; runAfter: string } | null;
@@ -191,6 +194,9 @@ export class GitRepositoryService {
       lastSyncError: null,
       headSha: null,
       lastFetchedAt: null,
+      lastSyncAttemptAt: null,
+      lastSyncFailedAt: null,
+      lastHeadChangedAt: null,
       autoAddStacks: input.autoAddStacks ?? true,
       createdAt: now,
       updatedAt: now,
@@ -320,6 +326,25 @@ export class GitRepositoryService {
     return this.get(workspaceId, id);
   }
 
+  /**
+   * Called only after a confirmed successful push and outside the Git provider lock.
+   * A queue failure must never misreport a successful Git push as failed.
+   */
+  async schedulePostPushRefresh(repositoryId: string): Promise<void> {
+    try {
+      await this.jobs.enqueue(
+        REPOSITORY_SYNC_JOB,
+        { repositoryId, requestedBy: null },
+        { dedupeKey: `${REPOSITORY_SYNC_JOB}:${repositoryId}`, followUpIfRunning: true },
+      );
+    } catch (error) {
+      this.logger.warn('post-push repository refresh could not be queued', {
+        repositoryId,
+        error: safeErrorMessage(error),
+      });
+    }
+  }
+
   async delete(workspaceId: string, id: string, actorUserId: string): Promise<void> {
     const conn = await this.#find(workspaceId, id);
     const sync = await this.jobs.latestFor(`${REPOSITORY_SYNC_JOB}:${id}`);
@@ -346,7 +371,12 @@ export class GitRepositoryService {
     const conn = await this.repo.findByIdUnscoped(connectionId);
     if (!conn) throw new PermanentJobError('Repository connection no longer exists.');
     const provider = this.providers.get(conn.gitProviderType);
-    await this.repo.update(conn.id, { syncStatus: 'syncing', updatedAt: this.clock.now() });
+    const attemptedAt = this.clock.now();
+    await this.repo.update(conn.id, {
+      syncStatus: 'syncing',
+      lastSyncAttemptAt: attemptedAt,
+      updatedAt: attemptedAt,
+    });
     try {
       await this.#assertHost(conn.remoteUrl);
       const targetDir = this.#cloneDir(conn);
@@ -374,15 +404,20 @@ export class GitRepositoryService {
         lastSyncError: null,
         headSha: result.headSha,
         lastFetchedAt: now,
+        lastHeadChangedAt: result.headSha !== conn.headSha ? now : conn.lastHeadChangedAt,
         updatedAt: now,
       });
-      await this.audit.record({
-        action: 'repository.sync',
-        workspaceId: conn.workspaceId,
-        entityType: 'repository',
-        entityId: conn.id,
-        meta: { cloned: result.cloned, headSha: result.headSha },
-      });
+      // Routine polling still updates lastFetchedAt, but unchanged HEADs should not
+      // fill the activity log every fifteen minutes.
+      if (result.cloned || result.headSha !== conn.headSha) {
+        await this.audit.record({
+          action: 'repository.sync',
+          workspaceId: conn.workspaceId,
+          entityType: 'repository',
+          entityId: conn.id,
+          meta: { cloned: result.cloned, headSha: result.headSha },
+        });
+      }
     } catch (error) {
       const message =
         error instanceof GitOperationError ||
@@ -393,6 +428,7 @@ export class GitRepositoryService {
       await this.repo.update(conn.id, {
         syncStatus: 'error',
         lastSyncError: message,
+        lastSyncFailedAt: this.clock.now(),
         updatedAt: this.clock.now(),
       });
       this.logger.warn('repository sync failed', { repositoryId: conn.id, error: message });
@@ -501,6 +537,9 @@ export class GitRepositoryService {
       lastSyncError: conn.lastSyncError,
       headSha: conn.headSha,
       lastFetchedAt: conn.lastFetchedAt?.toISOString() ?? null,
+      lastSyncAttemptAt: conn.lastSyncAttemptAt?.toISOString() ?? null,
+      lastSyncFailedAt: conn.lastSyncFailedAt?.toISOString() ?? null,
+      lastHeadChangedAt: conn.lastHeadChangedAt?.toISOString() ?? null,
       autoAddStacks: conn.autoAddStacks,
       createdAt: conn.createdAt.toISOString(),
       sync: job ? { status: job.status, attempts: job.attempts, runAfter: job.runAfter.toISOString() } : null,

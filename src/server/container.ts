@@ -9,6 +9,7 @@ import { GitRepositoryService, REPOSITORY_SYNC_JOB } from '@/server/application/
 import { GitWorkflowService } from '@/server/application/git-workflow-service';
 import { GitHistoryService } from '@/server/application/git-history-service';
 import { JobQueue } from '@/server/application/job-queue';
+import { RepositoryAutoFetch } from '@/server/application/repository-auto-fetch';
 import type { Repositories } from '@/server/application/ports';
 import { SourceService } from '@/server/application/source-service';
 import { StackService } from '@/server/application/stack-service';
@@ -53,6 +54,7 @@ export interface Container {
   gitHistory: GitHistoryService;
   jobs: JobQueue;
   worker: JobWorker;
+  autoFetch: RepositoryAutoFetch;
   ping(): boolean;
   close(): Promise<void>;
 }
@@ -175,6 +177,14 @@ export function createContainer(config: AppConfig, overrides: ContainerOverrides
       logger.child({ component: 'jobs' }),
       overrides.workerOptions,
     );
+    const autoFetch = new RepositoryAutoFetch(
+      repos.workspaces,
+      repos.gitRepositories,
+      jobs,
+      clock,
+      logger.child({ component: 'auto-fetch' }),
+      config.autoFetchIntervalMinutes,
+    );
 
     return {
       config,
@@ -193,8 +203,10 @@ export function createContainer(config: AppConfig, overrides: ContainerOverrides
       gitHistory,
       jobs,
       worker,
+      autoFetch,
       ping: () => pingSqlite(handle.db),
       close: async () => {
+        await autoFetch.stop();
         await worker.stop();
         handle.close();
       },

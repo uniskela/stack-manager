@@ -20,6 +20,8 @@ describe('loadConfig (fail closed)', () => {
     expect(cfg.databasePath).toBe('/tmp/sm/stack-manager.sqlite');
     expect(cfg.reposDir).toBe('/tmp/sm/repos');
     expect(cfg.allowPrivateNetworks).toBe(false);
+    expect(cfg.autoFetchEnabled).toBe(true);
+    expect(cfg.autoFetchIntervalMinutes).toBe(15);
   });
 
   it.each([
@@ -32,9 +34,20 @@ describe('loadConfig (fail closed)', () => {
     ['short session secret', { STACK_MANAGER_SESSION_SECRET: 'too-short' }],
     ['session secret equal to key', { STACK_MANAGER_SESSION_SECRET: key }],
     ['bad boolean', { STACK_MANAGER_COOKIE_SECURE: 'maybe' }],
+    ['invalid automatic fetch flag', { STACK_MANAGER_AUTO_FETCH_ENABLED: 'maybe' }],
+    ['short automatic fetch interval', { STACK_MANAGER_AUTO_FETCH_INTERVAL_MINUTES: '2' }],
+    ['oversized automatic fetch interval', { STACK_MANAGER_AUTO_FETCH_INTERVAL_MINUTES: '1441' }],
     ['short setup token', { STACK_MANAGER_SETUP_TOKEN: 'abc' }],
   ])('rejects %s', (_name, over) => {
     expect(() => loadConfig(env(over))).toThrow(ConfigError);
+  });
+
+  it('accepts disabling the scheduler or a longer polling interval', () => {
+    const cfg = loadConfig(
+      env({ STACK_MANAGER_AUTO_FETCH_ENABLED: 'false', STACK_MANAGER_AUTO_FETCH_INTERVAL_MINUTES: '60' }),
+    );
+    expect(cfg.autoFetchEnabled).toBe(false);
+    expect(cfg.autoFetchIntervalMinutes).toBe(60);
   });
 
   it('never echoes secret values in errors', () => {
