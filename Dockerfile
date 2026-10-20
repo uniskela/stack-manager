@@ -9,7 +9,8 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 RUN corepack enable
 COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --ignore-scripts \
+  && pnpm rebuild better-sqlite3 esbuild
 
 # ---------- build ----------
 FROM deps AS build
