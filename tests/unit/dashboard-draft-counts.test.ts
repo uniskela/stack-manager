@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { loadDashboardDraftCounts } from '@/server/application/dashboard-draft-counts';
+import { loadDashboardDraftCounts, type DashboardDraftPath } from '@/server/application/dashboard-draft-counts';
 
 const repositories = [
   { id: 'r1', headSha: 'a'.repeat(40) },
@@ -10,48 +10,85 @@ const stacks = [
   { id: 's2', rootPath: 'apps/two', repository: { id: 'r2', headSha: repositories[1]!.headSha } },
 ];
 
+const rows: DashboardDraftPath[] = [
+  { repositoryId: 'r1', path: 'apps/one/compose.yml' },
+  { repositoryId: 'r1', path: 'apps/one/config.json' },
+  { repositoryId: 'r1', path: 'apps/one-extra/compose.yml' },
+  { repositoryId: 'r2', path: 'apps/two/compose.yml' },
+];
+
 describe('loadDashboardDraftCounts', () => {
-  it('continues after a single repository fails and labels the total incomplete', async () => {
+  it('uses one metadata query for every stack and repository, with path-boundary checks', async () => {
+    const query = vi.fn(async () => rows);
+    const result = await loadDashboardDraftCounts(stacks, repositories, query, vi.fn());
+    expect(result).toEqual({ stackCounts: [2, 1], openDrafts: 4, failedCounts: 0 });
+    expect(query).toHaveBeenCalledExactlyOnceWith(['r1', 'r2']);
+  });
+
+  it('falls back per repository when the single batch query fails', async () => {
     const onFailure = vi.fn();
-    const count = vi.fn(async (id: string, root: string) => {
-      if (id === 'r2') throw new Error('repository unreadable');
-      return root ? 2 : 4;
+    const query = vi.fn(async (ids: readonly string[]) => {
+      if (ids.length > 1) throw new Error('batch unavailable');
+      if (ids[0] === 'r2') throw new Error('repository r2 unavailable');
+      return rows.filter((row) => row.repositoryId === ids[0]);
     });
-    const result = await loadDashboardDraftCounts(stacks, repositories, count, onFailure);
-    expect(result).toEqual({ stackCounts: [2, 0], openDrafts: null, failedCounts: 2 });
-    expect(onFailure).toHaveBeenCalledTimes(2);
+    const result = await loadDashboardDraftCounts(stacks, repositories, query, onFailure);
+    expect(result).toEqual({ stackCounts: [2, 0], openDrafts: null, failedCounts: 1 });
+    expect(query).toHaveBeenCalledTimes(3);
+    expect(onFailure).toHaveBeenCalledWith(expect.objectContaining({ scope: 'batch' }));
     expect(onFailure).toHaveBeenCalledWith(
       expect.objectContaining({ scope: 'repository', repositoryId: 'r2' }),
     );
-    expect(count).toHaveBeenCalledWith('r1', '');
   });
 
-  it('keeps an accurate repository total even if only one stack count fails', async () => {
-    const onFailure = vi.fn();
+  it('keeps accurate totals after batch recovery if every individual read succeeds', async () => {
+    const query = vi.fn(async (ids: readonly string[]) => {
+      if (ids.length > 1) throw new Error('batch failure');
+      return rows.filter((row) => row.repositoryId === ids[0]);
+    });
+    const result = await loadDashboardDraftCounts(stacks, repositories, query, vi.fn());
+    expect(result).toEqual({ stackCounts: [2, 1], openDrafts: 4, failedCounts: 0 });
+  });
+
+  it('does not count drafts from unknown or unfetched repositories', async () => {
+    const query = vi.fn(async () => [
+      ...rows,
+      { repositoryId: 'unexpected', path: 'apps/secret' },
+      { repositoryId: 'r3', path: 'apps/not-yet-fetched' },
+    ]);
     const result = await loadDashboardDraftCounts(
       stacks,
-      repositories,
-      async (id, root) => {
-        if (id === 'r2' && root) throw new Error('stack scan failed');
-        return root ? 1 : id === 'r1' ? 3 : 5;
-      },
-      onFailure,
+      [...repositories, { id: 'r3', headSha: null }],
+      query,
+      vi.fn(),
     );
-    expect(result).toEqual({ stackCounts: [1, 0], openDrafts: 8, failedCounts: 1 });
-    expect(onFailure).toHaveBeenCalledWith(
-      expect.objectContaining({ scope: 'stack', id: 's2', repositoryId: 'r2' }),
-    );
+    expect(result).toEqual({ stackCounts: [2, 1], openDrafts: 4, failedCounts: 0 });
+    expect(query).toHaveBeenCalledExactlyOnceWith(['r1', 'r2']);
   });
 
-  it('does not try to read repositories without fetched heads', async () => {
-    const count = vi.fn(async () => 99);
+  it('does not issue SQL queries when repositories have not been fetched', async () => {
+    const query = vi.fn(async () => rows);
     const result = await loadDashboardDraftCounts(
-      [{ id: 's', rootPath: 'x', repository: { id: 'r', headSha: null } }],
+      [{ id: 's', rootPath: '', repository: { id: 'r', headSha: null } }],
       [{ id: 'r', headSha: null }],
-      count,
+      query,
       vi.fn(),
     );
     expect(result).toEqual({ stackCounts: [0], openDrafts: 0, failedCounts: 0 });
-    expect(count).not.toHaveBeenCalled();
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it('supports repository-root stacks and overlapping scoped paths', async () => {
+    const result = await loadDashboardDraftCounts(
+      [
+        { id: 'root', rootPath: '', repository: repositories[0]! },
+        { id: 'parent', rootPath: 'apps', repository: repositories[0]! },
+        { id: 'nested', rootPath: 'apps/one', repository: repositories[0]! },
+      ],
+      [repositories[0]!],
+      async () => rows.filter((row) => row.repositoryId === 'r1'),
+      vi.fn(),
+    );
+    expect(result).toEqual({ stackCounts: [3, 3, 2], openDrafts: 3, failedCounts: 0 });
   });
 });
