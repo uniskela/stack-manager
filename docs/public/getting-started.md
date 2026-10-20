@@ -105,8 +105,8 @@ make the edit again on the current version.
    that looks like a hard-coded secret, review them and tick **Commit despite warnings**.
 5. Write a commit message, then choose **Commit**, or **Commit & Push** to send it to your Git server straight away.
    Pushing needs a token with write access.
-6. After pushing, choose **Fetch now** on the repository page. The commit then appears on the stack's **History**
-   tab. Discard the drafts you no longer need.
+6. After pushing, Stack Manager queues a background fetch. Once it finishes, the commit appears on the stack's
+   **History** tab. You can still choose **Fetch now** to retry. Discard the drafts you no longer need.
 
 Stack Manager pushes only to the repository's tracked branch and **never force pushes**. If someone else pushed
 first, you'll see *"The remote branch changed since your copy was last updated."* Nothing is overwritten, and your
@@ -129,6 +129,7 @@ whole repository. The repository page has tabs for them:
 
 ## 7. Keep it up to date
 
-Use **Fetch now** on the repository page to pull the latest commits from your Git server. The editor, docs and
-environment views read from the fetched commit plus your drafts. History lists only the commits in the fetched
-repository; drafts and unpushed commits don't appear there. Fetching never changes or deletes drafts.
+Stack Manager checks your repository automatically every 15 minutes by default while its job worker runs. You can
+change the interval or turn off automatic checks through server configuration, or use **Fetch now** at any time.
+The editor, docs and environment views read from the fetched commit plus your drafts. History lists only commits
+in the fetched repository; drafts and unpushed commits don't appear there. Fetching never changes or deletes drafts.
