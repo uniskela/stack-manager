@@ -43,6 +43,8 @@ Optional settings you are likely to want:
 - `STACK_MANAGER_SETUP_TOKEN`: required during first-run setup, so nobody else can claim a fresh instance
 - `STACK_MANAGER_ALLOW_PRIVATE_NETWORKS=true`: needed when your Gitea or Forgejo runs on your LAN (e.g. `192.168.x.x`)
 - `STACK_MANAGER_COOKIE_SECURE=false`: only for testing over plain HTTP on localhost
+- `STACK_MANAGER_AUTO_FETCH_ENABLED=true` and `STACK_MANAGER_AUTO_FETCH_INTERVAL_MINUTES=15`: automatically
+  refresh connected Git repositories every 15 minutes while the worker is enabled; no deployment is triggered
 
 After sign-in, set your Git author name and email under **Settings → Account**. Commits created by Stack Manager
 use that identity; it does not grant repository permissions. See [Git workflow](GIT_WORKFLOW.md) for committing,
