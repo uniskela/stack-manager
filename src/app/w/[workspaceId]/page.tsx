@@ -64,11 +64,10 @@ export default async function DashboardPage({ params }: { params: Promise<{ work
   } = await loadDashboardDraftCounts(
     stackList,
     repositories,
-    (repositoryId, rootPath) => container.source.countDrafts(repositoryId, rootPath),
-    ({ scope, id, repositoryId, error }) =>
+    (repositoryIds) => container.source.listDraftPaths(repositoryIds),
+    ({ scope, repositoryId, error }) =>
       container.logger.warn('dashboard draft count failed', {
         scope,
-        id,
         repositoryId,
         error: safeErrorMessage(error),
       }),
