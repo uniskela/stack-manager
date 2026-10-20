@@ -6,7 +6,7 @@ half of this page is a guide to the **Changes** and **History** tabs. The second
 and API contract.
 
 ```text
-Edit → save draft → review Changes → validate → commit → push → fetch → History
+Edit → save draft → review Changes → validate → commit → push → automatic fetch → History
 ```
 
 Deploying the stacks a commit touched, and watching the result, are later roadmap phases
@@ -59,8 +59,8 @@ the rest.
   that your commit builds directly on it. Only then does it send an ordinary push.
 - It **never force pushes**, and there is no option to. If the remote has moved, the push is stopped before
   anything is sent.
-- After a successful push, choose **Fetch now** on the repository page to see the commit in **History** and to
-  refresh the editor's view of the branch.
+- After a successful push, Stack Manager queues a background fetch to refresh the editor and **History**.
+  Use **Fetch now** if you need to retry or cannot wait for the background worker.
 
 If **Commit & Push** commits but the push doesn't go through, the commit is kept. The Changes tab then offers
 **Push** for that commit, so you don't have to commit the same drafts again. If you leave the tab before pushing,
