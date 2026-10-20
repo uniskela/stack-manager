@@ -35,7 +35,9 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      # Native builds are deliberately limited to the existing approved dependencies.
+      - run: pnpm rebuild better-sqlite3 esbuild
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm typecheck

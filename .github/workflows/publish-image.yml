@@ -29,10 +29,12 @@ env:
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
   build-scan-push:
+    permissions:
+      contents: read
+      packages: write
     name: Build, scan and push ${{ inputs.tag }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -207,6 +209,9 @@ jobs:
   # release or runs finishing out of order can never move latest (or X.Y) backwards. One shared concurrency
   # group serialises every promotion across releases.
   promote:
+    permissions:
+      contents: read
+      packages: write
     name: Promote moving tags
     needs: build-scan-push
     runs-on: ubuntu-latest
