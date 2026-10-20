@@ -1,12 +1,22 @@
 import fs from 'node:fs';
 import { expect, test } from '@playwright/test';
-import { AUTH_STATE, expectAccessible, SAMPLE_REMOTE, SAMPLE_STATE, WORKSPACE_NAME } from './support';
+import {
+  AUTH_STATE,
+  expectAccessible,
+  SAMPLE_REMOTE,
+  SAMPLE_STATE,
+  WORKSPACE_NAME,
+} from './support';
 
 test.use({ storageState: AUTH_STATE });
 test.skip(!SAMPLE_REMOTE, 'Set E2E_GIT_REMOTE to verify the populated dashboard.');
 
-test('dashboard stays focused, accessible and responsive with a connected repository', async ({ page }, info) => {
-  const { workspaceId } = JSON.parse(fs.readFileSync(SAMPLE_STATE, 'utf8')) as { workspaceId: string };
+test('dashboard stays focused, accessible and responsive with a connected repository', async ({
+  page,
+}, info) => {
+  const { workspaceId } = JSON.parse(fs.readFileSync(SAMPLE_STATE, 'utf8')) as {
+    workspaceId: string;
+  };
   await page.goto(`/w/${workspaceId}`);
 
   await expect(page.getByRole('heading', { level: 1, name: WORKSPACE_NAME })).toBeVisible();
