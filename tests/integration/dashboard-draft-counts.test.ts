@@ -16,7 +16,11 @@ beforeEach(async () => {
       updatedAt: now,
     });
   }
-  for (const [id, workspaceId] of [['r1', 'w1'], ['r2', 'w1'], ['r3', 'w2']] as const) {
+  for (const [id, workspaceId] of [
+    ['r1', 'w1'],
+    ['r2', 'w1'],
+    ['r3', 'w2'],
+  ] as const) {
     const repository: GitRepositoryConnection = {
       id,
       workspaceId,
