@@ -14,8 +14,13 @@ Open the app. The first visit starts setup:
 Setup can only happen once. After that, `/setup` redirects to sign-in.
 
 After sign-in, the sidebar lists **Dashboard**, **Stacks**, **Repositories** and **Settings** (in that order). The
-**Dashboard** is your workspace home: a quick overview and the main path to connect a repository when the workspace
-is empty. **Settings** has **General**, **Credentials**, **Activity** and **Account** tabs for workspace options,
+**Dashboard** is your workspace home: a quick view of repository and stack counts, open drafts, sync
+errors and the most recent Git sync attempt. **Needs attention** groups outdated drafts by stack and highlights
+failed repository fetches; ordinary drafts appear separately under **Work in progress**. Recent activity shows up
+to five meaningful events with a link to the full audit log in **Settings → Activity**. A single-repository
+workspace can request **Fetch now** from its dashboard without triggering deployments. These statuses describe
+Git source state, **not** container health. **Settings** has **General**, **Credentials**, **Activity** and
+**Account** tabs for workspace options,
 saved tokens, the audit log, your Git author identity, password and sessions.
 
 ## 2. Connect a repository
