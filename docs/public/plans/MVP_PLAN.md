@@ -71,6 +71,19 @@ Shipped across repository PRs #29, #31, #32, #34, #35, #36 and #37. User guide a
 - Deferred: automatic draft cleanup after push, "update draft to the current version", in-app discard of an
   unpushed local commit, in-app merge/rebase or conflict editor, SSH remotes
 
+## Near-term implementation work for the next feature release (planned 2026-10-20)
+
+**Track [#51](https://github.com/uniskela/stack-manager/issues/51)** and the [implementation slices](../../internal/plans/2026-10-20-v0.6.0-automation-deployment-dashboard.md). PR #5 remains the next core deployment-routing phase, but it is deliberately divided into reviewable sub-PRs:
+
+1. [#52](https://github.com/uniskela/stack-manager/issues/52): scheduled Git fetch and post-push source refresh, using existing durable jobs.
+2. [#53](https://github.com/uniskela/stack-manager/issues/53): signed forge push ingress to accelerate fetch.
+3. [#54](https://github.com/uniskela/stack-manager/issues/54): explicit per-stack Portainer/generic deployment bindings and manual triggers.
+4. [#55](https://github.com/uniskela/stack-manager/issues/55): deployment relevance, selective routing and idempotency.
+5. [#56](https://github.com/uniskela/stack-manager/issues/56): focused dashboard and actionable sync/deploy state (can run in parallel after data contract is set).
+6. [#57](https://github.com/uniskela/stack-manager/issues/57): security, E2E, docs, migrations and release verification.
+
+**Safe defaults:** automatic Git fetch enabled at 15-minute fallback; auto-deployment off for all stacks until operator opt-in; manual fetch retained; no draft deletion, merge/rebase or force-push. Release version is controlled by Release Please, not this plan. Keep PR #6 environment/secrets and PR #7 read-only runtime observation in their existing later sequence.
+
 ## PR #5 (next): deployment routing
 
 Next active phase. Scope as in the table above: `DeploymentProvider` with Portainer and generic webhooks, a forge
