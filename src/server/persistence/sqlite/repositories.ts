@@ -601,6 +601,15 @@ class SqliteStackRepository implements StackRepository {
 class SqliteSourceDraftRepository implements SourceDraftRepository {
   constructor(private readonly db: SqliteDb) {}
 
+  async listPaths(repositoryIds: readonly string[]) {
+    if (repositoryIds.length === 0) return [];
+    return this.db
+      .select({ repositoryId: sourceDrafts.repositoryId, path: sourceDrafts.path })
+      .from(sourceDrafts)
+      .where(inArray(sourceDrafts.repositoryId, [...repositoryIds]))
+      .all();
+  }
+
   async find(repositoryId: string, path: string) {
     return (
       this.db
