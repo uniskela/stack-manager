@@ -20,7 +20,7 @@ Retain per-repository enqueue. This is local synchronous SQLite in WAL mode, wit
 
 A temporary benchmark on a fresh migrated database using the real JobQueue/repository measured 100 durable enqueues in 184.5 ms and 1,000 in 1,304.5 ms. These are local observations, not capacity guarantees. They do not justify batch-port infrastructure or a shared all-or-nothing transaction that compromises failure isolation. Revisit if measured scheduling latency approaches the minute tick or a network database backend is introduced.
 
-## Per-repository policy decision
+## Per-repository policy decision (PR #59 history)
 
 Defer repository-specific enable/interval API and settings to an immediately following PR tracked in [#60](https://github.com/uniskela/stack-manager/issues/60), under #52. Global enabled/interval settings remain the policy in this PR; worker-disabled disables automatic scheduling. The follow-up must add safe migration defaults, bounded validation, settings UI/API and policy tests before #52 is considered fully complete. Dashboard work stays in #56. This avoids mixing a settings feature into race/recovery remediation; dedicated retry timestamps and focused status visibility are included here because they are required for correctness.
 
@@ -46,3 +46,28 @@ docker run --rm --mount "type=bind,src=$PWD/tests,dst=/app/tests,readonly" \
 The test tree is mounted because `.dockerignore` excludes it from application images. This temporary build-stage
 container adds Git for the local smart-HTTP test server; no ports, production credentials or deployment endpoints
 are used. Release publishing was not executed. For later heads, consult [current PR checks](https://github.com/uniskela/stack-manager/pull/59/checks).
+
+## Per-repository policy implementation — #60
+
+Repository connections now persist `autoFetchEnabled` (default true) and nullable
+`autoFetchIntervalMinutes` (null inherits the operator interval). Migration 0006 adds only these two columns;
+it leaves timestamps, credentials, drafts, jobs and Git files untouched. The migration integration test builds
+a populated pre-0006 database using historical migrations, compares every prior row after migration and reopening,
+and verifies that changing the global interval still affects inherited policies.
+
+`resolveRepositoryFetchPolicy` is shared by the service view and scheduler: worker off → server fetching off →
+repository off → repository interval or global interval. PATCH uses strict JSON validation (boolean and nullable
+integer 5–1440); service validation also protects internal callers. The existing workspace-scoped lookup and
+redacting `repository.update` audit remain in use. Responses include saved settings and effective enabled state,
+interval, disabling reason and server default, without exposing configuration secrets.
+
+The single minute scheduler re-reads repositories on every scan. Eligibility continues to use the latest persisted
+attempt/failure/success (creation fallback), so policy updates never reset history. Queue dedupe, follow-up flags,
+worker backoff, lease recovery and Git filesystem locks are unchanged. Disabling scheduled fetching deliberately
+does not cancel pending/running jobs or retries. Manual fetch and post-push enqueue paths do not consult this
+policy; with the worker off these remain durable pending requests until it resumes.
+
+The compact Overview form uses existing controls/styles, native keyboard-accessible inputs and status/alert
+messages. It distinguishes the saved effective policy from unsaved edits, preserves edits on request failure,
+and describes operator overrides and pending-job behavior. Existing published pages carry the user guidance;
+no documentation slug or manifest change is needed.

@@ -3,6 +3,11 @@ import type { GitRepositoryConnectionRepository, WorkspaceRepository } from '@/s
 import { REPOSITORY_SYNC_JOB } from '@/server/application/git-repository-service';
 import type { Clock } from '@/server/domain/clock';
 import type { GitRepositoryConnection } from '@/server/domain/git-repository';
+import {
+  resolveRepositoryFetchPolicy,
+  validateFetchInterval,
+  type ServerFetchPolicy,
+} from '@/server/domain/repository-fetch-policy';
 import type { Logger } from '@/server/observability/logger';
 import { safeErrorMessage } from '@/server/security/redact';
 
@@ -34,7 +39,6 @@ export function isRepositoryAutoFetchDue(repository: FetchState, now: Date, inte
  * the database and recovered by JobWorker after restarts.
  */
 export class RepositoryAutoFetch {
-  readonly #intervalMs: number;
   #timer: ReturnType<typeof setInterval> | null = null;
   #inFlight: Promise<number> | null = null;
   #stopping = false;
@@ -45,12 +49,9 @@ export class RepositoryAutoFetch {
     private readonly jobs: Pick<JobQueue, 'enqueue'>,
     private readonly clock: Clock,
     private readonly logger: Pick<Logger, 'debug' | 'warn'>,
-    intervalMinutes: number,
+    private readonly policy: ServerFetchPolicy,
   ) {
-    if (!Number.isInteger(intervalMinutes) || intervalMinutes < 5 || intervalMinutes > 1440) {
-      throw new Error('Automatic fetch interval must be 5–1440 minutes.');
-    }
-    this.#intervalMs = intervalMinutes * 60_000;
+    validateFetchInterval(policy.autoFetchIntervalMinutes);
   }
 
   /** Safe for manual tests and overlapping timer ticks. */
@@ -92,6 +93,7 @@ export class RepositoryAutoFetch {
   }
 
   async #scan(): Promise<number> {
+    if (!this.policy.workerEnabled || !this.policy.autoFetchEnabled) return 0;
     let queued = 0;
     for (const workspace of await this.workspaces.list()) {
       if (this.#stopping) break;
@@ -114,8 +116,13 @@ export class RepositoryAutoFetch {
     let queued = 0;
     for (const repository of repositories) {
       if (this.#stopping) break;
-      if (!isRepositoryAutoFetchDue(repository, this.clock.now(), this.#intervalMs)) continue;
       try {
+        const policy = resolveRepositoryFetchPolicy(repository, this.policy);
+        if (
+          !policy.enabled ||
+          !isRepositoryAutoFetchDue(repository, this.clock.now(), policy.intervalMinutes * 60_000)
+        )
+          continue;
         const { created } = await this.jobs.enqueue(
           REPOSITORY_SYNC_JOB,
           { repositoryId: repository.id, requestedBy: null },

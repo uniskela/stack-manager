@@ -1,0 +1,2 @@
+ALTER TABLE `git_repository_connections` ADD `auto_fetch_enabled` integer DEFAULT true NOT NULL;--> statement-breakpoint
+ALTER TABLE `git_repository_connections` ADD `auto_fetch_interval_minutes` integer;

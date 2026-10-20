@@ -380,3 +380,209 @@ describe('repository connection lifecycle', () => {
     expect(server.authHeaders).toHaveLength(0);
   });
 });
+
+describe('repository automatic fetch settings', () => {
+  it('persists overrides, inherits on reset, audits changes and keeps manual fetch available', async () => {
+    const repo = (await connect()).json.repository;
+    const params = { workspaceId, repositoryId: repo.id };
+    expect(repo).toMatchObject({
+      autoFetchEnabled: true,
+      autoFetchIntervalMinutes: null,
+      autoFetchPolicy: { enabled: true, intervalMinutes: 15 },
+    });
+    await drainJobs();
+    const before = await h.container.repositories.get(workspaceId, repo.id);
+    const changed = await call(repoRoute.PATCH, {
+      method: 'PATCH',
+      cookie,
+      params,
+      body: { autoFetchEnabled: false, autoFetchIntervalMinutes: 30 },
+    });
+    expect(changed.status).toBe(200);
+    expect(changed.json.repository).toMatchObject({
+      autoFetchEnabled: false,
+      autoFetchIntervalMinutes: 30,
+      autoFetchPolicy: { enabled: false, disabledReason: 'repository', intervalMinutes: 30 },
+      lastFetchedAt: before.lastFetchedAt,
+      lastSyncAttemptAt: before.lastSyncAttemptAt,
+    });
+    expect((await call(repoRoute.GET, { cookie, params })).json.repository.autoFetchIntervalMinutes).toBe(30);
+    h.clock.advance(60 * 60_000);
+    expect(await h.container.autoFetch.runOnce()).toBe(0);
+    expect((await call(syncRoute.POST, { method: 'POST', cookie, params })).status).toBe(200);
+    await drainJobs();
+    expect((await h.container.repositories.get(workspaceId, repo.id)).lastFetchedAt).not.toBe(
+      before.lastFetchedAt,
+    );
+    for (const interval of [5, 1440]) {
+      const valid = await call(repoRoute.PATCH, {
+        method: 'PATCH',
+        cookie,
+        params,
+        body: { autoFetchIntervalMinutes: interval },
+      });
+      expect(valid.status).toBe(200);
+      expect(valid.json.repository.autoFetchIntervalMinutes).toBe(interval);
+    }
+    const reset = await call(repoRoute.PATCH, {
+      method: 'PATCH',
+      cookie,
+      params,
+      body: { autoFetchEnabled: true, autoFetchIntervalMinutes: null },
+    });
+    expect(reset.json.repository).toMatchObject({
+      autoFetchEnabled: true,
+      autoFetchIntervalMinutes: null,
+      autoFetchPolicy: { enabled: true, intervalMinutes: 15 },
+    });
+    const events = await h.container.audit.list({ workspaceId, limit: 100 });
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          action: 'repository.update',
+          meta: expect.objectContaining({ autoFetchEnabled: false, autoFetchIntervalMinutes: 30 }),
+        }),
+      ]),
+    );
+  });
+
+  it('rejects invalid intervals/types/fields, cross-workspace writes and CSRF without mutation', async () => {
+    const repo = (await connect()).json.repository;
+    const params = { workspaceId, repositoryId: repo.id };
+    for (const value of [-1, 0, 4, 1441, 5.5, '15', 'no', true, [], {}]) {
+      expect(
+        (
+          await call(repoRoute.PATCH, {
+            method: 'PATCH',
+            cookie,
+            params,
+            body: { autoFetchIntervalMinutes: value },
+          })
+        ).status,
+      ).toBe(400);
+    }
+    for (const body of [{ autoFetchEnabled: 'false' }, { autoFetchEnabled: null }, { unexpected: 15 }]) {
+      expect((await call(repoRoute.PATCH, { method: 'PATCH', cookie, params, body })).status).toBe(400);
+    }
+    const other = (await call(workspaces.POST, { method: 'POST', cookie, body: { name: 'Other' } })).json
+      .workspace.id;
+    expect(
+      (
+        await call(repoRoute.PATCH, {
+          method: 'PATCH',
+          cookie,
+          params: { ...params, workspaceId: other },
+          body: { autoFetchEnabled: false },
+        })
+      ).status,
+    ).toBe(404);
+    expect(
+      (
+        await call(repoRoute.PATCH, {
+          method: 'PATCH',
+          cookie,
+          origin: 'http://evil.test',
+          params,
+          body: { autoFetchEnabled: false },
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      (await call(repoRoute.PATCH, { method: 'PATCH', params, body: { autoFetchEnabled: false } })).status,
+    ).toBe(401);
+    expect(await h.container.repositories.get(workspaceId, repo.id)).toMatchObject({
+      autoFetchEnabled: true,
+      autoFetchIntervalMinutes: null,
+    });
+  });
+});
+
+describe('persisted automatic fetch scheduling', () => {
+  it('applies individual intervals on later scans, deduplicates and resumes from persisted timestamps', async () => {
+    const first = (await connect()).json.repository;
+    const second = (await connect({ remoteUrl: 'https://git.test/acme/public.git' })).json.repository;
+    await drainJobs();
+    const actor = (await h.container.repos.users.findByUsername('admin'))!.id;
+    await h.container.repositories.update(workspaceId, first.id, { autoFetchIntervalMinutes: 5 }, actor);
+    await h.container.repositories.update(workspaceId, second.id, { autoFetchIntervalMinutes: 30 }, actor);
+    h.clock.advance(5 * 60_000 - 1);
+    expect(await h.container.autoFetch.runOnce()).toBe(0);
+    h.clock.advance(1);
+    expect(await h.container.autoFetch.runOnce()).toBe(1);
+    expect(await h.container.autoFetch.runOnce()).toBe(0);
+    await drainJobs();
+    h.clock.advance(10 * 60_000);
+    await h.container.repositories.update(workspaceId, first.id, { autoFetchIntervalMinutes: 30 }, actor);
+    expect(await h.container.autoFetch.runOnce()).toBe(0);
+    const timestamps = await h.container.repositories.get(workspaceId, first.id);
+    await h.container.repositories.update(workspaceId, first.id, { autoFetchIntervalMinutes: 10 }, actor);
+    expect(await h.container.autoFetch.runOnce()).toBe(1);
+    await h.container.repositories.update(workspaceId, first.id, { autoFetchEnabled: false }, actor);
+    // Disabling does not cancel already queued work.
+    expect((await h.container.repositories.get(workspaceId, first.id)).sync?.status).toBe('pending');
+    await drainJobs();
+    h.clock.advance(15 * 60_000);
+    expect(await h.container.autoFetch.runOnce()).toBe(1); // only second is due
+    await drainJobs();
+    expect((await h.container.repositories.get(workspaceId, first.id)).lastSyncFailedAt).toBe(
+      timestamps.lastSyncFailedAt,
+    );
+    const { dataDir, config } = h;
+    await h.container.close();
+    const restarted = await createHarness({ dataDir, config, overrides: gitServerOverrides(server) });
+    try {
+      restarted.clock.advance(h.clock.now().getTime() - restarted.clock.now().getTime());
+      // The new process uses persisted fetch timestamps; the disabled policy also persists.
+      expect(await restarted.container.autoFetch.runOnce()).toBe(0);
+      restarted.clock.advance(30 * 60_000);
+      expect(await restarted.container.autoFetch.runOnce()).toBe(1);
+      expect(await restarted.container.autoFetch.runOnce()).toBe(0);
+      expect((await restarted.container.repositories.get(workspaceId, first.id)).autoFetchEnabled).toBe(
+        false,
+      );
+    } finally {
+      await restarted.cleanup();
+    }
+  });
+});
+
+describe('operator policy overrides', () => {
+  it.each(['autoFetchEnabled', 'workerEnabled'] as const)(
+    'keeps manual and post-push jobs independent when %s is false',
+    async (setting) => {
+      const repo = (await connect()).json.repository;
+      await drainJobs();
+      const { dataDir } = h;
+      await h.container.close();
+      const restarted = await createHarness({
+        dataDir,
+        config: { ...h.config, [setting]: false },
+        overrides: gitServerOverrides(server),
+      });
+      try {
+        const view = await restarted.container.repositories.get(workspaceId, repo.id);
+        expect(view.autoFetchPolicy).toMatchObject({
+          enabled: false,
+          disabledReason: setting === 'workerEnabled' ? 'worker' : 'server',
+        });
+        restarted.clock.advance(60 * 60_000);
+        expect(await restarted.container.autoFetch.runOnce()).toBe(0);
+        const actor = (await restarted.container.repos.users.findByUsername('admin'))!.id;
+        await restarted.container.repositories.requestSync(workspaceId, repo.id, actor);
+        expect((await restarted.container.repositories.get(workspaceId, repo.id)).sync?.status).toBe(
+          'pending',
+        );
+        // Explicit runOnce is the worker test harness, independent of worker.start().
+        expect(await restarted.container.worker.runOnce()).toBe(true);
+        restarted.clock.advance(1);
+        await restarted.container.repositories.schedulePostPushRefresh(repo.id);
+        expect((await restarted.container.repositories.get(workspaceId, repo.id)).sync?.status).toBe(
+          'pending',
+        );
+        expect(await restarted.container.worker.runOnce()).toBe(true);
+      } finally {
+        await restarted.cleanup();
+      }
+    },
+  );
+});

@@ -122,6 +122,7 @@ export function createContainer(config: AppConfig, overrides: ContainerOverrides
         reposDir: config.reposDir,
         allowPrivateNetworks: config.allowPrivateNetworks,
         resolver: overrides.resolver,
+        fetchPolicy: config,
       },
     );
 
@@ -183,7 +184,7 @@ export function createContainer(config: AppConfig, overrides: ContainerOverrides
       jobs,
       clock,
       logger.child({ component: 'auto-fetch' }),
-      config.autoFetchIntervalMinutes,
+      config,
     );
 
     return {
