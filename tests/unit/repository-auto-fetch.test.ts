@@ -31,32 +31,26 @@ function repository(overrides: Partial<GitRepositoryConnection> = {}): GitReposi
 
 describe('isRepositoryAutoFetchDue', () => {
   const interval = 15 * 60_000;
+  const due = (overrides: Partial<GitRepositoryConnection>) =>
+    isRepositoryAutoFetchDue(repository(overrides), now, interval);
 
   it('fetches a ready repository after fifteen minutes, not earlier', () => {
-    expect(
-      isRepositoryAutoFetchDue(repository({ lastFetchedAt: minutesAgo(14) }), now, interval),
-    ).toBe(false);
-    expect(isRepositoryAutoFetchDue(repository({ lastFetchedAt: minutesAgo(15) }), now, interval)).toBe(true);
+    expect(due({ lastFetchedAt: minutesAgo(14) })).toBe(false);
+    expect(due({ lastFetchedAt: minutesAgo(15) })).toBe(true);
   });
 
   it('waits from the last failure before trying again', () => {
-    expect(
-      isRepositoryAutoFetchDue(repository({ syncStatus: 'error', updatedAt: minutesAgo(3) }), now, interval),
-    ).toBe(false);
-    expect(
-      isRepositoryAutoFetchDue(repository({ syncStatus: 'error', updatedAt: minutesAgo(20) }), now, interval),
-    ).toBe(true);
+    expect(due({ syncStatus: 'error', updatedAt: minutesAgo(3) })).toBe(false);
+    expect(due({ syncStatus: 'error', updatedAt: minutesAgo(20) })).toBe(true);
   });
 
   it('does not compete with queued or running initial fetches', () => {
-    expect(isRepositoryAutoFetchDue(repository({ syncStatus: 'pending' }), now, interval)).toBe(false);
-    expect(isRepositoryAutoFetchDue(repository({ syncStatus: 'syncing' }), now, interval)).toBe(false);
+    expect(due({ syncStatus: 'pending' })).toBe(false);
+    expect(due({ syncStatus: 'syncing' })).toBe(false);
   });
 
   it('uses connection creation as the due reference if no fetch completed', () => {
-    expect(
-      isRepositoryAutoFetchDue(repository({ lastFetchedAt: null, createdAt: minutesAgo(20) }), now, interval),
-    ).toBe(true);
+    expect(due({ lastFetchedAt: null, createdAt: minutesAgo(20) })).toBe(true);
   });
 });
 
@@ -78,7 +72,7 @@ describe('RepositoryAutoFetch', () => {
     return { scheduler, enqueue, warn, listRepositories };
   }
 
-  it('enqueues a durable deduplicated sync job and does not log secrets', async () => {
+  it('enqueues a reference-only durable sync job', async () => {
     const { scheduler, enqueue } = make();
     expect(await scheduler.runOnce()).toBe(1);
     expect(enqueue).toHaveBeenCalledWith(
