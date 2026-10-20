@@ -1,7 +1,11 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { getContainer } from '@/server/container';
-import { dashboardRecentActivity, dashboardSyncSummary, dashboardWork } from '@/shared/dashboard/overview';
+import {
+  dashboardRecentActivity,
+  dashboardSyncSummary,
+  dashboardWork,
+} from '@/shared/dashboard/overview';
 import { auditActionLabel } from '@/shared/audit/labels';
 import { auditEntityHref } from '@/shared/audit/links';
 import { DashboardFetchAction } from '@/ui/dashboard-fetch-action';
@@ -14,7 +18,11 @@ import { FolderGit2 } from 'lucide-react';
 
 export const metadata: Metadata = { title: 'Dashboard' };
 
-export default async function DashboardPage({ params }: { params: Promise<{ workspaceId: string }> }) {
+export default async function DashboardPage({
+  params,
+}: {
+  params: Promise<{ workspaceId: string }>;
+}) {
   const { workspaceId } = await params;
   const container = getContainer();
   const base = `/w/${workspaceId}`;
@@ -55,7 +63,9 @@ export default async function DashboardPage({ params }: { params: Promise<{ work
       ),
     ),
     Promise.all(
-      repositories.map((repo) => (repo.headSha ? container.source.countDrafts(repo.id, '') : Promise.resolve(0))),
+      repositories.map((repo) =>
+        repo.headSha ? container.source.countDrafts(repo.id, '') : Promise.resolve(0),
+      ),
     ).then((counts) => counts.reduce((sum, count) => sum + count, 0)),
   ]);
 
@@ -123,11 +133,20 @@ export default async function DashboardPage({ params }: { params: Promise<{ work
           <ul className="list dashboard-attention-list" aria-labelledby="dash-attention">
             {visibleAttention.map((item) => (
               <li key={item.key}>
-                <Link className="list-row dashboard-attention-row" href={`${base}/${item.target.type === 'stack' ? 'stacks' : 'repositories'}/${item.target.id}`}>
+                <Link
+                  className="list-row dashboard-attention-row"
+                  href={`${base}/${item.target.type === 'stack' ? 'stacks' : 'repositories'}/${item.target.id}`}
+                >
                   <div className="grow">
                     <span className="dashboard-row-heading">
                       <span className="title">{item.label}</span>
-                      <span className={item.kind === 'sync-error' ? 'dashboard-kind dashboard-kind-error' : 'dashboard-kind'}>
+                      <span
+                        className={
+                          item.kind === 'sync-error'
+                            ? 'dashboard-kind dashboard-kind-error'
+                            : 'dashboard-kind'
+                        }
+                      >
                         {item.kind === 'sync-error' ? 'Sync failed' : 'Outdated drafts'}
                       </span>
                     </span>
@@ -180,7 +199,9 @@ export default async function DashboardPage({ params }: { params: Promise<{ work
         aside={<Link href={`${base}/settings/activity`}>View all activity</Link>}
       />
       {activity.length === 0 ? (
-        <p className="muted">No meaningful changes yet. Full audit events remain in Settings → Activity.</p>
+        <p className="muted">
+          No meaningful changes yet. Full audit events remain in Settings → Activity.
+        </p>
       ) : (
         <ol className="list dashboard-activity" aria-labelledby="dash-activity">
           {activity.map((event) => {
@@ -193,7 +214,9 @@ export default async function DashboardPage({ params }: { params: Promise<{ work
                   ) : (
                     <span>{auditActionLabel(event.action)}</span>
                   )}
-                  {event.outcome === 'failure' ? <span className="dashboard-kind dashboard-kind-error">Failed</span> : null}
+                  {event.outcome === 'failure' ? (
+                    <span className="dashboard-kind dashboard-kind-error">Failed</span>
+                  ) : null}
                 </span>
                 <LocalTime iso={event.createdAt.toISOString()} />
               </li>
