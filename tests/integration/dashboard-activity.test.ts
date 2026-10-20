@@ -80,11 +80,7 @@ describe('dashboard activity query', () => {
     const result = await h.container.audit.list({
       workspaceId: 'workspace-one',
       limit: 5,
-      excludeSuccessfulActions: [
-        'auth.login',
-        'repository.sync_requested',
-        'repository.test',
-      ],
+      excludeSuccessfulActions: ['auth.login', 'repository.sync_requested', 'repository.test'],
     });
     expect(result.map((event) => event.id)).toEqual(['old-failed-test', 'old-push']);
     const fullAudit = await h.container.audit.list({ workspaceId: 'workspace-one', limit: 100 });
