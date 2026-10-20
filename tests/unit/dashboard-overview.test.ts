@@ -53,10 +53,15 @@ describe('dashboardWork', () => {
   ];
 
   it('groups the same stack’s draft and outdated files into one attention row', () => {
-    const result = dashboardWork(repos, stacks, [2, 3, 0], [
-      { repositoryId: 'r1', path: 'whatsupdocker/compose.yml', stackId: 's1' },
-      { repositoryId: 'r1', path: 'whatsupdocker/compose.yml', stackId: 's1' },
-    ]);
+    const result = dashboardWork(
+      repos,
+      stacks,
+      [2, 3, 0],
+      [
+        { repositoryId: 'r1', path: 'whatsupdocker/compose.yml', stackId: 's1' },
+        { repositoryId: 'r1', path: 'whatsupdocker/compose.yml', stackId: 's1' },
+      ],
+    );
     expect(result.attention).toEqual([
       {
         key: 'sync-r2',
@@ -77,11 +82,16 @@ describe('dashboardWork', () => {
   });
 
   it('groups different outdated paths outside a stack by repository', () => {
-    const result = dashboardWork(repos, [], [], [
-      { repositoryId: 'r1', path: 'root.yml' },
-      { repositoryId: 'r1', path: 'docs/old.md' },
-      { repositoryId: 'r1', path: 'root.yml' },
-    ]);
+    const result = dashboardWork(
+      repos,
+      [],
+      [],
+      [
+        { repositoryId: 'r1', path: 'root.yml' },
+        { repositoryId: 'r1', path: 'docs/old.md' },
+        { repositoryId: 'r1', path: 'root.yml' },
+      ],
+    );
     expect(result.attention.find((row) => row.key === 'outdated-repo-r1')).toMatchObject({
       label: 'Infrastructure',
       detail: '2 outdated drafts outside stacks',
@@ -90,9 +100,12 @@ describe('dashboardWork', () => {
   });
 
   it('does not misattribute a stale stack id from a different repository', () => {
-    const result = dashboardWork(repos, stacks, [1, 0, 0], [
-      { repositoryId: 'r2', path: 'compose.yml', stackId: 's1' },
-    ]);
+    const result = dashboardWork(
+      repos,
+      stacks,
+      [1, 0, 0],
+      [{ repositoryId: 'r2', path: 'compose.yml', stackId: 's1' }],
+    );
     expect(result.attention.some((row) => row.key === 'outdated-stack-s1')).toBe(false);
     expect(result.attention.some((row) => row.key === 'outdated-repo-r2')).toBe(true);
   });
