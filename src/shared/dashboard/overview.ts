@@ -120,17 +120,20 @@ export function dashboardWork(
   return { attention, draftsInProgress };
 }
 
-/** Hide routine connection tests and repeated fetch requests from the home feed; keep full audit elsewhere. */
+/** Successful routine events are excluded by SQL before LIMIT, preserving their failures. */
+export const DASHBOARD_ROUTINE_ACTIONS = [
+  'repository.sync_requested',
+  'repository.test',
+  'auth.login',
+  'auth.logout',
+] as const;
+
+/** Defensive UI filter: the SQL query normally excludes these before applying LIMIT. */
 export function dashboardRecentActivity<T extends { action: string; outcome: string }>(
   events: readonly T[],
   limit = 5,
 ): T[] {
-  const routineActions = new Set([
-    'repository.sync_requested',
-    'repository.test',
-    'auth.login',
-    'auth.logout',
-  ]);
+  const routineActions = new Set<string>(DASHBOARD_ROUTINE_ACTIONS);
   return events
     .filter((event) => event.outcome === 'failure' || !routineActions.has(event.action))
     .slice(0, limit);
