@@ -15,11 +15,7 @@ type FetchState = Pick<GitRepositoryConnection, 'syncStatus' | 'lastFetchedAt' |
  * A failed attempt waits a full interval from the failure; successful checks
  * wait from their last fetch even when the remote SHA has not changed.
  */
-export function isRepositoryAutoFetchDue(
-  repository: FetchState,
-  now: Date,
-  intervalMs: number,
-): boolean {
+export function isRepositoryAutoFetchDue(repository: FetchState, now: Date, intervalMs: number): boolean {
   if (repository.syncStatus === 'pending' || repository.syncStatus === 'syncing') return false;
   const lastAttempt =
     repository.syncStatus === 'error'
