@@ -1,4 +1,4 @@
-import type { AuditEvent } from '@/server/domain/audit';
+import type { AuditAction, AuditEvent } from '@/server/domain/audit';
 import type { CredentialRecord, CredentialTestStatus } from '@/server/domain/credential';
 import type { SourceDraft } from '@/server/domain/draft';
 import type { GitRepositoryConnection } from '@/server/domain/git-repository';
@@ -145,7 +145,11 @@ export interface JobRepository {
 
 export interface AuditRepository {
   insert(event: AuditEvent): Promise<void>;
-  list(filter: { workspaceId?: string; limit: number }): Promise<AuditEvent[]>;
+  list(filter: {
+    workspaceId?: string;
+    limit: number;
+    excludeSuccessfulActions?: readonly AuditAction[];
+  }): Promise<AuditEvent[]>;
 }
 
 export interface StackRepository {
