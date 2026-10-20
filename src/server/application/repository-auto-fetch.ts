@@ -8,10 +8,7 @@ import { safeErrorMessage } from '@/server/security/redact';
 
 export const AUTO_FETCH_POLL_INTERVAL_MS = 60_000;
 
-type FetchState = Pick<
-  GitRepositoryConnection,
-  'syncStatus' | 'lastFetchedAt' | 'createdAt' | 'updatedAt'
->;
+type FetchState = Pick<GitRepositoryConnection, 'syncStatus' | 'lastFetchedAt' | 'createdAt' | 'updatedAt'>;
 
 /**
  * Determine when background fetching is due without depending on the browser.
