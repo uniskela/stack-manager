@@ -23,7 +23,9 @@ export function DashboardFetchAction({
     setPending(true);
     setError(null);
     try {
-      await api(`/api/workspaces/${workspaceId}/repositories/${repositoryId}/sync`, { method: 'POST' });
+      await api(`/api/workspaces/${workspaceId}/repositories/${repositoryId}/sync`, {
+        method: 'POST',
+      });
       router.refresh();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not request a repository fetch.');
@@ -42,7 +44,11 @@ export function DashboardFetchAction({
       >
         {pending ? 'Requesting…' : 'Fetch now'}
       </Button>
-      {error ? <Alert tone="error" role="alert">{error}</Alert> : null}
+      {error ? (
+        <Alert tone="error" role="alert">
+          {error}
+        </Alert>
+      ) : null}
     </div>
   );
 }
