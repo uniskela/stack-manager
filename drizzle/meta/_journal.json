@@ -43,6 +43,13 @@
       "when": 1792491194427,
       "tag": "0005_sync-timestamps",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1792494900678,
+      "tag": "0006_repository_auto_fetch_policy",
+      "breakpoints": true
     }
   ]
 }

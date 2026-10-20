@@ -26,6 +26,8 @@ function repository(overrides: Partial<GitRepositoryConnection> = {}): GitReposi
     lastSyncFailedAt: null,
     lastHeadChangedAt: minutesAgo(16),
     autoAddStacks: true,
+    autoFetchEnabled: true,
+    autoFetchIntervalMinutes: null,
     createdAt: minutesAgo(90),
     updatedAt: minutesAgo(16),
     ...overrides,
@@ -70,7 +72,7 @@ describe('RepositoryAutoFetch', () => {
       { enqueue },
       { now: () => now },
       { warn, debug },
-      15,
+      { workerEnabled: true, autoFetchEnabled: true, autoFetchIntervalMinutes: 15 },
     );
     return { scheduler, enqueue, warn, listRepositories, listWorkspaces };
   }
@@ -89,6 +91,25 @@ describe('RepositoryAutoFetch', () => {
     const { scheduler, enqueue } = make({ lastFetchedAt: minutesAgo(1) });
     expect(await scheduler.runOnce()).toBe(0);
     expect(enqueue).not.toHaveBeenCalled();
+  });
+
+  it('uses fresh policies each tick and persisted fetch timestamps when intervals change', async () => {
+    const { scheduler, enqueue, listRepositories } = make();
+    const repo = repository({ lastFetchedAt: minutesAgo(10), lastSyncAttemptAt: minutesAgo(10) });
+    listRepositories.mockImplementation(async () => [repo, repository({ id: 'other' })]);
+    expect(await scheduler.runOnce()).toBe(1);
+    repo.autoFetchIntervalMinutes = 5;
+    expect(await scheduler.runOnce()).toBe(2);
+    repo.autoFetchIntervalMinutes = 30;
+    expect(await scheduler.runOnce()).toBe(1);
+    repo.autoFetchEnabled = false;
+    repo.autoFetchIntervalMinutes = 5;
+    expect(await scheduler.runOnce()).toBe(1);
+    repo.autoFetchEnabled = true;
+    repo.autoFetchIntervalMinutes = 10;
+    expect(await scheduler.runOnce()).toBe(2);
+    expect(enqueue).toHaveBeenCalledTimes(7);
+    expect(repo.lastFetchedAt).toEqual(minutesAgo(10));
   });
 
   it('handles deduplication without inflating the scheduled count', async () => {

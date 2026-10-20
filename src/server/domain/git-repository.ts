@@ -23,6 +23,9 @@ export interface GitRepositoryConnection {
   lastHeadChangedAt: Date | null;
   /** Register every Compose folder as a stack after each successful fetch (docs/public/STACK_DISCOVERY.md). */
   autoAddStacks: boolean;
+  autoFetchEnabled: boolean;
+  /** Null inherits the operator-configured server interval. */
+  autoFetchIntervalMinutes: number | null;
   createdAt: Date;
   updatedAt: Date;
 }

@@ -36,7 +36,7 @@ metadata addresses are always blocked.
 
 The repository overview shows **Last sync attempt**, **Last fetched** (successful fetch), **Last revision change
 observed**, and **Last sync failure** separately. A failed sync shows its error and whether the worker is retrying.
-Changing the repository name or other settings does not postpone automatic retries.
+Changing repository settings preserves synchronization history and does not cancel queued retries.
 
 ## 3. Add stacks
 
@@ -134,6 +134,18 @@ whole repository. The repository page has tabs for them:
 ## 7. Keep it up to date
 
 Stack Manager checks your repository automatically every 15 minutes by default while its job worker runs. You can
-change the interval or turn off automatic checks through server configuration, or use **Fetch now** at any time.
+open the repository **Overview → Automatic fetching**, turn **Automatically check for changes** on or off,
+and choose a check interval. Presets and custom whole-minute intervals from 5 to 1440 are supported. Choose
+**Use server default** and **Save settings** to clear an override and inherit the current server interval.
+The saved effective policy shows what will actually run; failed saves keep your edits available to retry.
+
+The server administrator's worker and automatic-fetch switches take precedence over repository settings.
+When either is off, the interface explains that saved repository settings cannot enable scheduled checks.
+Policy changes apply on the next one-minute scheduler tick, using the existing fetch/attempt/failure timestamps;
+shortening an interval can make a repository due immediately, while extending it postpones the next check.
+Disabling a repository stops new scheduled jobs. Pending/running jobs, their retries and durable post-push
+refreshes continue. **Fetch now** and **Test connection** remain available independently of scheduled policy;
+with the worker disabled, requested fetch jobs wait until the worker is enabled again.
+Fetching does not deploy a stack or indicate that it is healthy.
 The editor, docs and environment views read from the fetched commit plus your drafts. History lists only commits
 in the fetched repository; drafts and unpushed commits don't appear there. Fetching never changes or deletes drafts.

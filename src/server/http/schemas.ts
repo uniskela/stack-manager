@@ -28,6 +28,8 @@ export const RepositoryPatchSchema = z
     name: z.string().max(200).optional(),
     defaultBranch: z.string().max(255).optional(),
     autoAddStacks: z.boolean().optional(),
+    autoFetchEnabled: z.boolean().optional(),
+    autoFetchIntervalMinutes: z.number().int().min(5).max(1440).nullable().optional(),
   })
   .strict();
 

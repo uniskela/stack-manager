@@ -10,6 +10,11 @@ import {
   validateRepositoryName,
   type GitRepositoryConnection,
 } from '@/server/domain/git-repository';
+import {
+  resolveRepositoryFetchPolicy,
+  validateFetchInterval,
+  type ServerFetchPolicy,
+} from '@/server/domain/repository-fetch-policy';
 import { PermanentJobError, type Job } from '@/server/domain/job';
 import type { Logger } from '@/server/observability/logger';
 import type { GitProviderRegistry } from '@/server/providers/git/registry';
@@ -53,6 +58,9 @@ export interface RepositoryView {
   lastSyncFailedAt: string | null;
   lastHeadChangedAt: string | null;
   autoAddStacks: boolean;
+  autoFetchEnabled: boolean;
+  autoFetchIntervalMinutes: number | null;
+  autoFetchPolicy: ReturnType<typeof resolveRepositoryFetchPolicy>;
   createdAt: string;
   sync: { status: Job['status']; attempts: number; runAfter: string } | null;
 }
@@ -66,6 +74,7 @@ export interface GitRepositoryServiceOptions {
   reposDir: string;
   allowPrivateNetworks: boolean;
   resolver?: Resolver;
+  fetchPolicy: ServerFetchPolicy;
 }
 
 /**
@@ -198,6 +207,8 @@ export class GitRepositoryService {
       lastSyncFailedAt: null,
       lastHeadChangedAt: null,
       autoAddStacks: input.autoAddStacks ?? true,
+      autoFetchEnabled: true,
+      autoFetchIntervalMinutes: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -239,22 +250,51 @@ export class GitRepositoryService {
   async update(
     workspaceId: string,
     id: string,
-    input: { name?: string; defaultBranch?: string; autoAddStacks?: boolean },
+    input: {
+      name?: string;
+      defaultBranch?: string;
+      autoAddStacks?: boolean;
+      autoFetchEnabled?: boolean;
+      autoFetchIntervalMinutes?: number | null;
+    },
     actorUserId: string,
   ): Promise<RepositoryView> {
-    await this.#find(workspaceId, id);
-    const { autoAddStacks } = input;
+    const current = await this.#find(workspaceId, id);
+    const { autoAddStacks, autoFetchEnabled, autoFetchIntervalMinutes } = input;
+    if (autoFetchEnabled !== undefined && typeof autoFetchEnabled !== 'boolean') {
+      throw new ValidationError('Automatic fetching must be enabled or disabled.');
+    }
+    if (autoFetchIntervalMinutes !== undefined && autoFetchIntervalMinutes !== null)
+      validateFetchInterval(autoFetchIntervalMinutes);
     const name = input.name === undefined ? undefined : validateRepositoryName(input.name);
     const defaultBranch =
       input.defaultBranch === undefined ? undefined : validateBranchName(input.defaultBranch);
-    await this.repo.update(id, { name, defaultBranch, autoAddStacks, updatedAt: this.clock.now() });
+    await this.repo.update(id, {
+      name,
+      defaultBranch,
+      autoAddStacks,
+      autoFetchEnabled,
+      autoFetchIntervalMinutes,
+      updatedAt: this.clock.now(),
+    });
     await this.audit.record({
       action: 'repository.update',
       actorUserId,
       workspaceId,
       entityType: 'repository',
       entityId: id,
-      meta: { name, defaultBranch, autoAddStacks },
+      meta: {
+        name,
+        defaultBranch,
+        autoAddStacks,
+        ...(autoFetchEnabled !== undefined && autoFetchEnabled !== current.autoFetchEnabled
+          ? { autoFetchEnabled }
+          : {}),
+        ...(autoFetchIntervalMinutes !== undefined &&
+        autoFetchIntervalMinutes !== current.autoFetchIntervalMinutes
+          ? { autoFetchIntervalMinutes }
+          : {}),
+      },
     });
     if (defaultBranch !== undefined) await this.#enqueueSync(id, actorUserId);
     return this.get(workspaceId, id);
@@ -541,6 +581,9 @@ export class GitRepositoryService {
       lastSyncFailedAt: conn.lastSyncFailedAt?.toISOString() ?? null,
       lastHeadChangedAt: conn.lastHeadChangedAt?.toISOString() ?? null,
       autoAddStacks: conn.autoAddStacks,
+      autoFetchEnabled: conn.autoFetchEnabled,
+      autoFetchIntervalMinutes: conn.autoFetchIntervalMinutes,
+      autoFetchPolicy: resolveRepositoryFetchPolicy(conn, this.options.fetchPolicy),
       createdAt: conn.createdAt.toISOString(),
       sync: job ? { status: job.status, attempts: job.attempts, runAfter: job.runAfter.toISOString() } : null,
     };

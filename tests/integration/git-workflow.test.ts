@@ -113,6 +113,12 @@ describe('draft commit and safe push workflow', () => {
     expect(failed).toMatchObject({ syncStatus: 'error', headSha });
     expect(failed.sync).toMatchObject({ status: 'pending', attempts: 1 });
     expect(await drafts()).toEqual(before);
+    await h.container.repositories.update(
+      workspaceId,
+      repositoryId,
+      { autoFetchEnabled: false },
+      actorUserId,
+    );
     h.clock.advance(retryDelayMs(1));
     expect(await h.container.worker.runOnce()).toBe(true);
     expect((await h.container.repositories.get(workspaceId, repositoryId)).syncStatus).toBe('ready');
@@ -132,6 +138,12 @@ describe('draft commit and safe push workflow', () => {
       h.container.autoFetch.runOnce(),
       h.container.repositories.requestSync(workspaceId, repositoryId, actorUserId),
     ]);
+    await h.container.repositories.update(
+      workspaceId,
+      repositoryId,
+      { autoFetchEnabled: false },
+      actorUserId,
+    );
     expect(await h.container.worker.runOnce()).toBe(true);
     expect(await h.container.worker.runOnce()).toBe(false);
     expect(syncClone).toHaveBeenCalledTimes(1);
@@ -165,6 +177,12 @@ describe('draft commit and safe push workflow', () => {
     expect(failed.sync).toMatchObject({ status: 'pending', attempts: 1 });
     expect(await h.container.worker.runOnce()).toBe(false);
     expect(await h.container.autoFetch.runOnce()).toBe(0);
+    await h.container.repositories.update(
+      workspaceId,
+      repositoryId,
+      { autoFetchEnabled: false },
+      actorUserId,
+    );
     h.clock.advance(retryDelayMs(1));
     expect(await h.container.worker.runOnce()).toBe(true);
     const recovered = await h.container.repositories.get(workspaceId, repositoryId);
@@ -192,6 +210,12 @@ describe('draft commit and safe push workflow', () => {
           'repository_sync',
         ]);
       }
+      await h.container.repositories.update(
+        workspaceId,
+        repositoryId,
+        { autoFetchEnabled: false, autoFetchIntervalMinutes: 1440 },
+        actorUserId,
+      );
       const result = await push(committed.json.commitSha);
       expect(result.json.status).toBe('push_succeeded');
       const { dataDir, config } = h;
@@ -237,6 +261,12 @@ describe('draft commit and safe push workflow', () => {
     });
     const running = h.container.worker.runOnce();
     await fetchedPromise;
+    await h.container.repositories.update(
+      workspaceId,
+      repositoryId,
+      { autoFetchEnabled: false },
+      actorUserId,
+    );
     await Promise.all([
       h.container.repositories.requestSync(workspaceId, repositoryId, actorUserId),
       h.container.autoFetch.runOnce(),

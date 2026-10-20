@@ -44,13 +44,24 @@ Optional settings you are likely to want:
 - `STACK_MANAGER_ALLOW_PRIVATE_NETWORKS=true`: needed when your Gitea or Forgejo runs on your LAN (e.g. `192.168.x.x`)
 - `STACK_MANAGER_COOKIE_SECURE=false`: only for testing over plain HTTP on localhost
 - `STACK_MANAGER_AUTO_FETCH_ENABLED=true` and `STACK_MANAGER_AUTO_FETCH_INTERVAL_MINUTES=15`: automatically
-  refresh connected Git repositories every 15 minutes while the worker is enabled; no deployment is triggered
+  refresh connected Git repositories every 15 minutes by default while the worker is enabled; no deployment is triggered
+  (individual repositories can override the interval or disable scheduled checks in their Overview)
 
 After sign-in, set your Git author name and email under **Settings → Account**. Commits created by Stack Manager
 use that identity; it does not grant repository permissions. See [Git workflow](GIT_WORKFLOW.md) for committing,
 pushing and history.
 
 Every variable is described in the [self-hosting reference](SELF_HOSTING.md#configuration).
+
+Scheduled-fetch policy precedence is: `STACK_MANAGER_WORKER_ENABLED=false` stops background fetching;
+`STACK_MANAGER_AUTO_FETCH_ENABLED=false` stops scheduled fetching; then a repository's disabled setting stops
+its scheduled checks. Otherwise its interval override is used, or `STACK_MANAGER_AUTO_FETCH_INTERVAL_MINUTES`
+(default 15, range 5–1440) when it inherits. Operator switches cannot be overridden by a repository.
+Existing installations migrate to enabled repositories with a null interval override, preserving global defaults
+and all synchronization history. Future server interval changes still reach inheriting repositories. Repository
+settings apply on later scheduler ticks without restart; server environment changes require a restart.
+Disabling scheduling does not cancel pending/running jobs or retries. Manual requests and post-push refreshes
+still queue durable jobs; the worker must be enabled to process them. See [Keep it up to date](getting-started.md#7-keep-it-up-to-date).
 
 ## 3. Start
 

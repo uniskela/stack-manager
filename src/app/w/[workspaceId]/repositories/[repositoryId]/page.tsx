@@ -6,6 +6,7 @@ import { Alert } from '@/ui/primitives/alert';
 import { Section } from '@/ui/primitives/section';
 import { StatusPill } from '@/ui/primitives/status-pill';
 import { RemoveRepository, RepositoryActions } from '@/ui/repository-actions';
+import { RepositoryAutoFetchSettings } from '@/ui/repository-auto-fetch-settings';
 import { StackDiscovery } from '@/ui/source/stack-discovery';
 import { orNotFound } from '../../../../_lib/session';
 
@@ -72,6 +73,10 @@ export default async function RepositoryPage({
               : 'Public (no credential)'}
           </dd>
         </dl>
+      </Section>
+
+      <Section id="repo-auto-fetch" title="Automatic fetching">
+        <RepositoryAutoFetchSettings workspaceId={workspaceId} repositoryId={repo.id} settings={repo} />
       </Section>
 
       <Section

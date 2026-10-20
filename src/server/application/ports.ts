@@ -93,6 +93,8 @@ export interface GitRepositoryConnectionRepository {
         | 'lastSyncFailedAt'
         | 'lastHeadChangedAt'
         | 'autoAddStacks'
+        | 'autoFetchEnabled'
+        | 'autoFetchIntervalMinutes'
       >
     > & { updatedAt: Date },
   ): Promise<void>;
