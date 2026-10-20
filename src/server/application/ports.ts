@@ -165,6 +165,8 @@ export interface StackRepository {
 }
 
 export interface SourceDraftRepository {
+  /** Fetch only repository IDs and paths in one query; never load draft contents for counters. */
+  listPaths(repositoryIds: readonly string[]): Promise<Array<{ repositoryId: string; path: string }>>;
   find(repositoryId: string, path: string): Promise<SourceDraft | null>;
   /** Drafts of a repository, optionally only those at or under `rootPath`. */
   list(repositoryId: string, rootPath?: string): Promise<SourceDraft[]>;
