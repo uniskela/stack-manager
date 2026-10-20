@@ -48,7 +48,15 @@ export class AuditService {
     }
   }
 
-  list(filter: { workspaceId?: string; limit?: number }): Promise<AuditEvent[]> {
-    return this.repo.list({ workspaceId: filter.workspaceId, limit: Math.min(filter.limit ?? 50, 200) });
+  list(filter: {
+    workspaceId?: string;
+    limit?: number;
+    excludeSuccessfulActions?: readonly AuditAction[];
+  }): Promise<AuditEvent[]> {
+    return this.repo.list({
+      workspaceId: filter.workspaceId,
+      limit: Math.min(filter.limit ?? 50, 200),
+      excludeSuccessfulActions: filter.excludeSuccessfulActions,
+    });
   }
 }
