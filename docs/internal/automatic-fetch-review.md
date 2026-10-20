@@ -28,4 +28,21 @@ Defer repository-specific enable/interval API and settings to an immediately fol
 
 Deterministic integration coverage includes post-fetch/pre-completion push, coalesced follow-up requests, overlapping manual/scheduled requests, simultaneous ticks, lock contention/backoff, pending/running restart, preserved drafts and retained commits, separate success/failure/change timestamps, disabled worker/scheduler boot and lease-owner fencing. Workspace tests cover a failed lookup and a failed enqueue with later work still scheduled.
 
-Current command/CI evidence is recorded on PR #59; do not infer passing checks from this document.
+Observed on `1848cb5`: [CI run 39407389233](https://github.com/uniskela/stack-manager/actions/runs/39407389233)
+passed format, lint, types, all 377 tests, migration drift, production build, smoke, Playwright/axe and dependency
+audit. CodeQL, Gitleaks, Sonar analysis/quality gate and Kody code review also passed. Local Playwright ran with
+awesome-compose/nginx-golang: 33 passed, 9 intentional platform-specific skips. See the [validation comment](https://github.com/uniskela/stack-manager/pull/59#issuecomment-6288756991)
+for local check/build and production-container smoke/restart/disabled-worker evidence.
+
+A controlled rootless Docker run passed 61 tests across the Git workflow (including concurrency, retained refs,
+drafts and interrupted fetch), queue/fencing, disabled boot and scheduler suites. Reproduce from the PR checkout:
+
+```sh
+docker build --target build -t stack-manager:sync-tests .
+docker run --rm --mount "type=bind,src=$PWD/tests,dst=/app/tests,readonly" \
+  stack-manager:sync-tests sh -c 'apt-get update -qq && apt-get install -y --no-install-recommends git >/dev/null && pnpm exec vitest run tests/integration/git-workflow.test.ts tests/integration/jobs.test.ts tests/integration/boot.test.ts tests/unit/repository-auto-fetch.test.ts'
+```
+
+The test tree is mounted because `.dockerignore` excludes it from application images. This temporary build-stage
+container adds Git for the local smart-HTTP test server; no ports, production credentials or deployment endpoints
+are used. Release publishing was not executed. For later heads, consult [current PR checks](https://github.com/uniskela/stack-manager/pull/59/checks).

@@ -105,25 +105,31 @@ export class RepositoryAutoFetch {
         });
         continue;
       }
-      for (const repository of repositories) {
-        if (this.#stopping) break;
-        if (!isRepositoryAutoFetchDue(repository, this.clock.now(), this.#intervalMs)) continue;
-        try {
-          const { created } = await this.jobs.enqueue(
-            REPOSITORY_SYNC_JOB,
-            { repositoryId: repository.id, requestedBy: null },
-            { dedupeKey: `${REPOSITORY_SYNC_JOB}:${repository.id}` },
-          );
-          if (created) {
-            queued++;
-            this.logger.debug('scheduled repository fetch', { repositoryId: repository.id });
-          }
-        } catch (error) {
-          this.logger.warn('could not schedule repository fetch', {
-            repositoryId: repository.id,
-            error: safeErrorMessage(error),
-          });
+      queued += await this.#enqueueDue(repositories);
+    }
+    return queued;
+  }
+
+  async #enqueueDue(repositories: GitRepositoryConnection[]): Promise<number> {
+    let queued = 0;
+    for (const repository of repositories) {
+      if (this.#stopping) break;
+      if (!isRepositoryAutoFetchDue(repository, this.clock.now(), this.#intervalMs)) continue;
+      try {
+        const { created } = await this.jobs.enqueue(
+          REPOSITORY_SYNC_JOB,
+          { repositoryId: repository.id, requestedBy: null },
+          { dedupeKey: `${REPOSITORY_SYNC_JOB}:${repository.id}` },
+        );
+        if (created) {
+          queued++;
+          this.logger.debug('scheduled repository fetch', { repositoryId: repository.id });
         }
+      } catch (error) {
+        this.logger.warn('could not schedule repository fetch', {
+          repositoryId: repository.id,
+          error: safeErrorMessage(error),
+        });
       }
     }
     return queued;
