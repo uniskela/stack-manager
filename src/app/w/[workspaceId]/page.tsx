@@ -1,7 +1,14 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { getContainer } from '@/server/container';
-import { dashboardRecentActivity, dashboardSyncSummary, dashboardWork } from '@/shared/dashboard/overview';
+import { loadDashboardDraftCounts } from '@/server/application/dashboard-draft-counts';
+import { safeErrorMessage } from '@/server/security/redact';
+import {
+  DASHBOARD_ROUTINE_ACTIONS,
+  dashboardRecentActivity,
+  dashboardSyncSummary,
+  dashboardWork,
+} from '@/shared/dashboard/overview';
 import { auditActionLabel } from '@/shared/audit/labels';
 import { auditEntityHref } from '@/shared/audit/links';
 import { DashboardFetchAction } from '@/ui/dashboard-fetch-action';
@@ -23,7 +30,11 @@ export default async function DashboardPage({ params }: { params: Promise<{ work
     container.workspaces.get(workspaceId),
     container.repositories.list(workspaceId),
     container.stacks.list(workspaceId),
-    container.audit.list({ workspaceId, limit: 30 }),
+    container.audit.list({
+      workspaceId,
+      limit: 5,
+      excludeSuccessfulActions: DASHBOARD_ROUTINE_ACTIONS,
+    }),
     container.source.listOutdatedDraftSummaries(workspaceId),
   ]);
 
@@ -45,21 +56,19 @@ export default async function DashboardPage({ params }: { params: Promise<{ work
     );
   }
 
-  // Source drafts are counted repository-wide, including files outside registered stacks.
-  const [draftCounts, openDrafts] = await Promise.all([
-    Promise.all(
-      stackList.map((stack) =>
-        stack.repository.headSha
-          ? container.source.countDrafts(stack.repository.id, stack.rootPath)
-          : Promise.resolve(0),
-      ),
-    ),
-    Promise.all(
-      repositories.map((repo) =>
-        repo.headSha ? container.source.countDrafts(repo.id, '') : Promise.resolve(0),
-      ),
-    ).then((counts) => counts.reduce((sum, count) => sum + count, 0)),
-  ]);
+  // Source draft counting is best-effort. Failed counts never masquerade as complete totals.
+  const { stackCounts: draftCounts, openDrafts, failedCounts } = await loadDashboardDraftCounts(
+    stackList,
+    repositories,
+    (repositoryId, rootPath) => container.source.countDrafts(repositoryId, rootPath),
+    ({ scope, id, repositoryId, error }) =>
+      container.logger.warn('dashboard draft count failed', {
+        scope,
+        id,
+        repositoryId,
+        error: safeErrorMessage(error),
+      }),
+  );
 
   const sync = dashboardSyncSummary(repositories);
   const work = dashboardWork(repositories, stackList, draftCounts, outdatedDrafts);
@@ -92,7 +101,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ work
           </div>
           <div className="dashboard-metric">
             <dt>Open drafts</dt>
-            <dd>{openDrafts}</dd>
+            <dd>{openDrafts ?? '—'}</dd>
           </div>
           <div className="dashboard-metric">
             <dt>Sync errors</dt>
@@ -111,6 +120,11 @@ export default async function DashboardPage({ params }: { params: Promise<{ work
         <p className="fine-print dashboard-source-note">
           These are Git source states, not container health or deployment status.
         </p>
+        {failedCounts > 0 ? (
+          <p className="dashboard-count-warning" role="status">
+            Some draft counts could not be loaded. Totals or work-in-progress rows may be incomplete.
+          </p>
+        ) : null}
       </section>
 
       <SectionTitle
