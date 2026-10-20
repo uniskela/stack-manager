@@ -320,6 +320,21 @@ export class GitRepositoryService {
     return this.get(workspaceId, id);
   }
 
+  /**
+   * Called only after a confirmed successful push and outside the Git provider lock.
+   * A queue failure must never misreport a successful Git push as failed.
+   */
+  async schedulePostPushRefresh(repositoryId: string): Promise<void> {
+    try {
+      await this.#enqueueSync(repositoryId, null);
+    } catch (error) {
+      this.logger.warn('post-push repository refresh could not be queued', {
+        repositoryId,
+        error: safeErrorMessage(error),
+      });
+    }
+  }
+
   async delete(workspaceId: string, id: string, actorUserId: string): Promise<void> {
     const conn = await this.#find(workspaceId, id);
     const sync = await this.jobs.latestFor(`${REPOSITORY_SYNC_JOB}:${id}`);
@@ -376,13 +391,17 @@ export class GitRepositoryService {
         lastFetchedAt: now,
         updatedAt: now,
       });
-      await this.audit.record({
-        action: 'repository.sync',
-        workspaceId: conn.workspaceId,
-        entityType: 'repository',
-        entityId: conn.id,
-        meta: { cloned: result.cloned, headSha: result.headSha },
-      });
+      // Routine polling still updates lastFetchedAt, but unchanged HEADs should not
+      // fill the activity log every fifteen minutes.
+      if (result.cloned || result.headSha !== conn.headSha) {
+        await this.audit.record({
+          action: 'repository.sync',
+          workspaceId: conn.workspaceId,
+          entityType: 'repository',
+          entityId: conn.id,
+          meta: { cloned: result.cloned, headSha: result.headSha },
+        });
+      }
     } catch (error) {
       const message =
         error instanceof GitOperationError ||
