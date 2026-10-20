@@ -22,6 +22,9 @@ function repository(overrides: Partial<GitRepositoryConnection> = {}): GitReposi
     lastSyncError: null,
     headSha: 'a'.repeat(40),
     lastFetchedAt: minutesAgo(16),
+    lastSyncAttemptAt: minutesAgo(16),
+    lastSyncFailedAt: null,
+    lastHeadChangedAt: minutesAgo(16),
     autoAddStacks: true,
     createdAt: minutesAgo(90),
     updatedAt: minutesAgo(16),
@@ -40,17 +43,17 @@ describe('isRepositoryAutoFetchDue', () => {
   });
 
   it('waits from the last failure before trying again', () => {
-    expect(due({ syncStatus: 'error', updatedAt: minutesAgo(3) })).toBe(false);
-    expect(due({ syncStatus: 'error', updatedAt: minutesAgo(20) })).toBe(true);
+    expect(due({ syncStatus: 'error', lastSyncFailedAt: minutesAgo(3) })).toBe(false);
+    expect(due({ syncStatus: 'error', lastSyncFailedAt: minutesAgo(20), updatedAt: now })).toBe(true);
   });
 
-  it('does not compete with queued or running initial fetches', () => {
-    expect(due({ syncStatus: 'pending' })).toBe(false);
-    expect(due({ syncStatus: 'syncing' })).toBe(false);
+  it('lets DB dedupe recover an overdue pending or interrupted sync', () => {
+    expect(due({ syncStatus: 'pending', lastSyncAttemptAt: minutesAgo(1) })).toBe(false);
+    expect(due({ syncStatus: 'syncing', lastSyncAttemptAt: minutesAgo(16) })).toBe(true);
   });
 
   it('uses connection creation as the due reference if no fetch completed', () => {
-    expect(due({ lastFetchedAt: null, createdAt: minutesAgo(20) })).toBe(true);
+    expect(due({ lastFetchedAt: null, lastSyncAttemptAt: null, createdAt: minutesAgo(20) })).toBe(true);
   });
 });
 
@@ -69,7 +72,7 @@ describe('RepositoryAutoFetch', () => {
       { warn, debug },
       15,
     );
-    return { scheduler, enqueue, warn, listRepositories };
+    return { scheduler, enqueue, warn, listRepositories, listWorkspaces };
   }
 
   it('enqueues a reference-only durable sync job', async () => {
@@ -107,5 +110,21 @@ describe('RepositoryAutoFetch', () => {
     expect(first).toBe(1);
     expect(second).toBe(1);
     expect(enqueue).toHaveBeenCalledTimes(1);
+  });
+
+  it('continues after workspace lookup and individual enqueue failures', async () => {
+    const { scheduler, enqueue, warn, listRepositories, listWorkspaces } = make();
+    listWorkspaces.mockResolvedValue(['w1', 'w2', 'w3'].map((id) => ({ id }) as Workspace));
+    listRepositories.mockRejectedValueOnce(new Error('lookup unavailable'));
+    listRepositories.mockResolvedValueOnce([repository({ id: 'r2' }), repository({ id: 'r3' })]);
+    listRepositories.mockResolvedValueOnce([repository({ id: 'r4' })]);
+    enqueue.mockRejectedValueOnce(new Error('enqueue unavailable'));
+    expect(await scheduler.runOnce()).toBe(2);
+    expect(enqueue).toHaveBeenCalledTimes(3);
+    expect(warn).toHaveBeenCalledWith(
+      'automatic repository fetch workspace lookup failed',
+      expect.objectContaining({ workspaceId: 'w1' }),
+    );
+    expect(warn).toHaveBeenCalledTimes(2);
   });
 });

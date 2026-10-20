@@ -8,7 +8,10 @@ import { safeErrorMessage } from '@/server/security/redact';
 
 export const AUTO_FETCH_POLL_INTERVAL_MS = 60_000;
 
-type FetchState = Pick<GitRepositoryConnection, 'syncStatus' | 'lastFetchedAt' | 'createdAt' | 'updatedAt'>;
+type FetchState = Pick<
+  GitRepositoryConnection,
+  'lastSyncAttemptAt' | 'lastSyncFailedAt' | 'lastFetchedAt' | 'createdAt'
+>;
 
 /**
  * Determine when background fetching is due without depending on the browser.
@@ -16,11 +19,12 @@ type FetchState = Pick<GitRepositoryConnection, 'syncStatus' | 'lastFetchedAt' |
  * wait from their last fetch even when the remote SHA has not changed.
  */
 export function isRepositoryAutoFetchDue(repository: FetchState, now: Date, intervalMs: number): boolean {
-  if (repository.syncStatus === 'pending' || repository.syncStatus === 'syncing') return false;
-  const lastAttempt =
-    repository.syncStatus === 'error'
-      ? Math.max(repository.lastFetchedAt?.getTime() ?? 0, repository.updatedAt.getTime())
-      : (repository.lastFetchedAt?.getTime() ?? repository.createdAt.getTime());
+  // Active jobs dedupe in SQLite; stale repository status must not strand interrupted work.
+  const lastAttempt = Math.max(
+    repository.lastSyncAttemptAt?.getTime() ?? 0,
+    repository.lastSyncFailedAt?.getTime() ?? 0,
+    repository.lastFetchedAt?.getTime() ?? repository.createdAt.getTime(),
+  );
   return now.getTime() - lastAttempt >= intervalMs;
 }
 
@@ -91,7 +95,17 @@ export class RepositoryAutoFetch {
     let queued = 0;
     for (const workspace of await this.workspaces.list()) {
       if (this.#stopping) break;
-      for (const repository of await this.repositories.list(workspace.id)) {
+      let repositories;
+      try {
+        repositories = await this.repositories.list(workspace.id);
+      } catch (error) {
+        this.logger.warn('automatic repository fetch workspace lookup failed', {
+          workspaceId: workspace.id,
+          error: safeErrorMessage(error),
+        });
+        continue;
+      }
+      for (const repository of repositories) {
         if (this.#stopping) break;
         if (!isRepositoryAutoFetchDue(repository, this.clock.now(), this.#intervalMs)) continue;
         try {

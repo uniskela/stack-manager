@@ -60,6 +60,7 @@ the rest.
 - It **never force pushes**, and there is no option to. If the remote has moved, the push is stopped before
   anything is sent.
 - After a successful push, Stack Manager queues a background fetch to refresh the editor and **History**.
+  If a fetch is already running, a durable follow-up fetch runs after it; repeated requests coalesce into one job.
   Use **Fetch now** if you need to retry or cannot wait for the background worker.
 
 If **Commit & Push** commits but the push doesn't go through, the commit is kept. The Changes tab then offers

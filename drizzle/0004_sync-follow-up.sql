@@ -1,0 +1,1 @@
+ALTER TABLE `jobs` ADD `follow_up_requested` integer DEFAULT false NOT NULL;

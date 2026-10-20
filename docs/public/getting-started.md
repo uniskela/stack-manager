@@ -34,6 +34,10 @@ stack-manager works with GitHub, Gitea and Forgejo over HTTPS.
 A self-hosted Gitea or Forgejo on your LAN needs `STACK_MANAGER_ALLOW_PRIVATE_NETWORKS=true`. Loopback and cloud
 metadata addresses are always blocked.
 
+The repository overview shows **Last sync attempt**, **Last fetched** (successful fetch), **Last revision change
+observed**, and **Last sync failure** separately. A failed sync shows its error and whether the worker is retrying.
+Changing the repository name or other settings does not postpone automatic retries.
+
 ## 3. Add stacks
 
 Every folder that contains a Compose file (`compose.yaml`, `compose.yml`, `docker-compose.yaml` or

@@ -109,6 +109,9 @@ export const gitRepositoryConnections = sqliteTable(
     lastSyncError: text('last_sync_error'),
     headSha: text('head_sha'),
     lastFetchedAt: ts('last_fetched_at'),
+    lastSyncAttemptAt: ts('last_sync_attempt_at'),
+    lastSyncFailedAt: ts('last_sync_failed_at'),
+    lastHeadChangedAt: ts('last_head_changed_at'),
     /** Register every Compose folder as a stack after each successful fetch. */
     autoAddStacks: integer('auto_add_stacks', { mode: 'boolean' }).notNull().default(true),
     createdAt: ts('created_at').notNull(),
@@ -138,6 +141,7 @@ export const jobs = sqliteTable(
     acceptanceRecordedAt: ts('acceptance_recorded_at'),
     /** Optional idempotency key: enqueueing the same key twice while active returns the existing job. */
     dedupeKey: text('dedupe_key'),
+    followUpRequested: integer('follow_up_requested', { mode: 'boolean' }).notNull().default(false),
     createdAt: ts('created_at').notNull(),
     updatedAt: ts('updated_at').notNull(),
     finishedAt: ts('finished_at'),
