@@ -71,3 +71,31 @@ The compact Overview form uses existing controls/styles, native keyboard-accessi
 messages. It distinguishes the saved effective policy from unsaved edits, preserves edits on request failure,
 and describes operator overrides and pending-job behavior. Existing published pages carry the user guidance;
 no documentation slug or manifest change is needed.
+
+### #60 review dispositions and evidence
+
+[Kody's interval-read finding](https://github.com/uniskela/stack-manager/pull/62#discussion_r4324430494)
+assumes an unsupported direct database write and misidentifies both the HTTP status and repair behavior.
+Policy validation intentionally fails closed: `ValidationError` maps to HTTP 400, not 500. Strict PATCH and
+service validation reject invalid writes. A new integration test deliberately bypasses the service, verifies
+GET returns `validation_failed`, confirms the scheduler skips invalid state, and repairs it with the existing
+PATCH (`autoFetchIntervalMinutes: null`). No silent interval substitution is introduced for invalid data.
+
+The duplicate migration-test handle findings
+([resource cleanup](https://github.com/uniskela/stack-manager/pull/62#discussion_r4324430893),
+[determinism](https://github.com/uniskela/stack-manager/pull/62#discussion_r4324431323)) are fixed with
+`try/finally` around pre-upgrade migration, seed and snapshot work; errors still propagate and the database
+always closes. Focused migration/repository integration verification passed all 24 tests after this change.
+SonarCloud's six initial maintainability findings were addressed with read-only component props and explicit
+comments explaining the optional-server/mobile test conditions; these scenarios are exercised in the enabled
+and server-disabled browser runs, rather than removed or globally skipped.
+
+Local full validation passed format/lint/types and 397 tests after the review regression. Production
+build, drift verification, dependency audit, rootless Docker production build, read-only container smoke and
+same-volume restart passed. The full isolated Playwright/axe run passed 36 tests with 12 conditional skips.
+A concurrent-build run first timed out in two existing source-page tests; both passed on the isolated rerun,
+and GitHub CI's full default-worker run also passed. Final focused enabled and server-disabled browser runs
+each passed 5 tests with 3 complementary conditional skips. Screenshots:
+[desktop](screenshots/issue-60-desktop.png), [mobile](screenshots/issue-60-mobile.png),
+[server disabled](screenshots/issue-60-server-disabled.png).
+For final-head CI, SonarCloud and Kody results, consult [PR #62 checks](https://github.com/uniskela/stack-manager/pull/62/checks).

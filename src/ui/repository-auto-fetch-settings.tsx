@@ -27,11 +27,13 @@ type Settings = {
   };
 };
 
-export function RepositoryAutoFetchSettings(props: {
-  workspaceId: string;
-  repositoryId: string;
-  settings: Settings;
-}) {
+export function RepositoryAutoFetchSettings(
+  props: Readonly<{
+    workspaceId: string;
+    repositoryId: string;
+    settings: Settings;
+  }>,
+) {
   const router = useRouter();
   const id = useId();
   const [saved, setSaved] = useState(props.settings);

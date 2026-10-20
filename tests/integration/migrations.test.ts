@@ -74,19 +74,6 @@ describe('migrations', () => {
     fs.writeFileSync(path.join(previous, 'meta/_journal.json'), JSON.stringify(journal));
     for (const { tag } of journal.entries)
       fs.copyFileSync(`drizzle/${tag}.sql`, path.join(previous, `${tag}.sql`));
-    const old = openSqlite(file);
-    runMigrations(old.db, previous);
-    old.db.$client.exec(`
-      INSERT INTO workspaces VALUES ('w', 'Home', 'home', 1000, 2000);
-      INSERT INTO users (id, username, password_hash, role, created_at, updated_at) VALUES ('u', 'admin', 'hash', 'admin', 1000, 2000);
-      INSERT INTO sessions VALUES ('session', 'u', 1000, 2000, 9000, 'browser');
-      INSERT INTO provider_credentials (id, workspace_id, kind, provider_type, label, secret_ciphertext, secret_nonce, secret_key_version, secret_hint, secret_meta, created_at, updated_at) VALUES ('c', 'w', 'git', 'github', 'Token', 'synthetic-ciphertext', 'synthetic-nonce', 1, 'hint', '{}', 1000, 2000);
-      INSERT INTO git_repository_connections (id, workspace_id, name, git_provider_type, remote_url, default_branch, credential_id, local_clone_path, sync_status, last_sync_error, head_sha, last_fetched_at, created_at, updated_at, last_sync_attempt_at, last_sync_failed_at, last_head_changed_at) VALUES ('r', 'w', 'Infra', 'github', 'https://example.test/infra.git', 'main', 'c', 'repos/r', 'error', 'failure', 'retained-head', 3000, 1000, 4000, 3500, 4000, 3000);
-      INSERT INTO source_drafts VALUES ('draft', 'w', 'r', 'compose.yaml', 'saved draft', 'blob', 'retained-commit', 'u', 'u', 1000, 2000);
-      INSERT INTO stacks VALUES ('stack', 'w', 'r', 'Stack', 'stack', '', 'compose.yaml', 1000, 2000);
-      INSERT INTO audit_events VALUES ('event', 2000, 'u', 'w', 'repository.sync', 'success', 'repository', 'r', '{}');
-      INSERT INTO jobs (id, type, payload, status, run_after, attempts, max_attempts, last_error, lease_owner, lease_expires_at, dedupe_key, created_at, updated_at, follow_up_requested) VALUES ('job', 'repository_sync', '{"repositoryId":"r"}', 'running', 4000, 2, 5, 'retry', 'worker', 5000, 'repository_sync:r', 1000, 4000, 1);
-    `);
     const tables = [
       'workspaces',
       'users',
@@ -98,8 +85,25 @@ describe('migrations', () => {
       'audit_events',
       'jobs',
     ];
-    const before = tables.map((table) => old.db.$client.prepare(`SELECT * FROM ${table}`).all());
-    old.close();
+    let before: unknown[][];
+    const old = openSqlite(file);
+    try {
+      runMigrations(old.db, previous);
+      old.db.$client.exec(`
+        INSERT INTO workspaces VALUES ('w', 'Home', 'home', 1000, 2000);
+        INSERT INTO users (id, username, password_hash, role, created_at, updated_at) VALUES ('u', 'admin', 'hash', 'admin', 1000, 2000);
+        INSERT INTO sessions VALUES ('session', 'u', 1000, 2000, 9000, 'browser');
+        INSERT INTO provider_credentials (id, workspace_id, kind, provider_type, label, secret_ciphertext, secret_nonce, secret_key_version, secret_hint, secret_meta, created_at, updated_at) VALUES ('c', 'w', 'git', 'github', 'Token', 'synthetic-ciphertext', 'synthetic-nonce', 1, 'hint', '{}', 1000, 2000);
+        INSERT INTO git_repository_connections (id, workspace_id, name, git_provider_type, remote_url, default_branch, credential_id, local_clone_path, sync_status, last_sync_error, head_sha, last_fetched_at, created_at, updated_at, last_sync_attempt_at, last_sync_failed_at, last_head_changed_at) VALUES ('r', 'w', 'Infra', 'github', 'https://example.test/infra.git', 'main', 'c', 'repos/r', 'error', 'failure', 'retained-head', 3000, 1000, 4000, 3500, 4000, 3000);
+        INSERT INTO source_drafts VALUES ('draft', 'w', 'r', 'compose.yaml', 'saved draft', 'blob', 'retained-commit', 'u', 'u', 1000, 2000);
+        INSERT INTO stacks VALUES ('stack', 'w', 'r', 'Stack', 'stack', '', 'compose.yaml', 1000, 2000);
+        INSERT INTO audit_events VALUES ('event', 2000, 'u', 'w', 'repository.sync', 'success', 'repository', 'r', '{}');
+        INSERT INTO jobs (id, type, payload, status, run_after, attempts, max_attempts, last_error, lease_owner, lease_expires_at, dedupe_key, created_at, updated_at, follow_up_requested) VALUES ('job', 'repository_sync', '{"repositoryId":"r"}', 'running', 4000, 2, 5, 'retry', 'worker', 5000, 'repository_sync:r', 1000, 4000, 1);
+      `);
+      before = tables.map((table) => old.db.$client.prepare(`SELECT * FROM ${table}`).all());
+    } finally {
+      old.close();
+    }
     const upgraded = openSqlite(file);
     try {
       runMigrations(upgraded.db);

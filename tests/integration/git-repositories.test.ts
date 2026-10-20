@@ -446,6 +446,29 @@ describe('repository automatic fetch settings', () => {
     );
   });
 
+  it('fails closed on an out-of-band invalid DB interval and permits repair through PATCH', async () => {
+    const repo = (await connect()).json.repository;
+    const params = { workspaceId, repositoryId: repo.id };
+    // Deliberately bypass the service; supported API and service writes reject this value.
+    await h.container.repos.gitRepositories.update(repo.id, {
+      autoFetchIntervalMinutes: 0,
+      updatedAt: h.clock.now(),
+    });
+    const invalid = await call(repoRoute.GET, { cookie, params });
+    expect(invalid.status).toBe(400);
+    expect(invalid.json.error.code).toBe('validation_failed');
+    expect(await h.container.autoFetch.runOnce()).toBe(0);
+    const repaired = await call(repoRoute.PATCH, {
+      method: 'PATCH',
+      cookie,
+      params,
+      body: { autoFetchIntervalMinutes: null },
+    });
+    expect(repaired.status).toBe(200);
+    expect(repaired.json.repository.autoFetchPolicy.intervalMinutes).toBe(15);
+    expect((await call(repoRoute.GET, { cookie, params })).status).toBe(200);
+  });
+
   it('rejects invalid intervals/types/fields, cross-workspace writes and CSRF without mutation', async () => {
     const repo = (await connect()).json.repository;
     const params = { workspaceId, repositoryId: repo.id };
