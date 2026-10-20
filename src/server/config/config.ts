@@ -107,12 +107,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     STACK_MANAGER_LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
     STACK_MANAGER_WORKER_ENABLED: bool('STACK_MANAGER_WORKER_ENABLED').default(true),
     STACK_MANAGER_AUTO_FETCH_ENABLED: bool('STACK_MANAGER_AUTO_FETCH_ENABLED').default(true),
-    STACK_MANAGER_AUTO_FETCH_INTERVAL_MINUTES: z.coerce
-      .number()
-      .int()
-      .min(5)
-      .max(1440)
-      .default(15),
+    STACK_MANAGER_AUTO_FETCH_INTERVAL_MINUTES: z.coerce.number().int().min(5).max(1440).default(15),
     STACK_MANAGER_SESSION_TTL_HOURS: z.coerce
       .number()
       .int()
