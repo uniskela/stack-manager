@@ -1,12 +1,6 @@
 import fs from 'node:fs';
 import { expect, test } from '@playwright/test';
-import {
-  AUTH_STATE,
-  expectAccessible,
-  SAMPLE_REMOTE,
-  SAMPLE_STATE,
-  WORKSPACE_NAME,
-} from './support';
+import { AUTH_STATE, expectAccessible, SAMPLE_REMOTE, SAMPLE_STATE, WORKSPACE_NAME } from './support';
 
 test.use({ storageState: AUTH_STATE });
 test.skip(!SAMPLE_REMOTE, 'Set E2E_GIT_REMOTE to verify the populated dashboard.');
