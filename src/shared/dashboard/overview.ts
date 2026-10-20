@@ -63,15 +63,18 @@ export function dashboardWork(
   draftCounts: readonly number[],
   outdatedDrafts: readonly DashboardOutdatedDraft[],
 ): { attention: DashboardAttention[]; draftsInProgress: DashboardDraftWork[] } {
-  const stackById = new Map(stacks.map((stack, index) => [stack.id, { stack, draftCount: draftCounts[index] ?? 0 }]));
+  const stackById = new Map(
+    stacks.map((stack, index) => [stack.id, { stack, draftCount: draftCounts[index] ?? 0 }]),
+  );
   const repoById = new Map(repositories.map((repo) => [repo.id, repo]));
   const stackOutdated = new Map<string, Set<string>>();
   const repositoryOutdated = new Map<string, Set<string>>();
 
   for (const item of outdatedDrafts) {
     const stack = item.stackId ? stackById.get(item.stackId)?.stack : undefined;
-    const target = stack?.repository.id === item.repositoryId ? stackOutdated : repositoryOutdated;
-    const key = stack?.repository.id === item.repositoryId ? stack.id : item.repositoryId;
+    const validStack = stack?.repository.id === item.repositoryId;
+    const target = validStack ? stackOutdated : repositoryOutdated;
+    const key = validStack && stack ? stack.id : item.repositoryId;
     const paths = target.get(key) ?? new Set<string>();
     paths.add(item.path);
     target.set(key, paths);
@@ -93,11 +96,12 @@ export function dashboardWork(
   for (const [id, { stack, draftCount }] of stackById) {
     const outdated = stackOutdated.get(id)?.size ?? 0;
     if (outdated) {
+      const draftDetail = draftCount ? ` · ${plural(draftCount, 'open draft')}` : '';
       attention.push({
         key: `outdated-stack-${id}`,
         kind: 'outdated',
         label: stack.name,
-        detail: `${plural(outdated, 'outdated draft')}${draftCount ? ` · ${plural(draftCount, 'open draft')}` : ''}`,
+        detail: `${plural(outdated, 'outdated draft')}${draftDetail}`,
         target: { type: 'stack', id },
       });
     } else if (draftCount > 0) {
@@ -127,5 +131,7 @@ export function dashboardRecentActivity<T extends { action: string; outcome: str
     'auth.login',
     'auth.logout',
   ]);
-  return events.filter((event) => event.outcome === 'failure' || !routineActions.has(event.action)).slice(0, limit);
+  return events
+    .filter((event) => event.outcome === 'failure' || !routineActions.has(event.action))
+    .slice(0, limit);
 }
