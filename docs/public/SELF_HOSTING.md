@@ -42,7 +42,9 @@ when you change it. To run a build of your checkout instead, add the override:
 | `STACK_MANAGER_BIND` / `STACK_MANAGER_PORT` | no | `127.0.0.1` / `3000` | Host interface and port published by `docker-compose.yml` |
 | `STACK_MANAGER_SESSION_TTL_HOURS` | no | `168` | Sliding session lifetime |
 | `STACK_MANAGER_LOG_LEVEL` | no | `info` | `debug` \| `info` \| `warn` \| `error` |
-| `STACK_MANAGER_WORKER_ENABLED` | no | `true` | Disable the in-process job worker (diagnostics only) |
+| `STACK_MANAGER_WORKER_ENABLED` | no | `true` | Disable the in-process job worker (diagnostics only; also disables automatic fetch) |
+| `STACK_MANAGER_AUTO_FETCH_ENABLED` | no | `true` | Periodically queue safe repository fetches; does not deploy stacks |
+| `STACK_MANAGER_AUTO_FETCH_INTERVAL_MINUTES` | no | `15` | Background fetch interval, 5–1440 minutes; manual **Fetch now** is always available |
 
 Git author name and email are configured per signed-in user under **Settings → Account**. Missing identity blocks
 commits, not source reads. Push needs a Git credential with write access.
