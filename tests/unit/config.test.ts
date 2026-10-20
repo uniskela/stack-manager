@@ -43,7 +43,9 @@ describe('loadConfig (fail closed)', () => {
   });
 
   it('accepts disabling the scheduler or a longer polling interval', () => {
-    const cfg = loadConfig(env({ STACK_MANAGER_AUTO_FETCH_ENABLED: 'false', STACK_MANAGER_AUTO_FETCH_INTERVAL_MINUTES: '60' }));
+    const cfg = loadConfig(
+      env({ STACK_MANAGER_AUTO_FETCH_ENABLED: 'false', STACK_MANAGER_AUTO_FETCH_INTERVAL_MINUTES: '60' }),
+    );
     expect(cfg.autoFetchEnabled).toBe(false);
     expect(cfg.autoFetchIntervalMinutes).toBe(60);
   });
