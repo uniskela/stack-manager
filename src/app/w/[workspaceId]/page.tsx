@@ -1,11 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { getContainer } from '@/server/container';
-import {
-  dashboardRecentActivity,
-  dashboardSyncSummary,
-  dashboardWork,
-} from '@/shared/dashboard/overview';
+import { dashboardRecentActivity, dashboardSyncSummary, dashboardWork } from '@/shared/dashboard/overview';
 import { auditActionLabel } from '@/shared/audit/labels';
 import { auditEntityHref } from '@/shared/audit/links';
 import { DashboardFetchAction } from '@/ui/dashboard-fetch-action';
@@ -18,11 +14,7 @@ import { FolderGit2 } from 'lucide-react';
 
 export const metadata: Metadata = { title: 'Dashboard' };
 
-export default async function DashboardPage({
-  params,
-}: {
-  params: Promise<{ workspaceId: string }>;
-}) {
+export default async function DashboardPage({ params }: { params: Promise<{ workspaceId: string }> }) {
   const { workspaceId } = await params;
   const container = getContainer();
   const base = `/w/${workspaceId}`;
@@ -199,9 +191,7 @@ export default async function DashboardPage({
         aside={<Link href={`${base}/settings/activity`}>View all activity</Link>}
       />
       {activity.length === 0 ? (
-        <p className="muted">
-          No meaningful changes yet. Full audit events remain in Settings → Activity.
-        </p>
+        <p className="muted">No meaningful changes yet. Full audit events remain in Settings → Activity.</p>
       ) : (
         <ol className="list dashboard-activity" aria-labelledby="dash-activity">
           {activity.map((event) => {
