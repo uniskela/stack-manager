@@ -57,7 +57,11 @@ export default async function DashboardPage({ params }: { params: Promise<{ work
   }
 
   // Source draft counting is best-effort. Failed counts never masquerade as complete totals.
-  const { stackCounts: draftCounts, openDrafts, failedCounts } = await loadDashboardDraftCounts(
+  const {
+    stackCounts: draftCounts,
+    openDrafts,
+    failedCounts,
+  } = await loadDashboardDraftCounts(
     stackList,
     repositories,
     (repositoryId, rootPath) => container.source.countDrafts(repositoryId, rootPath),
