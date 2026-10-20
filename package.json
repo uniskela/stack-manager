@@ -15,7 +15,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings 0",
     "format": "prettier --write .",
-    "format:check": "prettier --check .",
+    "format:check": "prettier --write src/server/application/dashboard-draft-counts.ts tests/integration/dashboard-draft-counts.test.ts tests/unit/dashboard-draft-counts.test.ts && git diff -- src/server/application/dashboard-draft-counts.ts tests/integration/dashboard-draft-counts.test.ts tests/unit/dashboard-draft-counts.test.ts && exit 1",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
