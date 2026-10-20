@@ -33,13 +33,19 @@ describe('isRepositoryAutoFetchDue', () => {
   const interval = 15 * 60_000;
 
   it('fetches a ready repository after fifteen minutes, not earlier', () => {
-    expect(isRepositoryAutoFetchDue(repository({ lastFetchedAt: minutesAgo(14) }), now, interval)).toBe(false);
+    expect(
+      isRepositoryAutoFetchDue(repository({ lastFetchedAt: minutesAgo(14) }), now, interval),
+    ).toBe(false);
     expect(isRepositoryAutoFetchDue(repository({ lastFetchedAt: minutesAgo(15) }), now, interval)).toBe(true);
   });
 
   it('waits from the last failure before trying again', () => {
-    expect(isRepositoryAutoFetchDue(repository({ syncStatus: 'error', updatedAt: minutesAgo(3) }), now, interval)).toBe(false);
-    expect(isRepositoryAutoFetchDue(repository({ syncStatus: 'error', updatedAt: minutesAgo(20) }), now, interval)).toBe(true);
+    expect(
+      isRepositoryAutoFetchDue(repository({ syncStatus: 'error', updatedAt: minutesAgo(3) }), now, interval),
+    ).toBe(false);
+    expect(
+      isRepositoryAutoFetchDue(repository({ syncStatus: 'error', updatedAt: minutesAgo(20) }), now, interval),
+    ).toBe(true);
   });
 
   it('does not compete with queued or running initial fetches', () => {
@@ -48,7 +54,9 @@ describe('isRepositoryAutoFetchDue', () => {
   });
 
   it('uses connection creation as the due reference if no fetch completed', () => {
-    expect(isRepositoryAutoFetchDue(repository({ lastFetchedAt: null, createdAt: minutesAgo(20) }), now, interval)).toBe(true);
+    expect(
+      isRepositoryAutoFetchDue(repository({ lastFetchedAt: null, createdAt: minutesAgo(20) }), now, interval),
+    ).toBe(true);
   });
 });
 
