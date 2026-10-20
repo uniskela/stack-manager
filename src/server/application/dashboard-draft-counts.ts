@@ -70,13 +70,13 @@ export async function loadDashboardDraftCounts(
 
   const stackCounts = stacks.map((stack) => {
     if (stack.repository.headSha === null || failed.has(stack.repository.id)) return 0;
-    return (pathsByRepository.get(stack.repository.id) ?? []).filter((path) =>
-      isWithin(stack.rootPath, path),
-    ).length;
+    return (pathsByRepository.get(stack.repository.id) ?? []).filter((path) => isWithin(stack.rootPath, path))
+      .length;
   });
-  const openDrafts = failed.size > 0
-    ? null
-    : [...pathsByRepository.values()].reduce((total, paths) => total + paths.length, 0);
+  const openDrafts =
+    failed.size > 0
+      ? null
+      : [...pathsByRepository.values()].reduce((total, paths) => total + paths.length, 0);
 
   return { stackCounts, openDrafts, failedCounts: failed.size };
 }
