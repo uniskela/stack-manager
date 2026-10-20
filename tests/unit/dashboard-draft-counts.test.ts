@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { loadDashboardDraftCounts, type DashboardDraftPath } from '@/server/application/dashboard-draft-counts';
+import {
+  loadDashboardDraftCounts,
+  type DashboardDraftPath,
+} from '@/server/application/dashboard-draft-counts';
 
 const repositories = [
   { id: 'r1', headSha: 'a'.repeat(40) },
