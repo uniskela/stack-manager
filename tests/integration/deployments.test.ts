@@ -2,8 +2,10 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as setup from '@/app/api/setup/route';
-import { openSqlite } from '@/server/persistence/sqlite/database';
 import { DeploymentService } from '@/server/application/deployment-service';
+import { JobQueue } from '@/server/application/job-queue';
+import { openSqlite } from '@/server/persistence/sqlite/database';
+import { createSqliteRepositories } from '@/server/persistence/sqlite/repositories';
 import type { DeploymentProvider } from '@/server/providers/deployment/types';
 import { createHarness, type TestHarness } from '../support/container';
 import { call } from '../support/http';
@@ -432,4 +434,157 @@ describe('per-stack deployment bindings', () => {
       save.mockRestore();
     },
   );
+  it('serializes independent SQLite connections and retains binding state after reopen', async () => {
+    const handle = openSqlite(h.config.databasePath);
+    try {
+      const repos = createSqliteRepositories(handle.db);
+      const provider: DeploymentProvider = {
+        type: 'portainer-webhook',
+        validateConfiguration: (value) => value as { url: string },
+        validateDestination: async () => {},
+        trigger,
+      };
+      const other = new DeploymentService(
+        repos,
+        h.container.credentials,
+        new Map([['portainer-webhook', provider]]),
+        new JobQueue(repos.jobs, h.clock, randomUUID),
+        h.container.audit,
+        h.clock,
+        randomUUID,
+      );
+      const results = await Promise.allSettled([
+        configure(),
+        other.configure(
+          workspaceId,
+          stackId,
+          {
+            providerType: 'portainer-webhook',
+            enabled: true,
+            expectedRevision: null,
+            configuration: { url: URL },
+          },
+          actor,
+        ),
+      ]);
+      expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+      expect(await repos.credentials.list(workspaceId)).toHaveLength(1);
+      const requests = await Promise.allSettled([
+        service.trigger(workspaceId, stackId, actor),
+        other.trigger(workspaceId, stackId, actor),
+      ]);
+      expect(requests.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+      expect(await repos.deployments.history(workspaceId, stackId)).toHaveLength(1);
+    } finally {
+      handle.close();
+    }
+    const reopened = openSqlite(h.config.databasePath);
+    try {
+      const repos = createSqliteRepositories(reopened.db);
+      expect(await repos.deployments.binding(workspaceId, stackId)).toMatchObject({
+        enabled: true,
+        deployOnPush: false,
+      });
+      expect(await repos.deployments.history(workspaceId, stackId)).toHaveLength(1);
+    } finally {
+      reopened.close();
+    }
+  });
+  it.each(['ok', 'failed'] as const)(
+    'records safe non-sending destination validation: %s',
+    async (status) => {
+      await configure({ enabled: false });
+      const validateDestination = vi.fn(async () => {
+        if (status === 'failed') throw new Error(URL);
+      });
+      const provider: DeploymentProvider = {
+        type: 'portainer-webhook',
+        validateConfiguration: (v) => v as { url: string },
+        validateDestination,
+        trigger,
+      };
+      const validating = new DeploymentService(
+        h.container.repos,
+        h.container.credentials,
+        new Map([['portainer-webhook', provider]]),
+        h.container.jobs,
+        h.container.audit,
+        h.clock,
+        randomUUID,
+      );
+      const result = await validating.test(workspaceId, stackId, actor);
+      expect(result.binding).toMatchObject({
+        enabled: false,
+        lastTestStatus: status,
+        lastTestedAt: h.clock.now().toISOString(),
+      });
+      expect(result.binding?.lastTestMessage).toContain(
+        'No webhook sent; TLS and HTTP response were not tested.',
+      );
+      expect(JSON.stringify(result)).not.toContain(URL);
+      expect(trigger).not.toHaveBeenCalled();
+      expect(validateDestination).toHaveBeenCalledTimes(1);
+      expect((await service.settings(workspaceId, stackId)).binding?.lastTestStatus).toBe(status);
+    },
+  );
+  it.each(['rotation', 'removal', 'binding-update'] as const)(
+    'fences destination validation against concurrent %s',
+    async (change) => {
+      const binding = (await configure()).binding!;
+      const validateDestination = async () => {
+        if (change === 'rotation')
+          await h.container.credentials.replaceSecret(
+            workspaceId,
+            binding.credentialId,
+            JSON.stringify({ url: URL + '/rotated' }),
+            actor,
+          );
+        else if (change === 'removal') await service.remove(workspaceId, stackId, actor, binding.revision);
+        else
+          await configure({ expectedRevision: binding.revision, configuration: undefined, enabled: false });
+      };
+      const provider: DeploymentProvider = {
+        type: 'portainer-webhook',
+        validateConfiguration: (v) => v as { url: string },
+        validateDestination,
+        trigger,
+      };
+      const validating = new DeploymentService(
+        h.container.repos,
+        h.container.credentials,
+        new Map([['portainer-webhook', provider]]),
+        h.container.jobs,
+        h.container.audit,
+        h.clock,
+        randomUUID,
+      );
+      await expect(validating.test(workspaceId, stackId, actor)).rejects.toThrow(
+        'changed during destination validation',
+      );
+      expect((await service.settings(workspaceId, stackId)).binding?.lastTestStatus ?? null).toBeNull();
+      expect(trigger).not.toHaveBeenCalled();
+    },
+  );
+  it('rejects destination validation without a binding or in another workspace', async () => {
+    await expect(service.test(workspaceId, stackId, actor)).rejects.toThrow('Deployment binding not found');
+    await configure();
+    await expect(service.test('other-workspace', stackId, actor)).rejects.toThrow('Stack not found');
+    expect(trigger).not.toHaveBeenCalled();
+  });
+  it('clears stored destination validation when the credential rotates', async () => {
+    const binding = (await configure()).binding!;
+    await service.test(workspaceId, stackId, actor);
+    expect((await service.settings(workspaceId, stackId)).binding?.lastTestStatus).toBe('ok');
+    await h.container.credentials.replaceSecret(
+      workspaceId,
+      binding.credentialId,
+      JSON.stringify({ url: URL + '/rotated' }),
+      actor,
+    );
+    expect((await service.settings(workspaceId, stackId)).binding).toMatchObject({
+      lastTestedAt: null,
+      lastTestStatus: null,
+      lastTestMessage: null,
+    });
+  });
 });

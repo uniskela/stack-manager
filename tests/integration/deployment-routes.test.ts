@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as deployment from '@/app/api/workspaces/[workspaceId]/stacks/[stackId]/deployment/route';
 import * as history from '@/app/api/workspaces/[workspaceId]/stacks/[stackId]/deployment/history/route';
+import * as validation from '@/app/api/workspaces/[workspaceId]/stacks/[stackId]/deployment/test/route';
 import * as trigger from '@/app/api/workspaces/[workspaceId]/stacks/[stackId]/deployment/trigger/route';
 import * as setup from '@/app/api/setup/route';
 import { createHarness, type TestHarness } from '../support/container';
@@ -28,6 +29,7 @@ describe('deployment authenticated HTTP boundaries', () => {
       [deployment.DELETE, 'DELETE', {}],
       [history.GET, 'GET', undefined],
       [trigger.POST, 'POST', {}],
+      [validation.POST, 'POST', {}],
     ] as const) {
       expect((await call(handler, { method, params, body })).status).toBe(401);
     }
@@ -37,6 +39,7 @@ describe('deployment authenticated HTTP boundaries', () => {
       [deployment.PUT, 'PUT'],
       [deployment.DELETE, 'DELETE'],
       [trigger.POST, 'POST'],
+      [validation.POST, 'POST'],
     ] as const) {
       expect(
         (await call(handler, { method, params, cookie, origin: 'https://attacker.example', body: {} }))
@@ -57,6 +60,16 @@ describe('deployment authenticated HTTP boundaries', () => {
       },
     });
     expect(response.status).toBe(400);
+    expect(
+      (
+        await call(validation.POST, {
+          method: 'POST',
+          params,
+          cookie,
+          body: { url: 'https://unsaved.example' },
+        })
+      ).status,
+    ).toBe(400);
     expect(
       (
         await call(trigger.POST, {

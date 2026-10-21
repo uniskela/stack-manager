@@ -7,7 +7,16 @@ import { Alert } from './primitives/alert';
 import { Button } from './primitives/button';
 
 type Provider = 'portainer-webhook' | 'generic-webhook';
-type Binding = { id: string; providerType: Provider; enabled: boolean; revision: string; hint: string };
+type Binding = {
+  id: string;
+  providerType: Provider;
+  enabled: boolean;
+  revision: string;
+  hint: string;
+  lastTestedAt: string | null;
+  lastTestStatus: 'ok' | 'failed' | null;
+  lastTestMessage: string | null;
+};
 type Attempt = {
   id: string;
   providerType: Provider;
@@ -97,7 +106,7 @@ export function DeploymentSettings(
     });
   }
 
-  async function mutate(operation: 'save' | 'trigger' | 'remove') {
+  async function mutate(operation: 'save' | 'trigger' | 'remove' | 'test') {
     if (inFlight.current || (active && operation === 'trigger')) return;
     if (operation === 'save' && token.current?.value && !url.current?.value) {
       setMessage({ error: true, text: 'Enter the replacement URL together with the bearer token.' });
@@ -114,6 +123,12 @@ export function DeploymentSettings(
           error: false,
           text: 'Deployment request recorded. HTTP acceptance does not verify container health.',
         });
+      } else if (operation === 'test') {
+        const result = await api<{ binding: Binding | null }>(`${endpoint}/test`, {
+          method: 'POST',
+          body: {},
+        });
+        setBinding(result.binding);
       } else {
         await saveConfiguration(operation);
       }
@@ -227,6 +242,7 @@ export function DeploymentSettings(
           </Button>
         </fieldset>
       </form>
+      <DestinationValidation binding={binding} busy={busy} onValidate={() => void mutate('test')} />
       <div className="actions">
         <Button
           variant="primary"
@@ -318,5 +334,32 @@ function DeploymentFeedback({ message }: Readonly<{ message: Message }>) {
     <Alert tone={message.error ? 'error' : 'ok'} role={message.error ? 'alert' : 'status'}>
       {message.text}
     </Alert>
+  );
+}
+
+function DestinationValidation({
+  binding,
+  busy,
+  onValidate,
+}: Readonly<{ binding: Binding | null; busy: boolean; onValidate: () => void }>) {
+  return (
+    <section aria-label="Destination validation" className="stack">
+      <p className="hint">
+        Checks saved configuration and DNS/network policy only. Sends no webhook; TLS and HTTP acceptance are
+        not tested.
+      </p>
+      <Button disabled={busy || !binding} onClick={onValidate}>
+        Validate destination
+      </Button>
+      {binding?.lastTestStatus ? (
+        <div role="status">
+          <p>Destination validation: {binding.lastTestStatus === 'ok' ? 'Passed' : 'Failed'}</p>
+          <p>
+            <LocalTime iso={binding.lastTestedAt} />
+          </p>
+          {binding.lastTestMessage ? <p>{binding.lastTestMessage}</p> : null}
+        </div>
+      ) : null}
+    </section>
   );
 }

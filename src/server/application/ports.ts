@@ -244,5 +244,11 @@ export interface DeploymentRepository {
     result: { status: 'accepted' | 'rejected' | 'unknown'; httpStatus: number | null; reason: string | null },
     now: Date,
   ): Promise<boolean>;
+  recordValidation(
+    workspaceId: string,
+    stackId: string,
+    expected: { revision: string; credentialId: string; nonce: string },
+    result: { at: Date; status: CredentialTestStatus; message: string },
+  ): Promise<void>;
   recover(stackId: string, now: Date): Promise<DeploymentAttempt[]>;
 }

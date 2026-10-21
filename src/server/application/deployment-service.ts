@@ -53,12 +53,16 @@ export class DeploymentService {
   async settings(workspaceId: string, stackId: string) {
     await this.stack(workspaceId, stackId);
     const b = await this.repos.deployments.binding(workspaceId, stackId);
+    const credential = b && (await this.repos.credentials.findById(workspaceId, b.credentialId));
     return {
       binding: b
         ? {
             ...b,
             deployOnPush: false as const,
             hint: '••••',
+            lastTestedAt: credential?.lastTestedAt?.toISOString() ?? null,
+            lastTestStatus: credential?.lastTestStatus ?? null,
+            lastTestMessage: credential?.lastTestMessage ?? null,
             createdAt: b.createdAt.toISOString(),
             updatedAt: b.updatedAt.toISOString(),
             lastAttemptAt: b.lastAttemptAt?.toISOString() ?? null,
@@ -67,6 +71,47 @@ export class DeploymentService {
           }
         : null,
     };
+  }
+
+  async test(workspaceId: string, stackId: string, actorUserId: string) {
+    await this.stack(workspaceId, stackId);
+    const binding = await this.repos.deployments.binding(workspaceId, stackId);
+    if (!binding) throw new NotFoundError('Deployment binding not found.');
+    const credential = await this.repos.credentials.findById(workspaceId, binding.credentialId);
+    if (!credential) throw new ConflictError('Deployment credential unavailable.');
+    let status: 'ok' | 'failed' = 'ok';
+    try {
+      await this.credentials.withPlaintext(
+        workspaceId,
+        binding.credentialId,
+        async (secret) => {
+          const provider = this.providers.get(binding.providerType)!;
+          await provider.validateDestination(provider.validateConfiguration(JSON.parse(secret)));
+        },
+        { kind: 'deployment', providerType: binding.providerType, nonce: credential.secretNonce },
+      );
+    } catch {
+      status = 'failed';
+    }
+    const message =
+      status === 'ok'
+        ? 'Destination DNS and network policy validated. No webhook sent; TLS and HTTP response were not tested.'
+        : 'Destination validation failed. No webhook sent; TLS and HTTP response were not tested.';
+    await this.repos.deployments.recordValidation(
+      workspaceId,
+      stackId,
+      { revision: binding.revision, credentialId: binding.credentialId, nonce: credential.secretNonce },
+      { at: this.clock.now(), status, message },
+    );
+    await this.audit.record({
+      action: 'deployment.binding_updated',
+      actorUserId,
+      workspaceId,
+      entityType: 'stack',
+      entityId: stackId,
+      meta: { destinationValidation: status },
+    });
+    return this.settings(workspaceId, stackId);
   }
   async configure(
     workspaceId: string,

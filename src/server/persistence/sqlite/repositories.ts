@@ -978,6 +978,46 @@ class SqliteDeploymentRepository implements DeploymentRepository {
       { behavior: 'immediate' },
     );
   }
+
+  async recordValidation(
+    workspaceId: string,
+    stackId: string,
+    expected: Parameters<DeploymentRepository['recordValidation']>[2],
+    result: Parameters<DeploymentRepository['recordValidation']>[3],
+  ) {
+    this.db.transaction(
+      (tx) => {
+        const binding = tx
+          .select()
+          .from(deploymentBindings)
+          .where(
+            and(eq(deploymentBindings.workspaceId, workspaceId), eq(deploymentBindings.stackId, stackId)),
+          )
+          .get();
+        const credential = tx
+          .select()
+          .from(providerCredentials)
+          .where(eq(providerCredentials.id, expected.credentialId))
+          .get();
+        if (
+          binding?.revision !== expected.revision ||
+          binding.credentialId !== expected.credentialId ||
+          credential?.workspaceId !== workspaceId ||
+          credential.kind !== 'deployment' ||
+          credential.providerType !== binding.providerType ||
+          credential.secretNonce !== expected.nonce
+        )
+          throw new ConflictError(
+            'Deployment settings changed during destination validation. Reload and try again.',
+          );
+        tx.update(providerCredentials)
+          .set({ lastTestedAt: result.at, lastTestStatus: result.status, lastTestMessage: result.message })
+          .where(eq(providerCredentials.id, expected.credentialId))
+          .run();
+      },
+      { behavior: 'immediate' },
+    );
+  }
   async recover(stackId: string, now: Date) {
     return this.db.transaction((tx) => {
       const attempts = tx

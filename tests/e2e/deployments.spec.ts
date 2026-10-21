@@ -13,12 +13,23 @@ test('deployment settings and confirmation are accessible on desktop and mobile'
   let binding: object | null = null;
   let revision = 0;
   let triggers = 0;
+  let validations = 0;
   let failSave = true;
   const attempts: object[] = [];
   await page.route(`**${endpoint}**`, async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
     if (path.endsWith('/history')) return route.fulfill({ json: { attempts } });
+    if (path.endsWith('/test')) {
+      validations++;
+      binding = {
+        ...binding,
+        lastTestedAt: new Date().toISOString(),
+        lastTestStatus: 'ok',
+        lastTestMessage: 'Saved destination satisfies DNS/network policy.',
+      };
+      return route.fulfill({ json: { binding } });
+    }
     if (path.endsWith('/trigger')) {
       triggers++;
       const attempt = {
@@ -72,6 +83,18 @@ test('deployment settings and confirmation are accessible on desktop and mobile'
   await section.getByLabel('Bearer token (optional)').fill('synthetic-browser-token');
   await section.getByRole('button', { name: 'Save binding' }).click();
   await expect(section.getByLabel('Bearer token (optional)')).toHaveValue('');
+  await section.getByLabel('Replacement webhook URL').fill('https://unsaved.example/deploy');
+  await section.getByLabel('Bearer token (optional)').fill('synthetic-unsaved-token');
+  const validateButton = section.getByRole('button', { name: 'Validate destination', exact: true });
+  await validateButton.focus();
+  await page.keyboard.press('Enter');
+  await expect(section.getByText('Destination validation: Passed', { exact: true })).toBeVisible();
+  expect(validations).toBe(1);
+  expect(triggers).toBe(0);
+  await expect(section.getByLabel('Replacement webhook URL')).toHaveValue('https://unsaved.example/deploy');
+  await expect(section.getByLabel('Bearer token (optional)')).toHaveValue('synthetic-unsaved-token');
+  await section.getByLabel('Replacement webhook URL').fill('');
+  await section.getByLabel('Bearer token (optional)').fill('');
   await section.getByRole('button', { name: 'Deploy now', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Confirm deployment request' });
   await expect(dialog).toContainText('Sample');
@@ -93,6 +116,15 @@ test('deployment settings and confirmation are accessible on desktop and mobile'
   await section.getByLabel('Binding enabled').uncheck();
   await section.getByRole('button', { name: 'Save binding' }).click();
   await expect(section.getByRole('button', { name: 'Deploy now', exact: true })).toBeDisabled();
+  await section
+    .getByRole('button', { name: 'Validate destination' })
+    .evaluate((button: HTMLButtonElement) => {
+      button.click();
+      button.click();
+    });
+  await expect(section.getByText('Destination validation: Passed', { exact: true })).toBeVisible();
+  expect(validations).toBe(2);
+  expect(triggers).toBe(1);
   await expectAccessible(page);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await section.screenshot({ path: `test-results/deployment-${info.project.name}.png` });
