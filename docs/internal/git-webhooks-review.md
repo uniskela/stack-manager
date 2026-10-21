@@ -126,8 +126,9 @@ and new-head CI/reviews follow below.
 
 Kody inline finding [4332349111](https://github.com/uniskela/stack-manager/pull/64#discussion_r4332349111)
 identified unthrottled public ingress. The existing AttemptLimiter now bounds POST ingress before
-body reading and database/HMAC work: 120 requests/minute per trusted IP, or one shared webhook quota without a
-trusted address. Untrusted forwarding cannot select an IP bucket. Two route regressions failed before
+body reading and database/HMAC work: 120 requests/minute per trusted IP. Address-based limiting is
+skipped without a trustworthy address; proxy-level controls must bound unattributed traffic. Forwarding
+headers are ignored when proxy trust is disabled. Over-declaring trusted hops can select forged entries. Two route regressions failed before
 the fix and pass afterward, including expiry and independent trusted-IP quotas. Proxy limits remain
 required; counters intentionally reset on restart like login/setup counters.
 
@@ -135,11 +136,11 @@ The replay-fix full browser rerun passed all webhook scenarios, but an existing 
 blocked on warnings from the manually selected nginx-flask-mysql sample. This run used the wrong sample
 root; rerun with the maintained CI nginx-golang fixture follows, without changing production validation.
 
-Independent follow-up review identified attacker-controlled repository fallback buckets. The fallback
-now has one fixed webhook key: random URL IDs cannot bypass it or allocate limiter entries. Trusted
-IP quotas still use the existing sanitized proxy policy. This intentionally bounds all unattributed
-webhook traffic together; configure the trusted proxy correctly to isolate real client quotas.
-
+Independent follow-up review identified attacker-controlled repository fallback buckets. An interim
+shared fallback was subsequently removed to follow the forwarding-header trust rule: unknown clients
+must not be pooled into an address bucket. Neither unknown clients nor arbitrary URL IDs allocate
+limiter entries. Trusted-IP quotas require the configured proxy chain to match the real topology;
+operators must enforce connection/time/rate limits at the proxy for all traffic.
 
 Kody business-logic [re-review](https://github.com/uniskela/stack-manager/pull/64#issuecomment-6306425989)
 reports **Compliant**, high confidence, with no requirement gaps. Kody separately confirmed the ingress
@@ -161,3 +162,19 @@ the same credential retain the existing credential API’s last-write-wins seman
 the operator guide); each replacement immediately supersedes earlier secrets, and the incoming
 delivery nonce fence still rejects verification using superseded material. No rotation grace period
 or multi-operator credential-version protocol is introduced.
+
+
+## Remaining Kody findings follow-up
+
+- Unknown client addresses now skip address-based limiting instead of sharing a fallback quota.
+  Route regressions cover ignored client-supplied forwarding headers with trust disabled, early
+  trusted-IP 429 responses, quota expiry and distinct trusted addresses. The unknown-client
+  regression failed before the change.
+- The operator guide explicitly warns that over-declaring trusted proxy hops can use forged header
+  entries as quota keys. Startup cannot infer the actual network topology; proxy controls remain required.
+- All independently opened SQLite handles in the webhook integration suite now close in finally,
+  including provider fixture updates and injected-failure scenarios, preserving thrown errors.
+
+Follow-up verification: `pnpm check` passed 487 tests plus format/lint/types; production build passed.
+Targeted production webhook browser/axe checks passed 5 tests with 1 expected shared mobile mutation
+skip. The updated unknown-client regression failed before the fix and passes in the full suite.

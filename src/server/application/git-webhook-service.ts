@@ -24,8 +24,8 @@ export class GitWebhookService {
   private readonly requestLimiter = new AttemptLimiter(120, 60_000);
 
   limitRequests(ip: string | null) {
-    // A shared webhook quota bounds unattributed traffic even when URL IDs are attacker-controlled.
-    const key = ip ? `ip:${ip}` : 'unattributed-webhooks';
+    if (!ip) return;
+    const key = `ip:${ip}`;
     if (this.requestLimiter.isBlocked(key)) throw new RateLimitedError();
     this.requestLimiter.recordFailure(key);
   }

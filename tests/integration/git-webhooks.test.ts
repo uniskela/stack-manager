@@ -122,16 +122,19 @@ function rows(table: string) {
 describe('signed Git ingress via actual routes, SQLite and queue', () => {
   it.each(providers)('accepts native %s push bytes and only enqueues a repository sync', async (provider) => {
     const handle = db();
-    handle.db.$client
-      .prepare('UPDATE git_repository_connections SET git_provider_type = ?, remote_url = ? WHERE id = ?')
-      .run(
-        provider,
-        provider === 'github'
-          ? 'https://github.com/acme/infra.git'
-          : `https://${provider}.example/acme/infra.git`,
-        repositoryId,
-      );
-    handle.close();
+    try {
+      handle.db.$client
+        .prepare('UPDATE git_repository_connections SET git_provider_type = ?, remote_url = ? WHERE id = ?')
+        .run(
+          provider,
+          provider === 'github'
+            ? 'https://github.com/acme/infra.git'
+            : `https://${provider}.example/acme/infra.git`,
+          repositoryId,
+        );
+    } finally {
+      handle.close();
+    }
     expect((await configure()).status).toBe(200);
     const nudge = vi.spyOn(h.container.worker, 'nudge');
     const result = await deliver({ provider });
@@ -241,24 +244,30 @@ describe('signed Git ingress via actual routes, SQLite and queue', () => {
     await configure();
     const id = randomUUID();
     const handle = db();
-    handle.db.$client.exec(
-      "CREATE TRIGGER fail_job BEFORE INSERT ON jobs BEGIN SELECT RAISE(ABORT, 'synthetic storage failure'); END",
-    );
-    expect((await deliver({ id })).status).toBe(500);
-    expect(rows('git_webhook_deliveries')).toHaveLength(0);
-    handle.db.$client.exec('DROP TRIGGER fail_job');
-    handle.close();
+    try {
+      handle.db.$client.exec(
+        "CREATE TRIGGER fail_job BEFORE INSERT ON jobs BEGIN SELECT RAISE(ABORT, 'synthetic storage failure'); END",
+      );
+      expect((await deliver({ id })).status).toBe(500);
+      expect(rows('git_webhook_deliveries')).toHaveLength(0);
+      handle.db.$client.exec('DROP TRIGGER fail_job');
+    } finally {
+      handle.close();
+    }
     expect((await deliver({ id })).status).toBe(202);
   });
   it('fails safely on delivery database failure', async () => {
     await configure();
     const handle = db();
-    handle.db.$client.exec(
-      "CREATE TRIGGER fail_delivery BEFORE INSERT ON git_webhook_deliveries BEGIN SELECT RAISE(ABORT, 'synthetic failure'); END",
-    );
-    expect((await deliver()).status).toBe(500);
-    expect(rows('jobs')).toHaveLength(0);
-    handle.close();
+    try {
+      handle.db.$client.exec(
+        "CREATE TRIGGER fail_delivery BEFORE INSERT ON git_webhook_deliveries BEGIN SELECT RAISE(ABORT, 'synthetic failure'); END",
+      );
+      expect((await deliver()).status).toBe(500);
+      expect(rows('jobs')).toHaveLength(0);
+    } finally {
+      handle.close();
+    }
   });
   it('coalesces pending fetches and durably requests another fetch while running', async () => {
     await configure();
@@ -405,10 +414,13 @@ describe('verification/configuration races and background Git work', () => {
         overrides: gitServerOverrides(server),
       });
       const handle = db();
-      handle.db.$client
-        .prepare('UPDATE git_repository_connections SET remote_url = ? WHERE id = ?')
-        .run('https://git.test/acme/infra.git', repositoryId);
-      handle.close();
+      try {
+        handle.db.$client
+          .prepare('UPDATE git_repository_connections SET remote_url = ? WHERE id = ?')
+          .run('https://git.test/acme/infra.git', repositoryId);
+      } finally {
+        handle.close();
+      }
       await configure();
       const p = payload();
       p.repository = { ...(p.repository as object), clone_url: 'https://git.test/acme/infra.git' };
@@ -548,16 +560,19 @@ describe('signed-body replay protection', () => {
     'deduplicates a captured %s body with a changed delivery ID, also while running',
     async (provider) => {
       const handle = db();
-      handle.db.$client
-        .prepare('UPDATE git_repository_connections SET git_provider_type = ?, remote_url = ? WHERE id = ?')
-        .run(
-          provider,
-          provider === 'github'
-            ? 'https://github.com/acme/infra.git'
-            : `https://${provider}.example/acme/infra.git`,
-          repositoryId,
-        );
-      handle.close();
+      try {
+        handle.db.$client
+          .prepare('UPDATE git_repository_connections SET git_provider_type = ?, remote_url = ? WHERE id = ?')
+          .run(
+            provider,
+            provider === 'github'
+              ? 'https://github.com/acme/infra.git'
+              : `https://${provider}.example/acme/infra.git`,
+            repositoryId,
+          );
+      } finally {
+        handle.close();
+      }
       await configure();
       const body = JSON.stringify(payload(provider));
       expect((await deliver({ provider, body })).status).toBe(202);
@@ -578,22 +593,26 @@ describe('signed-body replay protection', () => {
 });
 
 describe('public webhook request throttling', () => {
-  it('bounds unattributed traffic across attacker-chosen repository IDs', async () => {
-    const configuredId = repositoryId;
-    for (let i = 0; i < 120; i++) {
-      repositoryId = randomUUID();
-      expect((await deliver()).status).toBe(401);
+  it('skips address quotas when no trusted client IP is available', async () => {
+    await configure();
+    for (let i = 0; i < 121; i++) {
+      expect((await deliver({ secret: ROTATED, headers: { 'x-forwarded-for': '203.0.113.8' } })).status).toBe(
+        401,
+      );
     }
-    repositoryId = configuredId;
-    expect((await deliver()).status).toBe(429);
+    expect((await deliver()).status).toBe(202);
   });
 
-  it('limits before body/credential work, ignores untrusted forwarding headers and recovers', async () => {
+  it('limits trusted requests before body/credential work and recovers', async () => {
     await configure();
+    await h.container.close();
+    h = await createHarness({ dataDir: h.dataDir, config: { ...h.config, trustedProxyHops: 1 } });
     const now = vi.spyOn(Date, 'now').mockReturnValue(1000);
     const lookup = vi.spyOn(h.container.repos.credentials, 'findById');
     for (let i = 0; i < 120; i++) {
-      expect((await deliver({ secret: ROTATED })).status).toBe(401);
+      expect((await deliver({ secret: ROTATED, headers: { 'x-forwarded-for': '203.0.113.8' } })).status).toBe(
+        401,
+      );
     }
     lookup.mockClear();
     expect(
@@ -601,7 +620,7 @@ describe('public webhook request throttling', () => {
     ).toBe(429);
     expect(lookup).not.toHaveBeenCalled();
     now.mockReturnValue(61000);
-    expect((await deliver()).status).toBe(202);
+    expect((await deliver({ headers: { 'x-forwarded-for': '203.0.113.8' } })).status).toBe(202);
   });
   it('isolates trusted client IP quotas', async () => {
     await configure();

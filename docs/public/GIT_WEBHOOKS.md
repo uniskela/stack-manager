@@ -65,12 +65,18 @@ Forward the full endpoint path, native event/delivery/signature headers and body
 parse/re-encode JSON, trim whitespace, rewrite Unicode, decompress/recompress, or redirect webhook
 requests. Permit POST JSON bodies up to **1 MiB**; the app enforces this limit while streaming as well
 as against Content-Length. Apply proxy connection/time limits and rate limits suited to your installation.
-The app also limits ingress to **120 POST requests per minute** before body reading or credential
-lookup. It uses the trusted client IP when `STACK_MANAGER_TRUSTED_PROXY_HOPS` is configured correctly;
-otherwise all unattributed webhook traffic shares one quota (including nonexistent repository IDs). Untrusted forwarding headers never bypass the fallback.
+The app limits ingress from each trusted client IP to **120 POST requests per minute**, before
+body reading or credential lookup. Address-based limiting is skipped when no trustworthy address can
+be determined; unknown clients are not grouped into a shared bucket. Configure
+`STACK_MANAGER_TRUSTED_PROXY_HOPS` to match the actual proxy chain, and ensure only that trusted chain
+can reach the app. With proxy trust disabled, client-supplied forwarding headers are ignored.
+Declaring more hops than actually exist can select a client-supplied forwarding entry as the quota
+key, allowing callers to evade address-based limits. The app cannot discover or validate your proxy
+topology automatically.
+
 Counters reset on process restart; this is an application safeguard, not distributed denial-of-service
-protection. Keep proxy-level limits enabled. Bursts may need forge redelivery after the window expires;
-polling remains available. Do not increase proxy trust to accept client-supplied forwarding headers.
+protection. Apply proxy-level connection/time/rate limits, including when no trusted client IP is
+available. Bursts may need forge redelivery after the window expires; polling remains available.
 
 Session authentication redirects and browser CSRF middleware must not intercept this exact path.
 Regular Stack Manager mutations still require a browser session and same-origin validation.
