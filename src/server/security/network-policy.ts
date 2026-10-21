@@ -110,10 +110,10 @@ export type Resolver = (hostname: string) => Promise<string[]>;
 const systemResolver: Resolver = async (hostname) =>
   (await lookup(hostname, { all: true })).map((r) => r.address);
 
-export async function assertAllowedHost(
+export async function resolveAllowedHost(
   hostname: string,
   options: { allowPrivateNetworks: boolean; resolver?: Resolver },
-): Promise<void> {
+): Promise<string[]> {
   const host = hostname.replace(/^\[|\]$/g, '');
   const lower = host.toLowerCase();
   const reject = (msg: string): never => {
@@ -142,4 +142,12 @@ export async function assertAllowedHost(
       );
     }
   }
+  return addresses;
+}
+
+export async function assertAllowedHost(
+  hostname: string,
+  options: { allowPrivateNetworks: boolean; resolver?: Resolver },
+): Promise<void> {
+  await resolveAllowedHost(hostname, options);
 }
