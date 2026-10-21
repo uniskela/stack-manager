@@ -6,6 +6,7 @@ import {
   validateLabel,
   validateSecretMeta,
   validateSecretValue,
+  validateWebhookSecret,
   type CredentialKind,
   type CredentialRecord,
   type CredentialView,
@@ -57,7 +58,8 @@ export class CredentialService {
       });
     }
     const label = validateLabel(input.label);
-    const secret = validateSecretValue(input.secret);
+    const secret =
+      input.kind === 'git_webhook' ? validateWebhookSecret(input.secret) : validateSecretValue(input.secret);
     const meta = validateSecretMeta(input.meta);
     const id = this.newId();
     const now = this.clock.now();
@@ -71,7 +73,7 @@ export class CredentialService {
       secretCiphertext: encrypted.ciphertext,
       secretNonce: encrypted.nonce,
       secretKeyVersion: encrypted.keyVersion,
-      secretHint: maskSecret(secret),
+      secretHint: input.kind === 'git_webhook' ? '••••' : maskSecret(secret),
       secretMeta: meta,
       lastTestedAt: null,
       lastTestStatus: null,
@@ -130,14 +132,15 @@ export class CredentialService {
     secretInput: string,
     actorUserId: string,
   ): Promise<CredentialView> {
-    await this.#find(workspaceId, id);
-    const secret = validateSecretValue(secretInput);
+    const existing = await this.#find(workspaceId, id);
+    const secret =
+      existing.kind === 'git_webhook' ? validateWebhookSecret(secretInput) : validateSecretValue(secretInput);
     const encrypted = this.box.encrypt(secret, credentialAad(workspaceId, id));
     await this.repo.updateSecret(id, {
       secretCiphertext: encrypted.ciphertext,
       secretNonce: encrypted.nonce,
       secretKeyVersion: encrypted.keyVersion,
-      secretHint: maskSecret(secret),
+      secretHint: existing.kind === 'git_webhook' ? '••••' : maskSecret(secret),
       updatedAt: this.clock.now(),
     });
     await this.audit.record({
@@ -173,9 +176,13 @@ export class CredentialService {
   async withPlaintext<T>(
     workspaceId: string,
     id: string,
-    fn: (secret: string, credential: CredentialView) => Promise<T>,
+    fn: (secret: string, credential: CredentialView) => T | Promise<T>,
+    expected?: { kind: CredentialKind; providerType: string },
   ): Promise<T> {
     const record = await this.#find(workspaceId, id);
+    if (expected && (record.kind !== expected.kind || record.providerType !== expected.providerType)) {
+      throw new ValidationError('Credential kind or provider does not match this operation.');
+    }
     const secret = this.box.decrypt(
       { ciphertext: record.secretCiphertext, nonce: record.secretNonce, keyVersion: record.secretKeyVersion },
       credentialAad(workspaceId, id),

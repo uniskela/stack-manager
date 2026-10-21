@@ -347,8 +347,11 @@ export class GitRepositoryService {
     };
     const invoke = (auth: GitHttpAuth | null) => run(provider, { ...input, auth });
     return conn.credentialId
-      ? this.credentials.withPlaintext(workspaceId, conn.credentialId, (token, cred) =>
-          invoke({ username: cred.meta.username || provider.defaultUsername(), token }),
+      ? this.credentials.withPlaintext(
+          workspaceId,
+          conn.credentialId,
+          (token, cred) => invoke({ username: cred.meta.username || provider.defaultUsername(), token }),
+          { kind: 'git', providerType: provider.descriptor.type },
         )
       : invoke(null);
   }
@@ -429,8 +432,11 @@ export class GitRepositoryService {
           signal,
         });
       const result = conn.credentialId
-        ? await this.credentials.withPlaintext(conn.workspaceId, conn.credentialId, (token, cred) =>
-            run({ username: cred.meta.username || provider.defaultUsername(), token }),
+        ? await this.credentials.withPlaintext(
+            conn.workspaceId,
+            conn.credentialId,
+            (token, cred) => run({ username: cred.meta.username || provider.defaultUsername(), token }),
+            { kind: 'git', providerType: provider.descriptor.type },
           )
         : await run(null);
       // The connection may have been deleted while git was running: do not leave an orphaned clone behind.
@@ -510,8 +516,11 @@ export class GitRepositoryService {
       return run({ username: auth.username?.trim() || provider.defaultUsername(), token });
     }
     try {
-      const result = await this.credentials.withPlaintext(workspaceId, auth.credentialId, (token, cred) =>
-        run({ username: cred.meta.username || provider.defaultUsername(), token }),
+      const result = await this.credentials.withPlaintext(
+        workspaceId,
+        auth.credentialId,
+        (token, cred) => run({ username: cred.meta.username || provider.defaultUsername(), token }),
+        { kind: 'git', providerType: provider.descriptor.type },
       );
       await this.credentials.recordTestResult(
         auth.credentialId,

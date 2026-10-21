@@ -24,6 +24,9 @@ describe('API route coverage', () => {
         if (!handler) continue;
         const key = `${rel} ${method}`;
         seen.push(key);
+        expect(handler.__stackManagerRoute === 'signed-webhook', key).toBe(
+          key === 'webhooks/git/[workspaceId]/[repositoryId] POST',
+        );
         expect(handler.__stackManagerRoute, `${key} must use defineRoute`).toBeDefined();
         expect(handler.__stackManagerRoute === 'public', `${key} public=${handler.__stackManagerRoute}`).toBe(
           PUBLIC.has(key),

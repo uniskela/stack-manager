@@ -35,6 +35,13 @@
       "kind": "doc"
     },
     {
+      "source": "docs/public/GIT_WEBHOOKS.md",
+      "slug": "git-webhooks",
+      "title": "Git push webhooks",
+      "group": "Start here",
+      "kind": "doc"
+    },
+    {
       "source": "docs/public/SELF_HOSTING.md",
       "slug": "self-hosting",
       "title": "Self-hosting reference",

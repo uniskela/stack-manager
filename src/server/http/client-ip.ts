@@ -8,7 +8,8 @@ import net from 'node:net';
  * declares how many trusted reverse proxies sit in front of the app (STACK_MANAGER_TRUSTED_PROXY_HOPS).
  * With N trusted hops, each proxy appends the address it received the connection from, so the client
  * is the N-th entry from the right of X-Forwarded-For; entries further left are client-controlled.
- * Returns null when the address cannot be determined; callers must not pool unknown clients together.
+ * Returns null when the address cannot be determined; callers must skip address-based limiting
+ * rather than pool unknown clients into a shared address bucket.
  */
 export function clientIpFrom(headers: Headers, trustedProxyHops: number): string | null {
   if (trustedProxyHops <= 0) return null;

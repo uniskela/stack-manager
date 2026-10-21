@@ -1,7 +1,7 @@
 import type { Clock } from '@/server/domain/clock';
 import { JOB_DEFAULT_MAX_ATTEMPTS, type Job } from '@/server/domain/job';
 import { redact } from '@/server/security/redact';
-import type { JobRepository } from './ports';
+import type { EnqueueJobInput, JobRepository } from './ports';
 
 /**
  * `JobEnqueue` port from ADR 0002. Payloads carry references (ids), never secrets: a payload that
@@ -19,11 +19,20 @@ export class JobQueue {
     payload: Record<string, unknown>,
     options: { dedupeKey?: string; delayMs?: number; maxAttempts?: number; followUpIfRunning?: boolean } = {},
   ): Promise<{ job: Job; created: boolean }> {
+    return this.repo.enqueue(this.prepare(type, payload, options));
+  }
+
+  /** Shared validation and defaults for persistence operations that also need a queue transaction. */
+  prepare(
+    type: string,
+    payload: Record<string, unknown>,
+    options: { dedupeKey?: string; delayMs?: number; maxAttempts?: number; followUpIfRunning?: boolean } = {},
+  ): EnqueueJobInput {
     if (JSON.stringify(redact(payload)) !== JSON.stringify(payload)) {
       throw new Error(`Job payload for "${type}" contains secret-like data; pass references instead.`);
     }
     const now = this.clock.now();
-    return this.repo.enqueue({
+    return {
       id: this.newId(),
       type,
       payload,
@@ -32,7 +41,7 @@ export class JobQueue {
       dedupeKey: options.dedupeKey ?? null,
       followUpIfRunning: options.followUpIfRunning,
       now,
-    });
+    };
   }
 
   get(id: string): Promise<Job | null> {

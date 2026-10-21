@@ -1,6 +1,6 @@
 import { ValidationError } from './errors';
 
-export const CREDENTIAL_KINDS = ['git', 'deployment', 'runtime', 'secret'] as const;
+export const CREDENTIAL_KINDS = ['git', 'git_webhook', 'deployment', 'runtime', 'secret'] as const;
 export type CredentialKind = (typeof CREDENTIAL_KINDS)[number];
 
 export type CredentialTestStatus = 'ok' | 'failed';
@@ -116,4 +116,13 @@ export function validateSecretMeta(meta: Record<string, unknown> | undefined): R
     out[key] = value.trim();
   }
   return out;
+}
+
+/** Signing keys must be independently generated; reject short or obviously repetitive values. */
+export function validateWebhookSecret(secret: string): string {
+  const value = validateSecretValue(secret);
+  if (value.length < 32 || new Set(value).size < 12) {
+    throw new ValidationError('Use an independently generated signing secret of at least 32 characters.');
+  }
+  return value;
 }

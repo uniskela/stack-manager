@@ -85,6 +85,7 @@ export interface GitRepositoryConnectionRepository {
         | 'name'
         | 'defaultBranch'
         | 'credentialId'
+        | 'webhookCredentialId'
         | 'syncStatus'
         | 'lastSyncError'
         | 'headSha'
@@ -98,6 +99,13 @@ export interface GitRepositoryConnectionRepository {
       >
     > & { updatedAt: Date },
   ): Promise<void>;
+  /** Compare-and-swap protects signing configuration against concurrent saves/disables. */
+  setWebhookCredential(
+    id: string,
+    expectedId: string | null,
+    nextId: string | null,
+    updatedAt: Date,
+  ): Promise<boolean>;
   delete(id: string): Promise<void>;
 }
 
@@ -182,7 +190,36 @@ export interface Repositories {
   credentials: CredentialRepository;
   gitRepositories: GitRepositoryConnectionRepository;
   jobs: JobRepository;
+  gitWebhookDeliveries: GitWebhookDeliveryRepository;
   audit: AuditRepository;
   stacks: StackRepository;
   drafts: SourceDraftRepository;
+}
+
+export interface GitWebhookDelivery {
+  id: string;
+  repositoryId: string;
+  provider: string;
+  deliveryId: string;
+  eventType: string;
+  bodyHash: string | null;
+  ref: string | null;
+  receivedAt: Date;
+  status: 'accepted' | 'ignored';
+  jobId: string | null;
+}
+
+export interface GitWebhookDeliveryRepository {
+  /** Atomically record the delivery and enqueue/coalesce the job, or do neither. */
+  accept(
+    delivery: GitWebhookDelivery,
+    job: EnqueueJobInput | null,
+    expected: {
+      credentialId: string;
+      nonce: string;
+      branch: string;
+      remoteUrl: string;
+    },
+  ): Promise<{ duplicate: boolean }>;
+  latestAccepted(repositoryId: string): Promise<GitWebhookDelivery | null>;
 }

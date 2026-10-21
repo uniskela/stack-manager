@@ -30,6 +30,7 @@ describe('migrations', () => {
     expect(tables).toEqual([
       'audit_events',
       'git_repository_connections',
+      'git_webhook_deliveries',
       'jobs',
       'provider_credentials',
       'sessions',

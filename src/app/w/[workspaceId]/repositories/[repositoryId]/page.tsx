@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { getContainer } from '@/server/container';
+import { GitWebhookSettings } from '@/ui/git-webhook-settings';
 import { CredentialActions } from '@/ui/credential-actions';
 import { LocalTime } from '@/ui/local-time';
 import { Alert } from '@/ui/primitives/alert';
@@ -20,7 +21,8 @@ export default async function RepositoryPage({
   params: Promise<{ workspaceId: string; repositoryId: string }>;
 }) {
   const { workspaceId, repositoryId } = await params;
-  const { repositories, stacks } = getContainer();
+  const { repositories, stacks, gitWebhooks, config } = getContainer();
+  const webhook = await orNotFound(gitWebhooks.settings(workspaceId, repositoryId));
   const repo = await orNotFound(repositories.get(workspaceId, repositoryId));
   const branches = await repositories.branches(workspaceId, repositoryId);
   const suggestions = repo.headSha ? await stacks.suggest(workspaceId, repositoryId).catch(() => []) : [];
@@ -77,6 +79,18 @@ export default async function RepositoryPage({
 
       <Section id="repo-auto-fetch" title="Automatic fetching">
         <RepositoryAutoFetchSettings workspaceId={workspaceId} repositoryId={repo.id} settings={repo} />
+      </Section>
+
+      <Section id="repo-webhooks" title="Git webhooks">
+        <GitWebhookSettings
+          workspaceId={workspaceId}
+          repositoryId={repo.id}
+          provider={repo.gitProviderType}
+          providerName={repo.providerName}
+          publicUrl={config.publicUrl?.origin ?? null}
+          settings={webhook}
+          workerEnabled={config.workerEnabled}
+        />
       </Section>
 
       <Section

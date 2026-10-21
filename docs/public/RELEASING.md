@@ -46,3 +46,10 @@ All third-party actions are pinned to commit SHAs; Dependabot proposes weekly up
   so the image can be pulled without `docker login`.
 - Images are linux/amd64. arm64 (e.g. Raspberry Pi) needs emulated or arm64 runners and can be added to
   `publish-image.yml` later.
+
+## v0.6.0 inbound webhook validation
+
+Issue #53 adds signed GitHub/Gitea/Forgejo ingress and additive delivery-ledger and accepted-body-fingerprint migrations (0007/0008).
+Before release, verify the provider/security/replay/queue/restart tests, production UI and rootless
+Docker smoke checks, plus live forge delivery from supported operator versions. No deployment is
+triggered by ingress. Follow [Git push webhooks](GIT_WEBHOOKS.md) for backup and rollback.

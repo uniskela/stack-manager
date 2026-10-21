@@ -1,9 +1,10 @@
-import { and, asc, count, desc, eq, gt, inArray, lt, lte, ne, notInArray, or } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, inArray, isNull, lt, lte, ne, notInArray, or } from 'drizzle-orm';
 import type {
   AuditRepository,
   CredentialRepository,
   EnqueueJobInput,
   GitRepositoryConnectionRepository,
+  GitWebhookDeliveryRepository,
   JobRepository,
   Repositories,
   SessionRepository,
@@ -22,6 +23,7 @@ import type { User } from '@/server/domain/user';
 import {
   auditEvents,
   gitRepositoryConnections,
+  gitWebhookDeliveries,
   jobs,
   providerCredentials,
   sessions,
@@ -30,6 +32,7 @@ import {
   users,
   workspaces,
 } from '../schema';
+import { AuthenticationError } from '@/server/domain/errors';
 import type { SqliteDb } from './database';
 
 type UserRow = typeof users.$inferSelect;
@@ -301,15 +304,36 @@ class SqliteGitRepositoryConnectionRepository implements GitRepositoryConnection
     this.db.update(gitRepositoryConnections).set(patch).where(eq(gitRepositoryConnections.id, id)).run();
   }
 
+  async setWebhookCredential(id: string, expectedId: string | null, nextId: string | null, updatedAt: Date) {
+    return (
+      this.db
+        .update(gitRepositoryConnections)
+        .set({ webhookCredentialId: nextId, updatedAt })
+        .where(
+          and(
+            eq(gitRepositoryConnections.id, id),
+            expectedId === null
+              ? isNull(gitRepositoryConnections.webhookCredentialId)
+              : eq(gitRepositoryConnections.webhookCredentialId, expectedId),
+          ),
+        )
+        .run().changes === 1
+    );
+  }
+
   async delete(id: string) {
     this.db.delete(gitRepositoryConnections).where(eq(gitRepositoryConnections.id, id)).run();
   }
 }
 
 class SqliteJobRepository implements JobRepository {
-  constructor(private readonly db: SqliteDb) {}
+  constructor(private readonly db: Pick<SqliteDb, 'select' | 'update' | 'insert' | 'transaction'>) {}
 
   async enqueue(input: EnqueueJobInput) {
+    return this.enqueueSync(input);
+  }
+
+  enqueueSync(input: EnqueueJobInput) {
     return this.db.transaction((tx) => {
       if (input.dedupeKey) {
         const active = tx
@@ -679,8 +703,74 @@ export function createSqliteRepositories(db: SqliteDb): Repositories {
     credentials: new SqliteCredentialRepository(db),
     gitRepositories: new SqliteGitRepositoryConnectionRepository(db),
     jobs: new SqliteJobRepository(db),
+    gitWebhookDeliveries: new SqliteGitWebhookDeliveryRepository(db),
     audit: new SqliteAuditRepository(db),
     stacks: new SqliteStackRepository(db),
     drafts: new SqliteSourceDraftRepository(db),
   };
+}
+
+class SqliteGitWebhookDeliveryRepository implements GitWebhookDeliveryRepository {
+  constructor(private readonly db: SqliteDb) {}
+
+  async accept(
+    delivery: Parameters<GitWebhookDeliveryRepository['accept']>[0],
+    job: EnqueueJobInput | null,
+    expected: Parameters<GitWebhookDeliveryRepository['accept']>[2],
+  ) {
+    return this.db.transaction(
+      (tx) => {
+        // Fence verification against concurrent rotation, disable, branch or connection changes.
+        const conn = tx
+          .select()
+          .from(gitRepositoryConnections)
+          .where(eq(gitRepositoryConnections.id, delivery.repositoryId))
+          .get();
+        const credential = tx
+          .select()
+          .from(providerCredentials)
+          .where(eq(providerCredentials.id, expected.credentialId))
+          .get();
+        if (
+          conn?.webhookCredentialId !== expected.credentialId ||
+          conn.gitProviderType !== delivery.provider ||
+          conn.defaultBranch !== expected.branch ||
+          conn.remoteUrl !== expected.remoteUrl ||
+          credential?.workspaceId !== conn.workspaceId ||
+          credential.kind !== 'git_webhook' ||
+          credential.providerType !== delivery.provider ||
+          credential.secretNonce !== expected.nonce
+        ) {
+          throw new AuthenticationError('Webhook authentication failed.');
+        }
+        const inserted = tx.insert(gitWebhookDeliveries).values(delivery).onConflictDoNothing().run();
+        if (!inserted.changes) return { duplicate: true };
+        if (job) {
+          const queued = new SqliteJobRepository(tx).enqueueSync(job);
+          tx.update(gitWebhookDeliveries)
+            .set({ jobId: queued.job.id })
+            .where(eq(gitWebhookDeliveries.id, delivery.id))
+            .run();
+        }
+        return { duplicate: false };
+      },
+      { behavior: 'immediate' },
+    );
+  }
+
+  async latestAccepted(repositoryId: string) {
+    return (
+      this.db
+        .select()
+        .from(gitWebhookDeliveries)
+        .where(
+          and(
+            eq(gitWebhookDeliveries.repositoryId, repositoryId),
+            eq(gitWebhookDeliveries.status, 'accepted'),
+          ),
+        )
+        .orderBy(desc(gitWebhookDeliveries.receivedAt))
+        .get() ?? null
+    );
+  }
 }
