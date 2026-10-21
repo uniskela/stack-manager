@@ -37,6 +37,7 @@ import {
 } from '../schema';
 import { ConflictError, AuthenticationError } from '@/server/domain/errors';
 import type { SqliteDb } from './database';
+import { SqliteDeploymentRoutingRepository, automaticSourceValid } from './routing';
 
 type UserRow = typeof users.$inferSelect;
 type JobRow = typeof jobs.$inferSelect;
@@ -314,6 +315,24 @@ class SqliteGitRepositoryConnectionRepository implements GitRepositoryConnection
     this.db.update(gitRepositoryConnections).set(patch).where(eq(gitRepositoryConnections.id, id)).run();
   }
 
+  async completeSync(
+    id: string,
+    expectedBranch: string,
+    patch: Parameters<GitRepositoryConnectionRepository['completeSync']>[2],
+  ) {
+    return (
+      this.db
+        .update(gitRepositoryConnections)
+        .set({ ...patch, syncStatus: 'ready', lastSyncError: null })
+        .where(
+          and(
+            eq(gitRepositoryConnections.id, id),
+            eq(gitRepositoryConnections.defaultBranch, expectedBranch),
+          ),
+        )
+        .run().changes === 1
+    );
+  }
   async setWebhookCredential(id: string, expectedId: string | null, nextId: string | null, updatedAt: Date) {
     return (
       this.db
@@ -442,12 +461,12 @@ class SqliteJobRepository implements JobRepository {
 
   private static readonly clearLease = { leaseOwner: null, leaseExpiresAt: null, heartbeatAt: null } as const;
 
-  async markSucceeded(id: string, owner: string, now: Date) {
+  async markSucceeded(id: string, owner: string, now: Date, continuation?: EnqueueJobInput) {
     return this.db.transaction((tx) => {
       const row = tx.select().from(jobs).where(this.fenced(id, owner)).get();
       if (!row) return false;
       // A request made after claim needs another fetch; keep the same durable, unique job.
-      return (
+      const completed =
         tx
           .update(jobs)
           .set({
@@ -461,8 +480,10 @@ class SqliteJobRepository implements JobRepository {
             lastError: null,
           })
           .where(this.fenced(id, owner))
-          .run().changes === 1
-      );
+          .run().changes === 1;
+      if (completed && !row.followUpRequested && continuation)
+        new SqliteJobRepository(tx).enqueueSync(continuation);
+      return completed;
     });
   }
 
@@ -708,6 +729,7 @@ class SqliteSourceDraftRepository implements SourceDraftRepository {
 export function createSqliteRepositories(db: SqliteDb): Repositories {
   return {
     deployments: new SqliteDeploymentRepository(db),
+    routing: new SqliteDeploymentRoutingRepository(db),
     users: new SqliteUserRepository(db),
     sessions: new SqliteSessionRepository(db),
     workspaces: new SqliteWorkspaceRepository(db),
@@ -754,7 +776,27 @@ class SqliteGitWebhookDeliveryRepository implements GitWebhookDeliveryRepository
         ) {
           throw new AuthenticationError('Webhook authentication failed.');
         }
-        const inserted = tx.insert(gitWebhookDeliveries).values(delivery).onConflictDoNothing().run();
+        const inserted = tx
+          .insert(gitWebhookDeliveries)
+          .values({
+            ...delivery,
+            signingCredentialId: expected.credentialId,
+            signingNonce: expected.nonce,
+            activeStackIds: tx
+              .select({ id: stacks.id })
+              .from(stacks)
+              .innerJoin(deploymentAttempts, eq(deploymentAttempts.stackId, stacks.id))
+              .where(
+                and(
+                  eq(stacks.repositoryId, delivery.repositoryId),
+                  inArray(deploymentAttempts.status, ['queued', 'running']),
+                ),
+              )
+              .all()
+              .map((s) => s.id),
+          })
+          .onConflictDoNothing()
+          .run();
         if (!inserted.changes) return { duplicate: true };
         if (job) {
           const queued = new SqliteJobRepository(tx).enqueueSync(job);
@@ -786,8 +828,23 @@ class SqliteGitWebhookDeliveryRepository implements GitWebhookDeliveryRepository
   }
 }
 
-class SqliteDeploymentRepository implements DeploymentRepository {
-  constructor(private readonly db: SqliteDb) {}
+export class SqliteDeploymentRepository implements DeploymentRepository {
+  private unresolvedUnknown(stackId: string): boolean {
+    return Boolean(
+      this.db
+        .select({ id: deploymentAttempts.id })
+        .from(deploymentAttempts)
+        .where(
+          and(
+            eq(deploymentAttempts.stackId, stackId),
+            eq(deploymentAttempts.status, 'unknown'),
+            isNull(deploymentAttempts.acknowledgedAt),
+          ),
+        )
+        .get(),
+    );
+  }
+  constructor(private readonly db: Omit<SqliteDb, '$client'>) {}
   async binding(workspaceId: string, stackId: string) {
     return (
       this.db
@@ -825,6 +882,24 @@ class SqliteDeploymentRepository implements DeploymentRepository {
           secret.providerType !== binding.providerType
         )
           throw new ConflictError('Deployment credential is unavailable or incompatible.');
+        if (binding.deployOnPush) {
+          const conn = tx
+            .select()
+            .from(gitRepositoryConnections)
+            .where(eq(gitRepositoryConnections.id, stack.repositoryId))
+            .get();
+          if (
+            !binding.enabled ||
+            !binding.routingPolicy ||
+            !conn?.webhookCredentialId ||
+            conn.syncStatus !== 'ready' ||
+            conn.headSha !== binding.routingHeadSha ||
+            conn.defaultBranch !== binding.routingBranch
+          )
+            throw new ConflictError(
+              'Repository baseline changed while saving. Fetch and reload before enabling automation.',
+            );
+        }
         const managedOwner = tx
           .select({ id: deploymentBindings.id })
           .from(deploymentBindings)
@@ -835,7 +910,11 @@ class SqliteDeploymentRepository implements DeploymentRepository {
             ),
           )
           .get();
-        const next = { ...binding, managedCredential: binding.managedCredential || Boolean(managedOwner) };
+        const next = {
+          ...binding,
+          automationHold: Boolean(current?.automationHold || this.unresolvedUnknown(binding.stackId)),
+          managedCredential: binding.managedCredential || Boolean(managedOwner),
+        };
         if (current)
           tx.update(deploymentBindings)
             .set({
@@ -865,6 +944,9 @@ class SqliteDeploymentRepository implements DeploymentRepository {
     if (!result.changes) throw new ConflictError('Deployment settings changed. Reload and try again.');
   }
   async enqueue(attempt: Parameters<DeploymentRepository['enqueue']>[0], job: EnqueueJobInput) {
+    this.enqueueSync(attempt, job);
+  }
+  enqueueSync(attempt: Parameters<DeploymentRepository['enqueue']>[0], job: EnqueueJobInput) {
     this.db.transaction(
       (tx) => {
         const b = tx
@@ -898,6 +980,22 @@ class SqliteDeploymentRepository implements DeploymentRepository {
         if (active || activeJob) throw new ConflictError('A deployment request is already active.');
         new SqliteJobRepository(tx).enqueueSync(job);
         tx.insert(deploymentAttempts).values(attempt).run();
+        if (attempt.triggerType === 'manual') {
+          tx.update(deploymentAttempts)
+            .set({ acknowledgedAt: attempt.requestedAt })
+            .where(
+              and(
+                eq(deploymentAttempts.stackId, attempt.stackId),
+                eq(deploymentAttempts.status, 'unknown'),
+                isNull(deploymentAttempts.acknowledgedAt),
+              ),
+            )
+            .run();
+          tx.update(deploymentBindings)
+            .set({ automationHold: false })
+            .where(eq(deploymentBindings.id, b.id))
+            .run();
+        }
         tx.update(deploymentBindings)
           .set({ lastAttemptAt: attempt.requestedAt })
           .where(eq(deploymentBindings.id, b.id))
@@ -934,8 +1032,9 @@ class SqliteDeploymentRepository implements DeploymentRepository {
           !b?.enabled ||
           b.revision !== a.bindingRevision ||
           c?.secretNonce !== a.credentialNonce ||
-          !actor ||
-          actor.disabledAt
+          (a.triggerType === 'manual' && (!actor || actor.disabledAt)) ||
+          (a.triggerType === 'automatic' &&
+            (!b.deployOnPush || b.automationHold || !automaticSourceValid(tx, a.id)))
         ) {
           tx.update(deploymentAttempts)
             .set({
@@ -970,9 +1069,18 @@ class SqliteDeploymentRepository implements DeploymentRepository {
           .where(eq(deploymentAttempts.id, id))
           .run();
         tx.update(deploymentBindings)
-          .set(result.status === 'accepted' ? { lastAcceptedAt: now } : { lastFailedAt: now })
+          .set(
+            result.status === 'accepted'
+              ? { lastAcceptedAt: now }
+              : { lastFailedAt: now, ...(result.status === 'unknown' ? { automationHold: true } : {}) },
+          )
           .where(eq(deploymentBindings.id, a.bindingId))
           .run();
+        if (result.status === 'unknown')
+          tx.update(deploymentBindings)
+            .set({ automationHold: true })
+            .where(eq(deploymentBindings.stackId, a.stackId))
+            .run();
         return true;
       },
       { behavior: 'immediate' },
@@ -1046,6 +1154,10 @@ class SqliteDeploymentRepository implements DeploymentRepository {
           tx.update(deploymentBindings)
             .set({ lastFailedAt: now })
             .where(eq(deploymentBindings.id, a.bindingId))
+            .run();
+          tx.update(deploymentBindings)
+            .set({ automationHold: true })
+            .where(eq(deploymentBindings.stackId, a.stackId))
             .run();
           recovered.push({ ...a, status: 'unknown', completedAt: now });
         }

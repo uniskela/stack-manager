@@ -1,9 +1,9 @@
 # Deployment webhooks
 
 Each explicitly registered stack can have one independent deployment binding. Open the stack’s
-**Deployment** tab to configure it. No binding is inferred from folder names. Git pushes, inbound
-Git webhooks and scheduled fetches do not trigger deployment. Automatic deployment is unavailable
-until the deployment-routing phase; its stored preference defaults to false.
+**Deployment** tab to configure it. No binding is inferred from folder names. Manual deployment is
+available independently. Automatic deployment is off by default and requires explicit per-stack
+rules and a verified forge push webhook.
 
 ## Portainer
 
@@ -84,6 +84,70 @@ Deploy now again. Stack Manager never blindly retries an ambiguous send or a kno
 An intent recorded immediately before a crash may show unknown even if nothing was sent; this
 conservative behavior avoids accidental repeated deployments.
 
+## Automatic deployment after verified pushes
+
+1. Configure the repository's signed [Git push webhook](GIT_WEBHOOKS.md) and fetch successfully.
+2. In the stack's **Deployment** tab, enable the binding and review **Include patterns**,
+   **Exclude patterns** and **Dependency patterns** under **Automatic deployment**.
+3. Enter repository-relative **Sample changed paths** and choose **Preview routing**. Preview uses
+   the unsaved rules and sends no request; it does not check the live baseline or destination.
+4. Select **Deploy automatically after verified Git pushes** and choose **Save binding**. This enables
+   live future requests for relevant signed pushes. An enabled binding, saved rules, configured signing
+   secret and ready synchronized repository baseline are required.
+
+Saving with automation enabled sets the baseline to the current fetched HEAD and tracked branch.
+Old history never deploys automatically, and saving again resets the baseline. Fetch and inspect before
+saving, particularly after a branch rewrite or blocked history check. Saving does not send a request.
+
+Only verified GitHub, Gitea or Forgejo events for the tracked branch authorize routing. Stack Manager
+fetches, then verifies the signed target commit against local Git objects and the fetched HEAD. It
+compares committed trees from the binding's baseline to that target, ignoring payload changed-file
+lists. Deletes count as changed paths; a rename includes its old and new paths. **Fetch now**, scheduled
+polling and an in-app push only fetch; the corresponding signed forge webhook is required for automation.
+
+### Patterns and preview
+
+Enter one pattern per line. Includes are relative to the stack root; dependencies are relative to the
+repository root and can select shared files outside the stack. Exclusions win for both: they are checked
+against stack-relative root paths and repository-relative dependency paths. Dependencies bypass includes.
+An empty include list matches no root paths, including the Compose file. Use `**` explicitly to match
+all non-excluded root paths.
+
+The initial form includes standard Compose filenames, the selected Compose file, `config/**` and
+`scripts/runtime/**`; it excludes `README.md`, `docs/**` and `**/*.md`. For shared configuration, add
+an explicit dependency such as `shared/proxy/**`. Exclude a shared file with its repository-relative path.
+
+Supported wildcards are `*` (within one path segment), `?` (one character) and whole-segment `**`
+(zero or more segments). Brace expansion, character classes, negation and extended globs are unsupported.
+Paths must be relative POSIX paths without traversal, `.git`, backslashes or control characters.
+Each list accepts at most **32 patterns**, each at most **256 characters**. Comparisons accept at most
+**1,000 commits** and **10,000 changed paths**, with bounded Git execution, output and wildcard matching work (50 million estimated steps per stack, 100 million per source).
+Invalid, missing, rewritten or oversized history blocks the affected routing; it never deploys all stacks.
+Inspect the repository, fetch, then save automatic settings deliberately to establish a new baseline.
+
+### Decisions, active requests and unknown outcomes
+
+Open **Recent routing decisions** below Recent deployments for deploy, skip and blocked explanations,
+matched paths and commit identifiers. Old or out-of-order targets already included in the baseline skip.
+Routine successful evaluations and skips stay out of the dashboard's recent activity feed; failures stay
+visible, and the full audit remains in **Settings → Activity**.
+
+One queued or running attempt is allowed per stack. A later matching push during an active attempt is
+saved as **blocked**; it is not automatically replayed afterward. Inspect the receiver and active outcome,
+then use **Deploy now** deliberately if the later change needs deployment.
+
+An **unknown** outcome places automatic deployment on a persistent hold. Later matching pushes are
+blocked. Saving settings, rotating credentials or recreating a binding does not clear the hold. Inspect Portainer or the receiver,
+then deliberately confirm a new **Deploy now** request to resume automation. This can send another live
+request, so first establish whether the receiver already acted. A new unknown outcome holds automation again.
+Known accepted requests are never resent automatically. A crash after request intent may be recorded as
+unknown even if nothing was sent; a failure before the routing queue transaction commits leaves no partial
+routing decision, attempt or cursor update.
+
+Binding revision, credential version and signing configuration are rechecked before an automatic send.
+Disabling or removing a binding stops queued sends when checked, but cannot recall an in-flight request.
+Acceptance still means HTTP acceptance, not deployment completion or runtime health.
+
 ## Credentials and rotation
 
 The complete URL and optional bearer token are encrypted together using the existing AES-256-GCM
@@ -114,8 +178,10 @@ concurrent saves must reload rather than silently overwrite a newer binding.
 
 ## Migration, backups and rollback
 
-Migration `0009` adds deployment binding and deployment attempt tables after `0008`. Existing stack,
-Git webhook and credential records remain intact. No existing stack gets a deployment binding.
+Migration `0009` adds deployment binding and deployment attempt tables after `0008`.
+Migration `0010_large_salo` then adds routing decisions, saved policy and baseline, persistent automation
+hold and internal signed-source metadata. Existing stack, Git webhook and credential records remain
+intact. No existing stack gets a binding or automatic deployment enabled.
 The database enforces one binding per stack and prevents deletion of referenced credentials. Deleting
 an explicit stack cascades its binding and deployment history; it does not delete repository source.
 

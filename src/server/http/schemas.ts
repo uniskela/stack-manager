@@ -69,11 +69,23 @@ export const GitCommitSchema = z
 const objectId = z.string().regex(/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/);
 export const GitPushSchema = z.object({ commitSha: objectId, expectedRemoteSha: objectId }).strict();
 
+export const RoutingPolicySchema = z
+  .object({
+    include: z.array(z.string().min(1).max(256)).max(32),
+    exclude: z.array(z.string().min(1).max(256)).max(32),
+    dependencies: z.array(z.string().min(1).max(256)).max(32),
+  })
+  .strict();
+export const RoutingPreviewSchema = z
+  .object({ routingPolicy: RoutingPolicySchema, paths: z.array(z.string().min(1).max(1024)).max(10000) })
+  .strict();
+
 export const DeploymentBindingSchema = z
   .object({
     providerType: z.enum(['portainer-webhook', 'generic-webhook']),
     enabled: z.boolean(),
-    deployOnPush: z.literal(false).optional(),
+    deployOnPush: z.boolean().optional(),
+    routingPolicy: RoutingPolicySchema.optional(),
     expectedRevision: z.string().min(1).max(128).nullable(),
     configuration: z
       .object({ url: z.string().min(1).max(4096), bearerToken: z.string().min(1).max(16384).optional() })

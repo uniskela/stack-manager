@@ -171,6 +171,8 @@ export interface HistoryReader {
   readCommit(cloneDir: string, sha: string): Promise<GitCommitMetadata>;
   /** Changes relative to the first parent, or the empty tree for an initial commit. */
   changedFiles(cloneDir: string, sha: string, root: string): Promise<HistoryFileChange[]>;
+  /** Canonical changed paths between existing fast-forward commits; bounded to 1,000 commits and 10,000 paths. */
+  compareCommits(cloneDir: string, beforeSha: string, afterSha: string): Promise<string[]>;
   isAncestor(cloneDir: string, sha: string, headSha: string): Promise<boolean>;
   objectSize(cloneDir: string, objectSha: string): Promise<number>;
 }

@@ -159,6 +159,7 @@ export class GitWebhookService {
       provider: conn.gitProviderType,
       deliveryId: event.deliveryId,
       eventType: event.eventType,
+      afterSha: relevant ? push!.afterSha : null,
       bodyHash: relevant ? createHash('sha256').update(bytes).digest('hex') : null,
       ref: push?.ref ?? null,
       receivedAt: this.clock.now(),

@@ -31,6 +31,7 @@ describe('migrations', () => {
       'audit_events',
       'deployment_attempts',
       'deployment_bindings',
+      'deployment_routing_decisions',
       'git_repository_connections',
       'git_webhook_deliveries',
       'jobs',

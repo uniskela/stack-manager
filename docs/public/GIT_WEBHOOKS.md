@@ -1,8 +1,9 @@
 # Git push webhooks
 
 Repository **Overview → Git webhooks** accelerates Git fetching after external pushes.
-It updates source state only: it does **not deploy stacks or verify container health**.
-Scheduled polling and manual fetching remain available independently.
+Verified deliveries queue a source fetch and can authorize selective deployment only for stacks that
+explicitly enable automatic deployment. Automatic deployment defaults to off; HTTP acceptance never
+verifies container health. Scheduled polling and manual fetching remain available independently.
 
 ## Configure a repository
 
@@ -102,8 +103,9 @@ Delivery IDs are persisted uniquely per repository/provider across process resta
 accepted delivery and inserting/coalescing its fetch are one SQLite transaction; a queue error rolls
 both back. An already pending fetch is reused. A new delivery during a running fetch durably requests
 one follow-up, preserving existing locks, recovery and retries. Duplicate IDs or accepted body fingerprints never request a follow-up.
-Distinct pushes can coalesce into one fetch, which reads authoritative Git history. No deployment jobs
-are created. Ignored verified deliveries are recorded for troubleshooting and deduplicated too.
+Distinct pushes can coalesce into one fetch, which reads authoritative Git history. Each accepted
+source retains its own routing record for opted-in stacks after successful fetching. Ignored verified
+deliveries are recorded for troubleshooting and deduplicated too.
 
 Native provider signatures cover the body, not delivery/event headers, and have no freshness timestamp.
 Accepted raw bodies are SHA-256 fingerprinted persistently: an identical body with a changed delivery ID
@@ -112,6 +114,28 @@ fingerprints. Exact byte-identical legitimate repetitions are treated as redeliv
 payloads request fetching. Polling and manual fetch remain available. An unseen old signed body has
 no provable freshness, so HTTPS and secret protection remain necessary. Delivery metadata and
 fingerprints are retained until repository removal; monitor database size for busy repositories.
+
+## Optional selective deployment
+
+Automatic deployment is an independent per-stack opt-in in **Deployment**. It requires an enabled
+binding, saved rules and a ready synchronized Git baseline as well as this signed repository webhook.
+Saving automatic settings establishes the current fetched HEAD as the baseline; old history is never
+replayed. See [Deployment webhooks](DEPLOYMENT_WEBHOOKS.md#automatic-deployment-after-verified-pushes)
+for rules, preview and recovery.
+
+Only a verified tracked-branch push authorizes routing. Its signed `after` identifier must resolve to
+a local commit included in the fetched HEAD, and the binding's baseline must be an ancestor of that
+target. Payload path lists are ignored. Already-included targets skip; missing objects, rewrites,
+unsafe paths or ranges exceeding 1,000 commits or 10,000 paths block routing instead of deploying all.
+Manual fetching, polling and in-app pushes alone cannot authorize deployment: an in-app push must
+also produce its corresponding signed forge webhook.
+
+The durable delivery/body replay ledger and source-plus-stack uniqueness prevent repeat routing.
+Decisions, attempt jobs, per-binding cursor updates and marking the source processed commit together
+in SQLite. Coalescing fetches does not discard later sources. Known acceptance is never automatically
+resent, but external HTTP execution cannot be guaranteed exactly once after a crash or timeout.
+An unknown outcome holds automation until receiver inspection and a deliberate manual Deploy now.
+A later push blocked by an active deployment is saved for inspection and manual action, without auto replay.
 
 ## Rotate or disable
 
@@ -122,7 +146,8 @@ credential relinks return 409 when the link changed; reload before retrying. Con
 the same existing credential follow the credential API’s last-write-wins behavior: only the last
 committed secret works. Coordinate rotation with the forge configuration. **Disable webhook…** unlinks the
 credential and rejects future deliveries immediately; disable/remove the hook in the forge too.
-Already queued fetches continue. Unlinked credentials remain encrypted and can be deleted from the
+Already queued fetches continue. Queued automatic sends recheck the signing credential and tracked branch;
+rotation or unlinking invalidates affected sources. Disabling cannot recall an in-flight deployment request. Unlinked credentials remain encrypted and can be deleted from the
 credential API; linked credentials are protected against deletion. Re-enabling requires saving or
 selecting a signing credential again. Polling continues according to its independent settings.
 
@@ -132,11 +157,14 @@ Additive migrations `0007` and `0008` create `git_webhook_deliveries` with repos
 received timestamp, event, ref, accepted/ignored status, accepted-body fingerprint uniqueness and optional job reference. It stores no raw
 payload or secret. Legacy rows created before migration `0008` have no body fingerprint and retain
 delivery-ID protection only; historical bodies cannot be reconstructed. Existing repositories start with webhooks disabled; Git history, drafts and jobs are
-unchanged. The new credential kind uses the existing encrypted credential table.
+unchanged. The new credential kind uses the existing encrypted credential table. Migration `0010_large_salo`, after
+`0009`, adds routing metadata to delivery rows and creates routing decisions and binding baselines/holds.
+Signing credential nonces are internal version checks and are never exposed in deployment history.
 
 Back up SQLite consistently with its WAL and retain the existing encryption key securely; see
 [Backup and restore](BACKUP_RESTORE.md). Restoring an older backup also restores its earlier delivery
-history, so later redeliveries can fetch again. Do not delete delivery history to troubleshoot retries.
+history, so later redeliveries can fetch or route again according to the restored state. A restore cannot
+undo a deployment request already sent. Do not delete delivery history to troubleshoot retries.
 Before rolling back to a version without this feature, disable forge hooks and restore a compatible
 pre-upgrade backup with its key. Do not drop tables or edit migrations on a running database. No
 production deployment or live forge setup is performed by installing the source changes alone.

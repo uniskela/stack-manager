@@ -240,6 +240,11 @@ export const gitWebhookDeliveries = sqliteTable(
     deliveryId: text('delivery_id').notNull(),
     eventType: text('event_type').notNull(),
     bodyHash: text('body_hash'),
+    afterSha: text('after_sha'),
+    activeStackIds: text('active_stack_ids', { mode: 'json' }).$type<string[]>().notNull().default([]),
+    signingCredentialId: text('signing_credential_id'),
+    signingNonce: text('signing_nonce'),
+    processedAt: ts('processed_at'),
     ref: text('ref'),
     receivedAt: ts('received_at').notNull(),
     status: text('status', { enum: ['accepted', 'ignored'] }).notNull(),
@@ -270,6 +275,12 @@ export const deploymentBindings = sqliteTable(
     enabled: integer('enabled', { mode: 'boolean' }).notNull(),
     deployOnPush: integer('deploy_on_push', { mode: 'boolean' }).notNull().default(false),
     revision: text('revision').notNull(),
+    routingPolicy: text('routing_policy', { mode: 'json' }).$type<
+      import('@/shared/deployment-routing').RoutingPolicy
+    >(),
+    routingHeadSha: text('routing_head_sha'),
+    routingBranch: text('routing_branch'),
+    automationHold: integer('automation_hold', { mode: 'boolean' }).notNull().default(false),
     lastAttemptAt: ts('last_attempt_at'),
     lastAcceptedAt: ts('last_accepted_at'),
     lastFailedAt: ts('last_failed_at'),
@@ -292,7 +303,7 @@ export const deploymentAttempts = sqliteTable(
     bindingId: text('binding_id').notNull(),
     providerType: text('provider_type', { enum: ['portainer-webhook', 'generic-webhook'] }).notNull(),
     actorUserId: text('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
-    triggerType: text('trigger_type', { enum: ['manual'] }).notNull(),
+    triggerType: text('trigger_type', { enum: ['manual', 'automatic'] }).notNull(),
     requestedAt: ts('requested_at').notNull(),
     status: text('status', { enum: ['queued', 'running', 'accepted', 'rejected', 'unknown'] }).notNull(),
     httpStatus: integer('http_status'),
@@ -300,6 +311,7 @@ export const deploymentAttempts = sqliteTable(
     completedAt: ts('completed_at'),
     bindingRevision: text('binding_revision').notNull(),
     credentialNonce: text('credential_nonce').notNull(),
+    acknowledgedAt: ts('acknowledged_at'),
     jobId: text('job_id')
       .notNull()
       .references(() => jobs.id, { onDelete: 'restrict' }),
@@ -309,5 +321,36 @@ export const deploymentAttempts = sqliteTable(
     uniqueIndex('deployment_attempt_active_uq')
       .on(t.stackId)
       .where(sql`${t.status} IN ('queued','running')`),
+  ],
+);
+
+/** Safe explanations only; no webhook URLs, credentials or request bodies. */
+export const deploymentRoutingDecisions = sqliteTable(
+  'deployment_routing_decisions',
+  {
+    id: text('id').primaryKey(),
+    repositoryId: text('repository_id')
+      .notNull()
+      .references(() => gitRepositoryConnections.id, { onDelete: 'cascade' }),
+    sourceDeliveryId: text('source_delivery_id')
+      .notNull()
+      .references(() => gitWebhookDeliveries.id, { onDelete: 'cascade' }),
+    stackId: text('stack_id')
+      .notNull()
+      .references(() => stacks.id, { onDelete: 'cascade' }),
+    bindingRevision: text('binding_revision'),
+    beforeSha: text('before_sha'),
+    afterSha: text('after_sha').notNull(),
+    matchedPaths: text('matched_paths', { mode: 'json' }).$type<string[]>().notNull(),
+    decision: text('decision', { enum: ['deploy', 'skip', 'blocked'] }).notNull(),
+    reasonCode: text('reason_code').notNull(),
+    explanation: text('explanation').notNull(),
+    attemptId: text('attempt_id').references(() => deploymentAttempts.id, { onDelete: 'set null' }),
+    createdAt: ts('created_at').notNull(),
+    processedAt: ts('processed_at').notNull(),
+  },
+  (t) => [
+    uniqueIndex('deployment_routing_source_stack_uq').on(t.sourceDeliveryId, t.stackId),
+    index('deployment_routing_history_idx').on(t.stackId, t.createdAt),
   ],
 );

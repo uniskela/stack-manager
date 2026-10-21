@@ -1,6 +1,12 @@
 'use client';
 
 import { useEffect, useId, useRef, useState } from 'react';
+import {
+  DEFAULT_ROUTING_POLICY,
+  validateRoutingPolicy,
+  type RoutingDecision,
+  type RoutingPolicy,
+} from '@/shared/deployment-routing';
 import { api, ApiError } from './api';
 import { LocalTime } from './local-time';
 import { Alert } from './primitives/alert';
@@ -11,6 +17,10 @@ type Binding = {
   id: string;
   providerType: Provider;
   enabled: boolean;
+  deployOnPush: boolean;
+  routingPolicy: RoutingPolicy | null;
+  routingHeadSha: string | null;
+  automationHold: boolean;
   revision: string;
   hint: string;
   lastTestedAt: string | null;
@@ -21,9 +31,21 @@ type Attempt = {
   id: string;
   providerType: Provider;
   requestedAt: string;
+  triggerType: 'manual' | 'automatic';
   status: 'queued' | 'running' | 'accepted' | 'rejected' | 'unknown';
   httpStatus: number | null;
   failureReason: string | null;
+};
+type Decision = {
+  id: string;
+  explanation: string;
+  reasonCode: string;
+  decision: 'deploy' | 'skip' | 'blocked';
+  createdAt: string;
+  beforeSha: string | null;
+  afterSha: string;
+  attemptId: string | null;
+  matchedPaths: string[];
 };
 type Message = { error: boolean; text: string } | null;
 const providers: Record<Provider, string> = {
@@ -36,8 +58,10 @@ export function DeploymentSettings(
     workspaceId: string;
     stackId: string;
     stackName: string;
+    composePath: string;
     settings: { binding: Binding | null };
     attempts: Attempt[];
+    decisions: Decision[];
     workerEnabled: boolean;
   }>,
 ) {
@@ -52,6 +76,20 @@ export function DeploymentSettings(
   const [provider, setProvider] = useState<Provider>(binding?.providerType ?? 'portainer-webhook');
   const [enabled, setEnabled] = useState(binding?.enabled ?? true);
   const [attempts, setAttempts] = useState(props.attempts);
+  const [decisions, setDecisions] = useState(props.decisions);
+  const [deployOnPush, setDeployOnPush] = useState(binding?.deployOnPush ?? false);
+  const initialPolicy = binding?.routingPolicy ?? {
+    ...DEFAULT_ROUTING_POLICY,
+    include: [...new Set([...DEFAULT_ROUTING_POLICY.include, props.composePath])],
+  };
+  const [rules, setRules] = useState({
+    include: initialPolicy.include.join('\n'),
+    exclude: initialPolicy.exclude.join('\n'),
+    dependencies: initialPolicy.dependencies.join('\n'),
+  });
+  const [routingError, setRoutingError] = useState<string | null>(null);
+  const [samplePaths, setSamplePaths] = useState('');
+  const [preview, setPreview] = useState<RoutingDecision | null>(null);
   const [busy, setBusy] = useState(false);
   const [action, setAction] = useState<'trigger' | 'remove'>('trigger');
   const [message, setMessage] = useState<Message>(null);
@@ -61,8 +99,19 @@ export function DeploymentSettings(
   useEffect(() => {
     if (!active) return;
     const timer = setInterval(() => {
-      void api<{ attempts: Attempt[] }>(`${endpoint}/history`)
-        .then((result) => setAttempts(result.attempts))
+      void Promise.all([
+        api<{ attempts: Attempt[]; decisions: Decision[] }>(`${endpoint}/history`),
+        api<{ binding: Binding | null }>(endpoint),
+      ])
+        .then(([result, settings]) => {
+          setAttempts(result.attempts);
+          setDecisions(result.decisions);
+          setBinding((current) =>
+            current && settings.binding?.id === current.id && settings.binding.revision === current.revision
+              ? { ...current, automationHold: settings.binding.automationHold }
+              : current,
+          );
+        })
         .catch(() => {
           setMessage({
             error: true,
@@ -73,7 +122,7 @@ export function DeploymentSettings(
     return () => clearInterval(timer);
   }, [active, endpoint]);
 
-  async function saveConfiguration(operation: 'save' | 'remove') {
+  async function saveConfiguration(operation: 'save' | 'remove', routingPolicy?: RoutingPolicy) {
     let request: { method: string; body: unknown };
     if (operation === 'remove') {
       request = { method: 'DELETE', body: { expectedRevision: binding!.revision } };
@@ -90,7 +139,8 @@ export function DeploymentSettings(
         body: {
           providerType: provider,
           enabled,
-          deployOnPush: false,
+          deployOnPush: enabled && deployOnPush,
+          routingPolicy,
           expectedRevision: binding?.revision ?? null,
           configuration,
         },
@@ -98,6 +148,7 @@ export function DeploymentSettings(
     }
     const value = await api<{ binding: Binding | null }>(endpoint, request);
     setBinding(value.binding);
+    setDeployOnPush(value.binding?.deployOnPush ?? false);
     if (url.current) url.current.value = '';
     if (token.current) token.current.value = '';
     setMessage({
@@ -106,17 +157,40 @@ export function DeploymentSettings(
     });
   }
 
-  async function mutate(operation: 'save' | 'trigger' | 'remove' | 'test') {
+  async function mutate(operation: 'save' | 'trigger' | 'remove' | 'test' | 'preview') {
     if (inFlight.current || (active && operation === 'trigger')) return;
     if (operation === 'save' && token.current?.value && !url.current?.value) {
       setMessage({ error: true, text: 'Enter the replacement URL together with the bearer token.' });
       return;
     }
+    let routingPolicy: RoutingPolicy | undefined;
+    if (operation === 'save' || operation === 'preview') {
+      try {
+        routingPolicy = validateRoutingPolicy({
+          include: rules.include.split(/\r?\n/).filter(Boolean),
+          exclude: rules.exclude.split(/\r?\n/).filter(Boolean),
+          dependencies: rules.dependencies.split(/\r?\n/).filter(Boolean),
+        });
+        setRoutingError(null);
+      } catch (error) {
+        setRoutingError(error instanceof Error ? error.message : 'Invalid routing policy.');
+        setPreview(null);
+        setMessage(null);
+        return;
+      }
+    }
     inFlight.current = true;
     setBusy(true);
     setMessage(null);
     try {
-      if (operation === 'trigger') {
+      if (operation === 'preview') {
+        setPreview(null);
+        const result = await api<{ decision: RoutingDecision }>(`${endpoint}/preview`, {
+          method: 'POST',
+          body: { routingPolicy, paths: samplePaths.split(/\r?\n/).filter(Boolean) },
+        });
+        setPreview(result.decision);
+      } else if (operation === 'trigger') {
         const result = await api<{ attempt: Attempt }>(`${endpoint}/trigger`, { method: 'POST', body: {} });
         setAttempts((previous) => [result.attempt, ...previous].slice(0, 20));
         setMessage({
@@ -137,7 +211,7 @@ export function DeploymentSettings(
         }
         setBinding(result.binding);
       } else {
-        await saveConfiguration(operation);
+        await saveConfiguration(operation, routingPolicy);
       }
       dialog.current?.close();
     } catch (error) {
@@ -166,11 +240,17 @@ export function DeploymentSettings(
     <div className="stack" aria-busy={busy}>
       <p>{binding ? `Configured (${binding.hint})` : 'Not configured'}</p>
       <p className="muted">
-        Send a deliberate deployment request for this stack. Acceptance does not verify deployment completion
-        or container health.
+        Send deployment requests manually or after verified Git pushes. Acceptance does not verify deployment
+        completion or container health.
       </p>
       {!props.workerEnabled ? (
         <Alert tone="info">The worker is disabled. Requests remain queued until it is enabled.</Alert>
+      ) : null}
+      {binding?.automationHold ? (
+        <Alert tone="info">
+          Automatic deployment is paused because a previous request has an unknown outcome. Verify the
+          destination, then deliberately use Deploy now to resume automatic deployment.
+        </Alert>
       ) : null}
       {active ? (
         <Alert tone="info">
@@ -241,9 +321,90 @@ export function DeploymentSettings(
             <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />{' '}
             Binding enabled
           </label>
-          <p className="hint">
-            Automatic deployment: Off — unavailable until automatic routing is implemented.
-          </p>
+          <fieldset className="stack" aria-describedby={`${id}-routing-hint`}>
+            <legend>Automatic deployment</legend>
+            <label className="check-row">
+              <input
+                type="checkbox"
+                checked={deployOnPush}
+                onChange={(event) => setDeployOnPush(event.target.checked)}
+              />{' '}
+              Deploy automatically after verified Git pushes
+            </label>
+            <p className="hint">
+              Off by default. Saving this option enables live future requests to the saved destination for
+              matching verified pushes. Preview sends no deployment request.
+            </p>
+            <p id={`${id}-routing-hint`} className="hint">
+              One pattern per line. Includes and exclusions are relative to the stack root; dependencies are
+              relative to the repository root. Exclusions win, including over dependencies (checked against
+              repository paths). Dependencies can match outside the stack. Empty includes match no stack-root
+              paths. Supported wildcards: *, ? and whole-segment **.
+            </p>
+            {(['include', 'exclude', 'dependencies'] as const).map((field) => (
+              <div className="field" key={field}>
+                <label htmlFor={`${id}-${field}`}>
+                  {field === 'include'
+                    ? 'Include patterns'
+                    : field === 'exclude'
+                      ? 'Exclude patterns'
+                      : 'Dependency patterns'}
+                </label>
+                <textarea
+                  id={`${id}-${field}`}
+                  rows={3}
+                  spellCheck={false}
+                  value={rules[field]}
+                  aria-invalid={routingError ? true : undefined}
+                  aria-describedby={routingError ? `${id}-routing-error` : `${id}-routing-hint`}
+                  onChange={(event) => {
+                    setRules({ ...rules, [field]: event.target.value });
+                    setRoutingError(null);
+                    setPreview(null);
+                  }}
+                />
+              </div>
+            ))}
+            {routingError ? (
+              <p id={`${id}-routing-error`} role="alert" className="error-text">
+                {routingError}
+              </p>
+            ) : null}
+            <div className="field">
+              <label htmlFor={`${id}-paths`}>Sample changed paths</label>
+              <textarea
+                id={`${id}-paths`}
+                rows={3}
+                spellCheck={false}
+                value={samplePaths}
+                aria-describedby={`${id}-paths-hint`}
+                onChange={(event) => {
+                  setSamplePaths(event.target.value);
+                  setPreview(null);
+                }}
+              />
+              <p id={`${id}-paths-hint`} className="hint">
+                Repository-relative paths, one per line. Uses the rules above without saving them.
+              </p>
+            </div>
+            <Button onClick={() => void mutate('preview')}>Preview routing</Button>
+            {preview ? (
+              <output className="stack" aria-live="polite">
+                <span>{preview.explanation}</span>
+                <span className="hint">
+                  {preview.reasonCode} ·{' '}
+                  {preview.deployEligible ? 'Would match enabled automation' : 'No deployment request'}
+                </span>
+                {preview.matchedPaths.length ? (
+                  <ul>
+                    {preview.matchedPaths.map((path) => (
+                      <li key={path}>{path}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </output>
+            ) : null}
+          </fieldset>
           <Button type="submit" variant="primary" loading={busy}>
             Save binding
           </Button>
@@ -301,13 +462,17 @@ export function DeploymentSettings(
           </div>
         </div>
       </dialog>
-      <DeploymentHistory id={`${id}-history`} attempts={attempts} />
+      <DeploymentHistory id={`${id}-history`} attempts={attempts} decisions={decisions} />
       <DeploymentFeedback message={message} />
     </div>
   );
 }
 
-function DeploymentHistory({ id, attempts }: Readonly<{ id: string; attempts: Attempt[] }>) {
+function DeploymentHistory({
+  id,
+  attempts,
+  decisions,
+}: Readonly<{ id: string; attempts: Attempt[]; decisions: Decision[] }>) {
   return (
     <section aria-labelledby={id} className="stack">
       <h3 id={id}>Recent deployments</h3>
@@ -317,7 +482,9 @@ function DeploymentHistory({ id, attempts }: Readonly<{ id: string; attempts: At
         <ol className="stack">
           {attempts.map((attempt) => (
             <li key={attempt.id}>
-              <LocalTime iso={attempt.requestedAt} /> · {providers[attempt.providerType]} ·{' '}
+              <LocalTime iso={attempt.requestedAt} /> ·{' '}
+              {attempt.triggerType === 'automatic' ? 'Automatic' : 'Manual'} ·{' '}
+              {providers[attempt.providerType]} ·{' '}
               <strong>{attempt.status.charAt(0).toUpperCase() + attempt.status.slice(1)}</strong>
               {attempt.httpStatus ? ` (HTTP ${attempt.httpStatus})` : ''}
               {attempt.failureReason ? <p>{attempt.failureReason}</p> : null}
@@ -331,6 +498,32 @@ function DeploymentHistory({ id, attempts }: Readonly<{ id: string; attempts: At
           ))}
         </ol>
       )}
+      <details>
+        <summary>Recent routing decisions ({decisions.length})</summary>
+        {!decisions.length ? (
+          <p className="muted">No routing decisions yet.</p>
+        ) : (
+          <ol className="stack">
+            {decisions.map((decision) => (
+              <li key={decision.id}>
+                <LocalTime iso={decision.createdAt} /> · <strong>{decision.decision}</strong>
+                <p>{decision.explanation}</p>
+                <p className="hint">
+                  {decision.reasonCode} · {decision.beforeSha?.slice(0, 12) ?? 'Initial'} →{' '}
+                  {decision.afterSha.slice(0, 12)}
+                </p>
+                {decision.matchedPaths.length ? (
+                  <ul>
+                    {decision.matchedPaths.map((path) => (
+                      <li key={path}>{path}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </li>
+            ))}
+          </ol>
+        )}
+      </details>
     </section>
   );
 }

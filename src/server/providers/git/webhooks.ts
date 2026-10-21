@@ -14,7 +14,7 @@ const nativePush = push.extend({ deleted: z.boolean().optional() });
 export interface VerifiedGitEvent {
   deliveryId: string;
   eventType: string;
-  push: { ref: string; cloneUrl: string; deleted: boolean } | null;
+  push: { ref: string; cloneUrl: string; deleted: boolean; afterSha: string } | null;
 }
 
 interface GitWebhookAdapter {
@@ -61,6 +61,7 @@ function parseEvent(
     eventType,
     push: {
       ref: p.ref,
+      afterSha: p.after,
       cloneUrl: p.repository.clone_url,
       deleted: p.deleted === true || /^0+$/.test(p.after),
     },

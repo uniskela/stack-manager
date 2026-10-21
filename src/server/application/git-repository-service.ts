@@ -272,6 +272,9 @@ export class GitRepositoryService {
     await this.repo.update(id, {
       name,
       defaultBranch,
+      ...(defaultBranch !== undefined && defaultBranch !== current.defaultBranch
+        ? { syncStatus: 'pending' as const, headSha: null }
+        : {}),
       autoAddStacks,
       autoFetchEnabled,
       autoFetchIntervalMinutes,
@@ -445,14 +448,19 @@ export class GitRepositoryService {
         throw new PermanentJobError('Repository connection was deleted during sync.');
       }
       const now = this.clock.now();
-      await this.repo.update(conn.id, {
-        syncStatus: 'ready',
-        lastSyncError: null,
-        headSha: result.headSha,
-        lastFetchedAt: now,
-        lastHeadChangedAt: result.headSha !== conn.headSha ? now : conn.lastHeadChangedAt,
-        updatedAt: now,
-      });
+      signal?.throwIfAborted();
+      if (
+        !(await this.repo.completeSync(conn.id, conn.defaultBranch, {
+          headSha: result.headSha,
+          lastFetchedAt: now,
+          lastHeadChangedAt: result.headSha !== conn.headSha ? now : conn.lastHeadChangedAt,
+          updatedAt: now,
+        }))
+      )
+        throw new GitOperationError(
+          'conflict',
+          'Tracked branch changed during fetch. Fetch again before enabling automatic deployment.',
+        );
       // Routine polling still updates lastFetchedAt, but unchanged HEADs should not
       // fill the activity log every fifteen minutes.
       if (result.cloned || result.headSha !== conn.headSha) {

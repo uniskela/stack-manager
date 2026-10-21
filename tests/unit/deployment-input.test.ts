@@ -18,9 +18,9 @@ describe('deployment configuration HTTP boundary', () => {
       }).success,
     ).toBe(true);
   });
-  it('rejects unknown fields, automatic deployment and conflicting credential sources', () => {
+  it('rejects unknown fields, invalid policies and conflicting credential sources', () => {
     for (const input of [
-      { ...valid, deployOnPush: true },
+      { ...valid, routingPolicy: { include: [], exclude: [], dependencies: [], extra: true } },
       { ...valid, headers: {} },
       { ...valid, configuration: { ...valid.configuration, headers: {} } },
       { ...valid, credentialId: 'credential' },

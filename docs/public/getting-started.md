@@ -17,7 +17,8 @@ After sign-in, the sidebar lists **Dashboard**, **Stacks**, **Repositories** and
 **Dashboard** is your workspace home: a quick view of repository and stack counts, open drafts, sync
 errors and the most recent Git sync attempt. **Needs attention** groups outdated drafts by stack and highlights
 failed repository fetches; ordinary drafts appear separately under **Work in progress**. Recent activity shows up
-to five meaningful events with a link to the full audit log in **Settings → Activity**. A single-repository
+to five meaningful events with a link to the full audit log in **Settings → Activity**. Successful routine
+routing evaluations and skips are hidden from this feed; failures remain visible. A single-repository
 workspace can request **Fetch now** from its dashboard without triggering deployments. These statuses describe
 Git source state, **not** container health. **Settings** has **General**, **Credentials**, **Activity** and
 **Account** tabs for workspace options,
@@ -91,6 +92,7 @@ Each stack has these tabs:
 | **Environment** | Variables the Compose file references, whether `.env.example` documents them, env files it expects, and values that look like hard-coded secrets. Values are never shown. |
 | **Changes** | Every draft as a line-by-line diff against the fetched commit. Select files, commit with your Account Git identity, and push when ready. Discard drafts you don't want. |
 | **History** | Commits that touched this stack, as of the last fetch. Open a commit to see what changed in this stack's files. |
+| **Deployment** | Configure the deployment webhook, preview and opt into routing rules, deploy manually and inspect attempts or routing decisions. |
 | **Settings** | Rename the stack, change its Compose file or remove it (files and drafts are kept). |
 
 Files that look like secrets (`.env`, private keys, certificates, anything in a `secrets/` folder) are listed but
@@ -151,7 +153,7 @@ shortening an interval can make a repository due immediately, while extending it
 Disabling a repository stops new scheduled jobs. Pending/running jobs, their retries and durable post-push
 refreshes continue. **Fetch now** and **Test connection** remain available independently of scheduled policy;
 with the worker disabled, requested fetch jobs wait until the worker is enabled again.
-Fetching does not deploy a stack or indicate that it is healthy.
+Fetching alone does not authorize deployment or indicate that a stack is healthy.
 The editor, docs and environment views read from the fetched commit plus your drafts. History lists only commits
 in the fetched repository; drafts and unpushed commits don't appear there. Fetching never changes or deletes drafts.
 
@@ -159,15 +161,22 @@ in the fetched repository; drafts and unpushed commits don't appear there. Fetch
 
 Repository Overview → **Git webhooks** accepts signed GitHub, Gitea and Forgejo push deliveries.
 Configure a separate encrypted signing secret and POST JSON webhook in the forge. Verified pushes
-queue a source fetch; they do not deploy stacks or verify container health. Polling remains available.
+queue a source fetch and authorize routing only for stacks that explicitly enable automatic deployment.
+Polling remains available; fetching alone does not authorize deployment or verify container health.
 See [Git push webhooks](GIT_WEBHOOKS.md) for HTTPS, proxy, signature, rotation and recovery instructions.
 
-## Optional manual deployment webhooks
+## Optional deployment webhooks
 
 Open an explicitly registered stack’s **Deployment** tab to save a Portainer or generic HTTPS webhook.
 The complete URL and optional bearer token are encrypted and masked after saving. **Deploy now** requires
 a deliberate confirmation and records queued, running, accepted, rejected or unknown outcomes. Acceptance
-is not container health. Automatic deployment remains off; Git pushes and fetches do not deploy.
+is not container health. Automatic deployment defaults to off. To opt in, configure a signed Git webhook,
+fetch successfully, review the routing rules and select **Deploy automatically after verified Git pushes**.
+Saving establishes the current fetched HEAD as a baseline; old history never deploys. Only corresponding
+signed tracked-branch forge pushes authorize automatic requests; Fetch now, polling and in-app pushes alone
+only fetch. Use **Preview routing** to check sample paths without saving or sending a request.
+A later push during an active deployment is saved as blocked for manual action. An unknown outcome holds
+automation: inspect the receiver, then deliberately use **Deploy now** to resume. Saving does not clear the hold.
 Private homelab destinations require the existing operator network opt-in; TLS verification stays enabled.
 See [Deployment webhooks](DEPLOYMENT_WEBHOOKS.md) for setup, request contracts, rotation, uncertainty,
 network security, migrations, backups and rollback.

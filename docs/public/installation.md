@@ -109,15 +109,28 @@ The locally built image is tagged `stack-manager:local`, so it can't be mistaken
 
 Repository Overview → **Git webhooks** accepts signed GitHub, Gitea and Forgejo push deliveries.
 Configure a separate encrypted signing secret and POST JSON webhook in the forge. Verified pushes
-queue a source fetch; they do not deploy stacks or verify container health. Polling remains available.
+queue a source fetch and authorize routing only for stacks that explicitly enable automatic deployment.
+Polling remains available; fetching alone does not authorize deployment or verify container health.
 See [Git push webhooks](GIT_WEBHOOKS.md) for HTTPS, proxy, signature, rotation and recovery instructions.
 
-## Optional manual deployment webhooks
+## Optional deployment webhooks
 
 Open an explicitly registered stack’s **Deployment** tab to save a Portainer or generic HTTPS webhook.
 The complete URL and optional bearer token are encrypted and masked after saving. **Deploy now** requires
 a deliberate confirmation and records queued, running, accepted, rejected or unknown outcomes. Acceptance
-is not container health. Automatic deployment remains off; Git pushes and fetches do not deploy.
+is not container health. Automatic deployment defaults to off. To opt in, configure a signed Git webhook,
+fetch successfully, review the routing rules and select **Deploy automatically after verified Git pushes**.
+Saving establishes the current fetched HEAD as a baseline; old history never deploys. Only corresponding
+signed tracked-branch forge pushes authorize automatic requests; Fetch now, polling and in-app pushes alone
+only fetch. Use **Preview routing** to check sample paths without saving or sending a request.
+A later push during an active deployment is saved as blocked for manual action. An unknown outcome holds
+automation: inspect the receiver, then deliberately use **Deploy now** to resume. Saving does not clear the hold.
 Private homelab destinations require the existing operator network opt-in; TLS verification stays enabled.
 See [Deployment webhooks](DEPLOYMENT_WEBHOOKS.md) for setup, request contracts, rotation, uncertainty,
 network security, migrations, backups and rollback.
+
+Before upgrading to routing migration `0010_large_salo` (after `0009`), stop the application and take a
+consistent SQLite/WAL backup; retain encryption keys separately. Existing bindings remain opted out.
+For rollback, stop workers, inspect receivers, restore the pre-upgrade backup with its keys and run the
+matching prior pinned application version. Restoring SQLite cannot undo requests already sent. See the
+[deployment migration and rollback guide](DEPLOYMENT_WEBHOOKS.md#migration-backups-and-rollback).

@@ -100,6 +100,11 @@ export interface GitRepositoryConnectionRepository {
       >
     > & { updatedAt: Date },
   ): Promise<void>;
+  completeSync(
+    id: string,
+    expectedBranch: string,
+    patch: { headSha: string; lastFetchedAt: Date; lastHeadChangedAt: Date | null; updatedAt: Date },
+  ): Promise<boolean>;
   /** Compare-and-swap protects signing configuration against concurrent saves/disables. */
   setWebhookCredential(
     id: string,
@@ -132,7 +137,7 @@ export interface JobRepository {
   /** Extends the lease if `owner` still holds it. Returns false if the lease was lost. */
   heartbeat(id: string, owner: string, now: Date, leaseTtlMs: number): Promise<boolean>;
   /** Terminal/retry transitions are fenced on `leaseOwner`; they return false if the lease was lost. */
-  markSucceeded(id: string, owner: string, now: Date): Promise<boolean>;
+  markSucceeded(id: string, owner: string, now: Date, continuation?: EnqueueJobInput): Promise<boolean>;
   markRetry(id: string, owner: string, now: Date, error: string, runAfter: Date): Promise<boolean>;
   markFailed(
     id: string,
@@ -185,6 +190,7 @@ export interface SourceDraftRepository {
 }
 
 export interface Repositories {
+  routing: import('./deployment-routing-ports').DeploymentRoutingRepository;
   deployments: DeploymentRepository;
   users: UserRepository;
   sessions: SessionRepository;
@@ -205,6 +211,7 @@ export interface GitWebhookDelivery {
   deliveryId: string;
   eventType: string;
   bodyHash: string | null;
+  afterSha?: string | null;
   ref: string | null;
   receivedAt: Date;
   status: 'accepted' | 'ignored';

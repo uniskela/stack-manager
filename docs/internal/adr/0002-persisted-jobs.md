@@ -94,3 +94,16 @@ establishes container health.
 - Need delayed precision scheduling across hosts
 
 Then introduce a queue abstraction (interface already: `JobEnqueue` port) with Redis/NATS backend — without rewriting domain handlers.
+
+## Routing continuation (#55)
+
+A handler may return one prepared continuation job. `markSucceeded` commits the original job's final
+success and enqueues that continuation in the same SQLite transaction. Coalesced follow-up fetches
+remain pending and defer routing until their final success. A crash before this transaction reruns the
+fetch; a crash afterward leaves durable routing work. Routing never races an uncommitted fetch success.
+
+Routing records source/stack decisions, deployment attempts/jobs and binding cursors in one transaction.
+A source captures which stacks had active attempts when it was accepted; their later intents remain
+blocked even if the earlier attempt finishes before routing runs. Unknown attempts survive binding
+removal; only a new deliberate manual request acknowledges prior unknowns. Recreating a binding cannot
+clear that hold. Generic/Portainer receivers still cannot universally guarantee exactly-once execution.

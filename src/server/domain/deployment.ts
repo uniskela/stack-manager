@@ -9,6 +9,10 @@ export interface DeploymentBinding {
   enabled: boolean;
   deployOnPush: boolean;
   revision: string;
+  routingPolicy: import('@/shared/deployment-routing').RoutingPolicy | null;
+  routingHeadSha: string | null;
+  routingBranch: string | null;
+  automationHold: boolean;
   lastAttemptAt: Date | null;
   lastAcceptedAt: Date | null;
   lastFailedAt: Date | null;
@@ -22,7 +26,7 @@ export interface DeploymentAttempt {
   bindingId: string;
   providerType: DeploymentProviderType;
   actorUserId: string | null;
-  triggerType: 'manual';
+  triggerType: 'manual' | 'automatic';
   requestedAt: Date;
   status: 'queued' | 'running' | 'accepted' | 'rejected' | 'unknown';
   httpStatus: number | null;
@@ -45,3 +49,20 @@ export const deploymentAttemptView = (a: DeploymentAttempt) => ({
   failureReason: a.reason,
   completedAt: a.completedAt?.toISOString() ?? null,
 });
+
+export interface PersistedRoutingDecision {
+  id: string;
+  repositoryId: string;
+  sourceDeliveryId: string;
+  stackId: string;
+  bindingRevision: string | null;
+  beforeSha: string | null;
+  afterSha: string;
+  matchedPaths: string[];
+  decision: 'deploy' | 'skip' | 'blocked';
+  reasonCode: string;
+  explanation: string;
+  attemptId: string | null;
+  createdAt: Date;
+  processedAt: Date;
+}
