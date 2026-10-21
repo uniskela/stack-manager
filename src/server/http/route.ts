@@ -124,6 +124,12 @@ export function defineRoute<P = Record<string, string>, B = undefined, A extends
       const session = signedWebhook ? null : await container.auth.resolveSession(sessionToken);
       if (options.auth === 'user' && !session) throw new AuthenticationError();
 
+      const params = ((await segment?.params) ?? {}) as P;
+      const requestContext = requestContextFrom(req, config.trustedProxyHops);
+      if (signedWebhook) {
+        container.gitWebhooks.limitRequests(requestContext.ip);
+      }
+
       const rawBody = signedWebhook
         ? await readSignedWebhookBody(req, options.body !== undefined)
         : new Uint8Array();
@@ -131,7 +137,6 @@ export function defineRoute<P = Record<string, string>, B = undefined, A extends
         ? await readJsonBody(req, options.body, options.maxBodyBytes ?? MAX_BODY_BYTES)
         : (undefined as B);
 
-      const params = ((await segment?.params) ?? {}) as P;
       const result = await handler({
         req,
         rawBody,
@@ -139,7 +144,7 @@ export function defineRoute<P = Record<string, string>, B = undefined, A extends
         body,
         container,
         session: session as RouteContext<P, B, A>['session'],
-        requestContext: requestContextFrom(req, config.trustedProxyHops),
+        requestContext,
         sessionToken,
       });
       return result instanceof Response ? result : json(result ?? { ok: true });

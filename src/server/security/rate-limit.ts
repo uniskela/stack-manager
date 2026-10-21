@@ -1,5 +1,5 @@
 /**
- * In-memory fixed-window limiter for login/setup attempts. Single-process by design (ADR 0004);
+ * In-memory fixed-window limiter for login/setup attempts and webhook requests. Single-process by design (ADR 0004);
  * a restart resets counters, which is acceptable for a self-hosted single-operator app.
  */
 export class AttemptLimiter {

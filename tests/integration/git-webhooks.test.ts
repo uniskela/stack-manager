@@ -576,3 +576,43 @@ describe('signed-body replay protection', () => {
     },
   );
 });
+
+describe('public webhook request throttling', () => {
+  it('bounds unattributed traffic across attacker-chosen repository IDs', async () => {
+    const configuredId = repositoryId;
+    for (let i = 0; i < 120; i++) {
+      repositoryId = randomUUID();
+      expect((await deliver()).status).toBe(401);
+    }
+    repositoryId = configuredId;
+    expect((await deliver()).status).toBe(429);
+  });
+
+  it('limits before body/credential work, ignores untrusted forwarding headers and recovers', async () => {
+    await configure();
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1000);
+    const lookup = vi.spyOn(h.container.repos.credentials, 'findById');
+    for (let i = 0; i < 120; i++) {
+      expect((await deliver({ secret: ROTATED })).status).toBe(401);
+    }
+    lookup.mockClear();
+    expect(
+      (await deliver({ headers: { 'content-type': 'text/plain', 'x-forwarded-for': '203.0.113.8' } })).status,
+    ).toBe(429);
+    expect(lookup).not.toHaveBeenCalled();
+    now.mockReturnValue(61000);
+    expect((await deliver()).status).toBe(202);
+  });
+  it('isolates trusted client IP quotas', async () => {
+    await configure();
+    await h.container.close();
+    h = await createHarness({ dataDir: h.dataDir, config: { ...h.config, trustedProxyHops: 1 } });
+    for (let i = 0; i < 120; i++) {
+      expect((await deliver({ secret: ROTATED, headers: { 'x-forwarded-for': '203.0.113.8' } })).status).toBe(
+        401,
+      );
+    }
+    expect((await deliver({ headers: { 'x-forwarded-for': '1.2.3.4, 203.0.113.8' } })).status).toBe(429);
+    expect((await deliver({ headers: { 'x-forwarded-for': '203.0.113.9' } })).status).toBe(202);
+  });
+});

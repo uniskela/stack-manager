@@ -1,7 +1,13 @@
 import { createHash } from 'node:crypto';
 import type { Clock } from '@/server/domain/clock';
-import { AuthenticationError, NotFoundError, ValidationError } from '@/server/domain/errors';
+import {
+  AuthenticationError,
+  NotFoundError,
+  RateLimitedError,
+  ValidationError,
+} from '@/server/domain/errors';
 import { normalizeRemoteUrl } from '@/server/domain/git-repository';
+import { AttemptLimiter } from '@/server/security/rate-limit';
 import { gitWebhookAdapter } from '@/server/providers/git/webhooks';
 import type { AuditService } from './audit-service';
 import type { CredentialService } from './credential-service';
@@ -14,6 +20,15 @@ import type {
 } from './ports';
 
 export class GitWebhookService {
+  private readonly requestLimiter = new AttemptLimiter(120, 60_000);
+
+  limitRequests(ip: string | null) {
+    // A shared webhook quota bounds unattributed traffic even when URL IDs are attacker-controlled.
+    const key = ip ? `ip:${ip}` : 'unattributed-webhooks';
+    if (this.requestLimiter.isBlocked(key)) throw new RateLimitedError();
+    this.requestLimiter.recordFailure(key);
+  }
+
   constructor(
     private readonly repositories: GitRepositoryConnectionRepository,
     private readonly credentials: CredentialService,

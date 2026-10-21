@@ -65,6 +65,13 @@ Forward the full endpoint path, native event/delivery/signature headers and body
 parse/re-encode JSON, trim whitespace, rewrite Unicode, decompress/recompress, or redirect webhook
 requests. Permit POST JSON bodies up to **1 MiB**; the app enforces this limit while streaming as well
 as against Content-Length. Apply proxy connection/time limits and rate limits suited to your installation.
+The app also limits ingress to **120 POST requests per minute** before body reading or credential
+lookup. It uses the trusted client IP when `STACK_MANAGER_TRUSTED_PROXY_HOPS` is configured correctly;
+otherwise all unattributed webhook traffic shares one quota (including nonexistent repository IDs). Untrusted forwarding headers never bypass the fallback.
+Counters reset on process restart; this is an application safeguard, not distributed denial-of-service
+protection. Keep proxy-level limits enabled. Bursts may need forge redelivery after the window expires;
+polling remains available. Do not increase proxy trust to accept client-supplied forwarding headers.
+
 Session authentication redirects and browser CSRF middleware must not intercept this exact path.
 Regular Stack Manager mutations still require a browser session and same-origin validation.
 
@@ -78,6 +85,7 @@ Regular Stack Manager mutations still require a browser session and same-origin 
 | 401 | Missing/unlinked/wrong signing credential, wrong provider header or signature. Compare secrets and native hook type; check proxy byte/header preservation. |
 | 400 | Signed invalid JSON, push shape, event metadata or delivery identifier. Delivery IDs must be 1–128 ASCII letters, digits, hyphens or underscores. |
 | 405 / 413 / 415 | Wrong method / too large / wrong content type, encoding or charset. |
+| 429 | Request quota exceeded; wait one minute and redeliver. Check trusted proxy configuration and burst volume. |
 | 500 | Storage or internal failure; acceptance is not acknowledged. Retry/redeliver after recovery. |
 
 Last accepted time appears in Overview. Failed unauthenticated deliveries are not stored as delivery

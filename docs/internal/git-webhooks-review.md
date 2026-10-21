@@ -122,3 +122,20 @@ Replay-fix verification: `pnpm check` passed **483 tests** plus format/lint/type
 SQLite, route coverage and migration suite passed **75 tests**. Production build and migration drift
 passed. Independent review found no substantive issue in the fingerprint change. Full browser rerun
 and new-head CI/reviews follow below.
+
+
+Kody inline finding [4332349111](https://github.com/uniskela/stack-manager/pull/64#discussion_r4332349111)
+identified unthrottled public ingress. The existing AttemptLimiter now bounds POST ingress before
+body reading and database/HMAC work: 120 requests/minute per trusted IP, or one shared webhook quota without a
+trusted address. Untrusted forwarding cannot select an IP bucket. Two route regressions failed before
+the fix and pass afterward, including expiry and independent trusted-IP quotas. Proxy limits remain
+required; counters intentionally reset on restart like login/setup counters.
+
+The replay-fix full browser rerun passed all webhook scenarios, but an existing commit-form scenario
+blocked on warnings from the manually selected nginx-flask-mysql sample. This run used the wrong sample
+root; rerun with the maintained CI nginx-golang fixture follows, without changing production validation.
+
+Independent follow-up review identified attacker-controlled repository fallback buckets. The fallback
+now has one fixed webhook key: random URL IDs cannot bypass it or allocate limiter entries. Trusted
+IP quotas still use the existing sanitized proxy policy. This intentionally bounds all unattributed
+webhook traffic together; configure the trusted proxy correctly to isolate real client quotas.
