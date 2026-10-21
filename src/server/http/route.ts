@@ -124,35 +124,12 @@ export function defineRoute<P = Record<string, string>, B = undefined, A extends
       const session = signedWebhook ? null : await container.auth.resolveSession(sessionToken);
       if (options.auth === 'user' && !session) throw new AuthenticationError();
 
-      let rawBody: Uint8Array = new Uint8Array();
-      if (signedWebhook) {
-        if (options.body) throw new Error('Signed webhook bodies must be authenticated before parsing.');
-        const type = req.headers.get('content-type') ?? '';
-        if (
-          !/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(type.trim()) ||
-          (req.headers.get('content-encoding') ?? 'identity') !== 'identity'
-        ) {
-          throw new AppError(415, 'unsupported_media_type', 'Expected uncompressed UTF-8 application/json.');
-        }
-        rawBody = await readBytesWithLimit(req, 1024 * 1024);
-      }
-      let body = undefined as B;
-      if (options.body) {
-        const contentType = req.headers.get('content-type') ?? '';
-        if (!contentType.toLowerCase().startsWith('application/json')) {
-          throw new AppError(415, 'unsupported_media_type', 'Expected application/json.');
-        }
-        const text = await readBodyWithLimit(req, options.maxBodyBytes ?? MAX_BODY_BYTES);
-        let raw: unknown;
-        try {
-          raw = JSON.parse(text);
-        } catch {
-          throw new ValidationError('Malformed JSON body.');
-        }
-        const parsed = options.body.safeParse(raw);
-        if (!parsed.success) throw new ValidationError('Invalid request.', zodFields(parsed.error));
-        body = parsed.data;
-      }
+      const rawBody = signedWebhook
+        ? await readSignedWebhookBody(req, options.body !== undefined)
+        : new Uint8Array();
+      const body = options.body
+        ? await readJsonBody(req, options.body, options.maxBodyBytes ?? MAX_BODY_BYTES)
+        : (undefined as B);
 
       const params = ((await segment?.params) ?? {}) as P;
       const result = await handler({
@@ -182,4 +159,33 @@ function zodFields(error: z.ZodError): Record<string, string> {
     fields[key] ??= issue.message;
   }
   return fields;
+}
+
+async function readSignedWebhookBody(req: Request, hasBodySchema: boolean): Promise<Uint8Array> {
+  if (hasBodySchema) throw new Error('Signed webhook bodies must be authenticated before parsing.');
+  const type = req.headers.get('content-type') ?? '';
+  if (
+    !/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(type.trim()) ||
+    (req.headers.get('content-encoding') ?? 'identity') !== 'identity'
+  ) {
+    throw new AppError(415, 'unsupported_media_type', 'Expected uncompressed UTF-8 application/json.');
+  }
+  return readBytesWithLimit(req, 1024 * 1024);
+}
+
+async function readJsonBody<B>(req: Request, schema: ZodType<B>, maxBytes: number): Promise<B> {
+  const contentType = req.headers.get('content-type') ?? '';
+  if (!contentType.toLowerCase().startsWith('application/json')) {
+    throw new AppError(415, 'unsupported_media_type', 'Expected application/json.');
+  }
+  const text = await readBodyWithLimit(req, maxBytes);
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    throw new ValidationError('Malformed JSON body.');
+  }
+  const parsed = schema.safeParse(raw);
+  if (!parsed.success) throw new ValidationError('Invalid request.', zodFields(parsed.error));
+  return parsed.data;
 }

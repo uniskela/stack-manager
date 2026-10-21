@@ -715,13 +715,11 @@ class SqliteGitWebhookDeliveryRepository implements GitWebhookDeliveryRepository
           .where(eq(providerCredentials.id, expected.credentialId))
           .get();
         if (
-          !conn ||
-          conn.webhookCredentialId !== expected.credentialId ||
+          conn?.webhookCredentialId !== expected.credentialId ||
           conn.gitProviderType !== delivery.provider ||
           conn.defaultBranch !== expected.branch ||
           conn.remoteUrl !== expected.remoteUrl ||
-          !credential ||
-          credential.workspaceId !== conn.workspaceId ||
+          credential?.workspaceId !== conn.workspaceId ||
           credential.kind !== 'git_webhook' ||
           credential.providerType !== delivery.provider ||
           credential.secretNonce !== expected.nonce

@@ -6,6 +6,7 @@ import { AUTH_STATE, expectAccessible, SAMPLE_REMOTE, SAMPLE_STATE } from './sup
 test.use({ storageState: AUTH_STATE });
 
 test('Git webhook settings are accessible and fit desktop and mobile', async ({ page }, info) => {
+  // Repository onboarding is optional locally; CI configures the public sample remote.
   test.skip(!SAMPLE_REMOTE, 'Requires the optional sample repository.');
   const { workspaceId, repositoryId } = JSON.parse(fs.readFileSync(SAMPLE_STATE, 'utf8'));
   await page.goto(`/w/${workspaceId}/repositories/${repositoryId}`);
@@ -18,7 +19,9 @@ test('Git webhook settings are accessible and fit desktop and mobile', async ({ 
 });
 
 test('signing secret saves, rotates with confirmation and disables', async ({ page }, info) => {
+  // Repository onboarding is optional locally; CI configures the public sample remote.
   test.skip(!SAMPLE_REMOTE, 'Requires the optional sample repository.');
+  // Desktop and mobile share a repository; mutations run once to avoid racing signing changes.
   test.skip(info.project.name !== 'desktop', 'Shared settings mutate once.');
   const { workspaceId, repositoryId } = JSON.parse(fs.readFileSync(SAMPLE_STATE, 'utf8'));
   await page.goto(`/w/${workspaceId}/repositories/${repositoryId}`);

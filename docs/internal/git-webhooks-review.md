@@ -65,3 +65,33 @@ permission explicitly; the production copy action already reports a safe fallbac
 Enhanced production HTTP/browser rerun: **5 passed, 1 expected mobile mutation skip**, exit 0.
 It verifies real Next.js POST acceptance (202), duplicate acknowledgment (200), invalidation of the old
 signature after rotation (401), copy URL, masked settings, confirmation focus and light/dark axe checks.
+
+## External review / CI follow-up
+
+The initial Gitleaks run flagged the exact synthetic HMAC fixture in the provider unit tests
+(`generic-api-key`). The existing default rules remain enabled; an AND-scoped exception matches
+only that exact fake value in that exact test file, following the existing redaction-fixture policy.
+No real signing credential is committed or exempted.
+
+Initial [Sonar analysis](https://sonarcloud.io/dashboard?id=uniskela_stack-manager&pullRequest=64) passed
+its quality gate with zero new security hotspots. Individual dispositions:
+
+| Finding | Disposition |
+| --- | --- |
+| [WX5x](https://sonarcloud.io/project/issues?id=uniskela_stack-manager&issues=AaFcMi1BOQ3_qzSlWX5x) optional chain | Fixed credential-kind guard. |
+| [WX5y](https://sonarcloud.io/project/issues?id=uniskela_stack-manager&issues=AaFcMi1BOQ3_qzSlWX5y) synchronous callback declared async | Fixed: credential callbacks may return a value or Promise; verification uses the synchronous return. |
+| [WX5z](https://sonarcloud.io/project/issues?id=uniskela_stack-manager&issues=AaFcMi1BOQ3_qzSlWX5z) nested result ternary | Fixed with explicit duplicate return. |
+| [WX53](https://sonarcloud.io/project/issues?id=uniskela_stack-manager&issues=AaFcMi6iOQ3_qzSlWX53) route complexity | Fixed by extracting existing signed/raw and ordinary/schema body readers, preserving validation and error mapping. |
+| [WX50](https://sonarcloud.io/project/issues?id=uniskela_stack-manager&issues=AaFcMi41OQ3_qzSlWX50) async SQLite accept | Retained deliberately: implements an async persistence port and turns synchronous database failures into rejected Promises. The transaction callback must remain synchronous; adding a meaningless await would obscure that requirement. |
+| [WX51](https://sonarcloud.io/project/issues?id=uniskela_stack-manager&issues=AaFcMi41OQ3_qzSlWX51) optional chain | Fixed transaction connection/credential guards. |
+| [WX52](https://sonarcloud.io/project/issues?id=uniskela_stack-manager&issues=AaFcMi41OQ3_qzSlWX52) async SQLite query | Retained deliberately to implement the Promise-based port and map synchronous database failures to rejected Promises, matching the surrounding SQLite repositories. |
+| [WX54](https://sonarcloud.io/project/issues?id=uniskela_stack-manager&issues=AaFcMi8KOQ3_qzSlWX54) optional sample test skip | Added adjacent explanation; CI provides the sample remote. |
+| [WX55](https://sonarcloud.io/project/issues?id=uniskela_stack-manager&issues=AaFcMi8KOQ3_qzSlWX55) optional sample test skip | Added adjacent explanation; CI executes it. |
+| [WX56](https://sonarcloud.io/project/issues?id=uniskela_stack-manager&issues=AaFcMi8KOQ3_qzSlWX56) shared mobile mutation skip | Added adjacent explanation; desktop performs mutations while mobile verifies rendering/accessibility. |
+
+No Sonar suppression or rule change was introduced. The two Promise-port advisories are maintainability
+notes, not security findings; their external issue statuses are not changed by this evidence record.
+
+Local Gitleaks v8.30.1 scanned all 148 reachable commits without leaks after the exact fixture exception.
+Temporary control repositories verified the exact test value/path is allowed, the same value in a different
+path is detected, and a different value in that test file is detected. The default rules remain enabled.

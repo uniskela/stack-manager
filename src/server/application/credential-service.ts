@@ -176,7 +176,7 @@ export class CredentialService {
   async withPlaintext<T>(
     workspaceId: string,
     id: string,
-    fn: (secret: string, credential: CredentialView) => Promise<T>,
+    fn: (secret: string, credential: CredentialView) => T | Promise<T>,
     expected?: { kind: CredentialKind; providerType: string },
   ): Promise<T> {
     const record = await this.#find(workspaceId, id);

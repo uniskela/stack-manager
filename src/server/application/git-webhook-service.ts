@@ -102,10 +102,10 @@ export class GitWebhookService {
     const conn = await this.repositories.findById(workspaceId, repositoryId);
     if (!conn?.webhookCredentialId) throw new AuthenticationError('Webhook authentication failed.');
     const record = await this.credentialRecords.findById(workspaceId, conn.webhookCredentialId);
-    if (!record || record.kind !== 'git_webhook' || record.providerType !== conn.gitProviderType) {
+    if (record?.kind !== 'git_webhook' || record.providerType !== conn.gitProviderType) {
       throw new AuthenticationError('Webhook authentication failed.');
     }
-    const event = await this.credentials.withPlaintext(workspaceId, record.id, async (secret, credential) => {
+    const event = await this.credentials.withPlaintext(workspaceId, record.id, (secret, credential) => {
       this.#checkCredential(credential, conn.gitProviderType);
       return gitWebhookAdapter(conn.gitProviderType).verify(headers, bytes, secret);
     });
@@ -145,7 +145,8 @@ export class GitWebhookService {
         remoteUrl: conn.remoteUrl,
       },
     );
-    return result.duplicate ? 'duplicate' : relevant ? 'accepted' : 'ignored';
+    if (result.duplicate) return 'duplicate';
+    return relevant ? 'accepted' : 'ignored';
   }
 
   #matchesRemote(supplied: string, stored: string) {

@@ -19,3 +19,9 @@ regexes = [
   '''^eC1hY2Nlc3MtdG9rZW46c2VjcmV0$''',
   '''^s3cr3tvalue$''',
 ]
+
+[[allowlists]]
+description = "Exact synthetic HMAC key used by native webhook contract tests"
+condition = "AND"
+paths = ['''^tests/unit/git-webhook-verification\.test\.ts$''']
+regexes = ['''^synthetic-test-key-0123456789abcdef$''']
