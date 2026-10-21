@@ -102,7 +102,8 @@ jobs:
           for _ in $(seq 1 30); do [ "$(docker inspect -f '{{.State.Health.Status}}' sm)" = healthy ] && break; sleep 2; done
           docker inspect -f '{{.State.Health.Status}}' sm | grep -q healthy || (docker logs sm; exit 1)
           docker exec sm node -e '
-            const db = require("better-sqlite3")("/data/stack-manager.sqlite", { readonly: true });
+            const { DatabaseSync } = require("node:sqlite");
+            const db = new DatabaseSync("/data/stack-manager.sqlite", { readOnly: true });
             if (db.prepare("SELECT count(*) AS n FROM workspaces WHERE slug = ?").get("smoke").n !== 1)
               throw new Error("Workspace was not preserved across restart");
             if (!db.prepare("SELECT name FROM sqlite_master WHERE type = ? AND name = ?").get("table", "deployment_routing_decisions"))

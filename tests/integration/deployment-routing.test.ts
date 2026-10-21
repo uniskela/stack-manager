@@ -224,7 +224,7 @@ describe('durable selective deployment worker', () => {
     await drain();
     // Both sources are durable. A later source is either explicitly blocked by an active attempt or already covered.
     expect(trigger).toHaveBeenCalledTimes(1);
-    expect((await decisions()).length).toBe(2);
+    expect(await decisions()).toHaveLength(2);
     expect(await deliver(one, id)).toBe('duplicate');
     expect(await deliver(one)).toBe('duplicate');
     await deliver(two, randomUUID(), { extra: 'distinct signed bytes' });

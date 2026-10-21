@@ -86,22 +86,31 @@ export function normalizeChangedPaths(paths: readonly string[]): string[] {
   return [
     ...new Set(
       paths.map((path) => {
-        if (typeof path !== 'string' || /^[\/\\]|^[a-z]:/i.test(path) || path.includes('\\')) {
+        if (
+          typeof path !== 'string' ||
+          path.startsWith('/') ||
+          /^[a-z]:/i.test(path) ||
+          path.includes('\\')
+        ) {
           throw new Error('Changed paths must be repository-relative POSIX paths.');
         }
         return normalizeRepoPath(path);
       }),
     ),
-  ].sort();
+  ].sort((a, b) => {
+    // Git paths use ordinal ordering, independent of the host locale.
+    if (a === b) return 0;
+    return a < b ? -1 : 1;
+  });
 }
 
 /** Dynamic programming bounds wildcard matching; no user-derived regular expressions. */
 function matchSegment(pattern: string, path: string): boolean {
   const characters = [...path];
-  let previous = Array<boolean>(characters.length + 1).fill(false);
+  let previous = new Array<boolean>(characters.length + 1).fill(false);
   previous[0] = true;
   for (const token of pattern) {
-    const current = Array<boolean>(characters.length + 1).fill(false);
+    const current = new Array<boolean>(characters.length + 1).fill(false);
     current[0] = token === '*' && previous[0] === true;
     for (let i = 1; i <= characters.length; i++) {
       current[i] =
@@ -116,10 +125,10 @@ function matchSegment(pattern: string, path: string): boolean {
 
 function matches(pattern: string, path: string): boolean {
   const segments = path.split('/');
-  let previous = Array<boolean>(segments.length + 1).fill(false);
+  let previous = new Array<boolean>(segments.length + 1).fill(false);
   previous[0] = true;
   for (const part of pattern.split('/')) {
-    const current = Array<boolean>(segments.length + 1).fill(false);
+    const current = new Array<boolean>(segments.length + 1).fill(false);
     current[0] = part === '**' && previous[0] === true;
     for (let i = 1; i <= segments.length; i++) {
       current[i] =

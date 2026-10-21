@@ -34,7 +34,7 @@ and published review records were inspected. No competing routing PR was open at
 ## Validation
 
 - Frozen dependency install with ignored scripts and approved native rebuild completed; no dependency change.
-- Final `pnpm check`: format/lint/typecheck and 654 tests passed, including the branch-completion fence.
+- Final `pnpm check`: format/lint/typecheck and 655 tests passed, including branch fencing and Unicode ordering.
 - Targeted Git/workflow/jobs/SQLite routing regressions: 79 passed.
 - Migration generation reports no schema changes after migration 0010.
 - Production build and full Playwright/axe run against the public sample repository passed: 43 passed,
@@ -44,9 +44,36 @@ and published review records were inspected. No competing routing PR was open at
   CI/security jobs and Kody/SonarCloud disposition are pending. CodeQL's external PR analysis reported no new alerts.
 - Rootless Docker is configured. Low host disk space prevents a fresh local image build. CI now runs the
   production smoke script, restarts the container and verifies persisted workspace data and routing migration.
-  Its execution result is pending; no host/network security settings were changed.
+  Initial restart reached healthy and preserved the database; its assertion used a package name unavailable
+  from the traced standalone root. The assertion now uses Node 24's built-in read-only SQLite reader.
+  Corrected remote execution is pending; no host/network security settings were changed.
+
+## External review dispositions
+
+[Kody business validation](https://github.com/uniskela/stack-manager/pull/66#issuecomment-6318713869)
+reports **Compliant**, high confidence, with no missing acceptance criteria. Final independent read-only
+review through `bee03c3` found no critical/important defects. Inline Kody findings, if any, remain pending.
+
+Initial [Sonar analysis](https://sonarcloud.io/dashboard?id=uniskela_stack-manager&pullRequest=66)
+reported 35 findings and zero security hotspots. Each rule group was reviewed:
+
+| Findings | Disposition |
+| --- | --- |
+| S2871 (2), implicit path ordering | Fixed with explicit ordinal comparators; locale-independent ordering is intentional for exact Git paths. Added case/Unicode order regression. |
+| S6535 (1), redundant escape | Fixed by explicit absolute-path check. |
+| S7723 (4), Array constructor style | Fixed. |
+| S7722 (1), missing internal error message | Fixed; public error remains safely generic. |
+| S3358 (1), nested label ternary | Fixed with typed label mapping. |
+| S5906 (1), assertion reporting | Fixed with length matcher. |
+| S9382 (13), awaits inside routing loops | Retained deliberately: sources advance per-binding cursors in order, reads depend on preceding recovery, and matching work has a shared source budget. Parallel execution would invalidate these ordering/resource guarantees. |
+| S7503 (7), synchronous SQLite implementations of async ports | Retained deliberately: Promise ports map synchronous failures to rejections, while transaction callbacks must remain synchronous. No meaningless await added. |
+| S3776 (5), complexity | Label mapping simplifies the UI render. Remaining orchestration/configuration/transaction/submit advisories are retained: the guarded safety transitions are kept together with integration coverage; no transaction split or behavior change solely to meet a threshold. |
+
+No Sonar suppression, quality-profile change or accepted-issue mutation was introduced. Corrected-head
+quality gate and maintained CI/security results will be recorded on the PR.
 
 ## Operator acceptance and residual risk
+
 
 No production webhook, release, image publication or production deployment is authorized/performed. Before
 production opt-in, verify a disposable GitHub/Gitea/Forgejo → receiver path, exact Portainer edition/version,

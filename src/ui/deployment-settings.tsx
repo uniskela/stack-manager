@@ -52,6 +52,11 @@ const providers: Record<Provider, string> = {
   'portainer-webhook': 'Portainer webhook',
   'generic-webhook': 'Generic HTTP webhook',
 };
+const routingLabels: Record<keyof RoutingPolicy, string> = {
+  include: 'Include patterns',
+  exclude: 'Exclude patterns',
+  dependencies: 'Dependency patterns',
+};
 
 export function DeploymentSettings(
   props: Readonly<{
@@ -343,13 +348,7 @@ export function DeploymentSettings(
             </p>
             {(['include', 'exclude', 'dependencies'] as const).map((field) => (
               <div className="field" key={field}>
-                <label htmlFor={`${id}-${field}`}>
-                  {field === 'include'
-                    ? 'Include patterns'
-                    : field === 'exclude'
-                      ? 'Exclude patterns'
-                      : 'Dependency patterns'}
-                </label>
+                <label htmlFor={`${id}-${field}`}>{routingLabels[field]}</label>
                 <textarea
                   id={`${id}-${field}`}
                   rows={3}

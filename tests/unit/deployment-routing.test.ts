@@ -138,6 +138,13 @@ describe('deployment routing', () => {
     expect(normalizeChangedPaths(paths)).toEqual(['apps/wiki/compose.yaml', 'shared/proxy/z.conf']);
   });
 
+  it('keeps ordinal order for case and canonically distinct Unicode paths', () => {
+    const paths = ['é', 'a', 'e\u0301', 'A', 'é'];
+    const expected = ['A', 'a', 'e\u0301', 'é'];
+    expect(normalizeChangedPaths(paths)).toEqual(expected);
+    expect(normalizeChangedPaths([...paths].reverse())).toEqual(expected);
+  });
+
   it('handles repeated wildcard near misses without recursive backtracking', () => {
     expect(
       evaluateRouting([`apps/wiki/${'a'.repeat(1000)}`], {

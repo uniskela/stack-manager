@@ -234,12 +234,17 @@ export class GitHistoryReader implements HistoryReader {
     for (const file of paths) {
       try {
         // GitCli decodes UTF-8; do not route paths that may have been decoded lossily.
-        if (normalizeRepoPath(file) !== file || file.includes('\ufffd')) throw new Error();
+        if (normalizeRepoPath(file) !== file || file.includes('\ufffd'))
+          throw new Error('Invalid or lossy Git path.');
       } catch {
         throw new GitOperationError('invalid', 'Invalid comparison path.');
       }
     }
-    return [...new Set(paths)].sort();
+    return [...new Set(paths)].sort((a, b) => {
+      // Git paths use ordinal ordering, independent of the host locale.
+      if (a === b) return 0;
+      return a < b ? -1 : 1;
+    });
   }
 
   async objectSize(cloneDir: string, objectSha: string): Promise<number> {
