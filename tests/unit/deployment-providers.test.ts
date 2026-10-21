@@ -141,6 +141,7 @@ describe('local HTTPS webhook transport', () => {
         request.on('data', (chunk: Buffer) => {
           body += chunk.toString();
         });
+        request.on('error', () => response.destroy());
         request.on('end', () => {
           calls.push({ method: request.method, body, headers: request.headers });
           if (stall) return;

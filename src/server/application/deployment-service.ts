@@ -215,8 +215,9 @@ export class DeploymentService {
     });
   }
   private async recover(stackId: string) {
-    // Keep recovery audit writes ordered and avoid concurrent writes on the single SQLite connection.
-    for (const a of await this.repos.deployments.recover(stackId, this.clock.now())) {
+    // The per-stack active-attempt constraint bounds this recovery to at most one row.
+    const [a] = await this.repos.deployments.recover(stackId, this.clock.now());
+    if (a) {
       await this.audit.record({
         action: 'deployment.unknown',
         actorUserId: a.actorUserId,
@@ -327,12 +328,13 @@ export class DeploymentService {
         workspaceId: a.workspaceId,
         entityType: 'deployment_attempt',
         entityId: id,
-        meta: { httpStatus: result.httpStatus },
+        meta: { httpStatus: result.httpStatus, reason: result.reason },
       });
     }
   }
   private async send(a: DeploymentAttempt, ctx: JobContext): Promise<TriggerOutcome> {
     let providerInvoked = false;
+    let outcome: TriggerOutcome | undefined;
     try {
       const b = await this.repos.deployments.binding(a.workspaceId, a.stackId);
       const c = b && (await this.repos.credentials.findById(a.workspaceId, b.credentialId));
@@ -355,17 +357,34 @@ export class DeploymentService {
           if (r.status === 'unknown')
             reason = 'Request outcome uncertain; verify destination before retrying.';
           else if (r.httpStatus === null) reason = 'Destination validation prevented the request.';
-          return { status: r.status, httpStatus: 'httpStatus' in r ? r.httpStatus : null, reason };
+          outcome = { status: r.status, httpStatus: 'httpStatus' in r ? r.httpStatus : null, reason };
+          return outcome;
         },
         { kind: 'deployment', providerType: b.providerType, nonce: a.credentialNonce },
       );
-    } catch {
+    } catch (error) {
+      if (outcome) {
+        ctx.logger.error('Deployment credential operation failed after provider result', { attemptId: a.id });
+        return outcome;
+      }
+      if (providerInvoked)
+        return {
+          status: 'unknown',
+          httpStatus: null,
+          reason: 'Request outcome uncertain; verify destination before retrying.',
+        };
+      const validationFailure =
+        error instanceof ValidationError ||
+        error instanceof NotFoundError ||
+        error instanceof SyntaxError ||
+        (ctx.signal.aborted && error === ctx.signal.reason);
+      if (!validationFailure) ctx.logger.error('Internal deployment error before send', { attemptId: a.id });
       return {
-        status: providerInvoked ? 'unknown' : 'rejected',
+        status: 'rejected',
         httpStatus: null,
-        reason: providerInvoked
-          ? 'Request outcome uncertain; verify destination before retrying.'
-          : 'Local validation prevented the request.',
+        reason: validationFailure
+          ? 'Local validation prevented the request.'
+          : 'Internal deployment error before send; no request was sent. Check server logs.',
       };
     }
   }

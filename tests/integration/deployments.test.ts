@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as setup from '@/app/api/setup/route';
 import { DeploymentService } from '@/server/application/deployment-service';
 import { JobQueue } from '@/server/application/job-queue';
+import { ValidationError } from '@/server/domain/errors';
+import { DecryptionError } from '@/server/security/secret-box';
 import { openSqlite } from '@/server/persistence/sqlite/database';
 import { createSqliteRepositories } from '@/server/persistence/sqlite/repositories';
 import type { DeploymentProvider } from '@/server/providers/deployment/types';
@@ -102,13 +104,13 @@ async function configure(extra: Record<string, unknown> = {}) {
     actor,
   );
 }
-async function execute() {
+async function execute(signal = new AbortController().signal) {
   const j = await h.container.repos.jobs.claimNext('test-worker', h.clock.now(), 60000, [
     'deployment_trigger',
   ]);
   expect(j).not.toBeNull();
   await service.execute(j!, {
-    signal: new AbortController().signal,
+    signal,
     logger: h.container.logger,
     recordAcceptance: () => h.container.repos.jobs.recordAcceptance(j!.id, 'test-worker', h.clock.now()),
   });
@@ -188,6 +190,98 @@ describe('per-stack deployment bindings', () => {
     expect((await service.history(workspaceId, stackId)).attempts[0]!.status).toBe(result.status);
     expect(await h.container.worker.runOnce()).toBe(false);
     expect(trigger).toHaveBeenCalledTimes(1);
+  });
+  it.each([
+    { status: 'accepted', httpStatus: 202 },
+    { status: 'rejected', httpStatus: 403 },
+  ] as const)('preserves $status after a post-callback credential failure', async (result) => {
+    await configure();
+    trigger.mockResolvedValue(result);
+    await service.trigger(workspaceId, stackId, actor);
+    const original = h.container.credentials.withPlaintext.bind(h.container.credentials);
+    const access = vi
+      .spyOn(h.container.credentials, 'withPlaintext')
+      .mockImplementation(async (workspace, id, fn, expected) => {
+        await original(workspace, id, fn, expected);
+        throw new Error(URL);
+      });
+    try {
+      const job = await execute();
+      expect((await service.history(workspaceId, stackId)).attempts[0]).toMatchObject(result);
+      if (result.status === 'accepted')
+        expect((await h.container.repos.jobs.findById(job.id))?.acceptanceRecordedAt).not.toBeNull();
+      expect(trigger).toHaveBeenCalledTimes(1);
+      expect(await h.container.worker.runOnce()).toBe(false);
+      expect(h.logs.join('')).toContain('failed after provider result');
+      expect(h.logs.join('')).not.toContain(URL);
+    } finally {
+      access.mockRestore();
+    }
+  });
+  it.each(['binding', 'credential', 'decryption'] as const)(
+    'diagnoses internal pre-send %s failure without sending',
+    async (failure) => {
+      await configure();
+      await service.trigger(workspaceId, stackId, actor);
+      const fault =
+        failure === 'binding'
+          ? vi.spyOn(h.container.repos.deployments, 'binding').mockRejectedValue(new Error(URL))
+          : failure === 'credential'
+            ? vi.spyOn(h.container.repos.credentials, 'findById').mockRejectedValue(new Error(URL))
+            : vi.spyOn(h.container.credentials, 'withPlaintext').mockRejectedValue(new DecryptionError());
+      try {
+        await execute();
+        expect((await service.history(workspaceId, stackId)).attempts[0]).toMatchObject({
+          status: 'rejected',
+          httpStatus: null,
+          failureReason: 'Internal deployment error before send; no request was sent. Check server logs.',
+        });
+        expect(trigger).not.toHaveBeenCalled();
+        expect(h.logs.join('')).toContain('Internal deployment error before send');
+        expect(h.logs.join('')).not.toContain(URL);
+        expect(await h.container.audit.list({ workspaceId })).toContainEqual(
+          expect.objectContaining({
+            action: 'deployment.rejected',
+            meta: {
+              httpStatus: null,
+              reason: 'Internal deployment error before send; no request was sent. Check server logs.',
+            },
+          }),
+        );
+      } finally {
+        fault.mockRestore();
+      }
+    },
+  );
+  it('keeps credential validation failure separate from an internal error', async () => {
+    await configure();
+    await service.trigger(workspaceId, stackId, actor);
+    const fault = vi
+      .spyOn(h.container.credentials, 'withPlaintext')
+      .mockRejectedValue(new ValidationError('Configuration changed.'));
+    try {
+      await execute();
+      expect((await service.history(workspaceId, stackId)).attempts[0]).toMatchObject({
+        status: 'rejected',
+        failureReason: 'Local validation prevented the request.',
+      });
+      expect(trigger).not.toHaveBeenCalled();
+      expect(h.logs.join('')).not.toContain('Internal deployment error before send');
+    } finally {
+      fault.mockRestore();
+    }
+  });
+  it('rejects an aborted context before provider invocation without an internal-error claim', async () => {
+    await configure();
+    await service.trigger(workspaceId, stackId, actor);
+    await execute(AbortSignal.abort(new Error(URL)));
+    expect((await service.history(workspaceId, stackId)).attempts[0]).toMatchObject({
+      status: 'rejected',
+      failureReason: 'Local validation prevented the request.',
+    });
+    expect(trigger).not.toHaveBeenCalled();
+    expect(h.logs.join('')).not.toContain('Internal deployment error before send');
+    expect(h.logs.join('')).not.toContain(URL);
   });
   it.each(['disable', 'rotate', 'remove'])('does not send after %s before execution', async (operation) => {
     const b = (await configure()).binding!;

@@ -75,7 +75,9 @@ review history and request again deliberately if appropriate. Disabling cannot r
 has already been sent.
 
 **Accepted** means an HTTP 2xx response, not verified deployment success or container health.
-**Rejected** means a non-success response or a local validation failure prevented the request.
+**Rejected** means a non-success response, or a local validation/internal failure prevented the request.
+A rejection without an HTTP status means no request was sent; inspect its safe reason. Internal
+pre-send errors also produce a server log entry without secret details.
 **Unknown** means the destination may have received it, including a connection failure, timeout,
 or worker interruption after intent was recorded. Inspect Portainer or the receiver before choosing
 Deploy now again. Stack Manager never blindly retries an ambiguous send or a known acceptance.

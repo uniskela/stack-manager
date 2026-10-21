@@ -53,6 +53,16 @@ a new attempt. Do not infer failure from a timeout or clear recorded intent to f
 For Portainer, inspect the stack or receiver before retrying because webhook acceptance does not
 verify deployment completion or container health.
 
+## BREAKING CHANGE: nullable rejection HTTP status
+
+The earlier provider contract required a numeric HTTP status for every rejection. The #54 provider
+contract allows `httpStatus: null` when local validation or an internal failure prevents sending.
+Portainer/generic provider adapters and integrations based on the earlier plan must narrow the
+result by `status`, then check `httpStatus !== null` before displaying or processing an HTTP code.
+Do not coerce null to zero or infer that the destination refused a request when no request was sent.
+Accepted results retain a numeric HTTP status; unknown results retain a safe reason. This interface
+is new in #54, so no released deployment-provider consumer needs migration.
+
 ## Independent review dispositions
 
 - Fixed: DNS failures prevented disabling an unchanged binding. Disabled settings now retain credential
@@ -94,7 +104,8 @@ SonarCloud initial quality gate passes, zero new security hotspots. Readability/
 were fixed in `9c3182a` and `ac15087`. SQLite S7503 advisories are intentionally retained: persistence ports are Promise-based
 for PostgreSQL portability and async functions turn synchronous SQLite exceptions into rejected Promises.
 Removing async changes error behavior; adding dummy await hides the design. No rule is suppressed.
-Recovery audit writes remain sequential and bounded to at most one active attempt per stack (S9382).
+Recovery is called for one explicit stack, never a cross-stack batch. Its unique active-attempt
+constraint bounds each call to at most one audit write; the service now expresses this without a loop.
 Recovery persists before auditing; the central AuditService catches and logs redacted write failures,
 so audit storage errors do not abort recovery. A batch/concurrency API would add no throughput here.
 
@@ -158,3 +169,10 @@ Follow-up Kody audit finding: destination validation now records `deployment.des
 with safe status metadata and success/failure outcome. Configuration updates retain their own action.
 Regression coverage checks both validation outcomes, unchanged binding revision, no misleading
 binding-update event, and absence of the secret URL in audit records.
+
+Follow-up review: a captured provider result survives a later credential-wrapper failure. Internal
+pre-send failures have a distinct safe reason and a fixed log event containing only the attempt ID;
+the persisted rejection audit includes that safe reason. Local validation/abort remains rejected, and
+an uncertain provider throw remains unknown. No raw exception or secret enters these logs/audits.
+The local mock request stream now handles errors by destroying its response. Recovery remains
+per-stack; batching unrelated operator requests would change its API and offers no demonstrated gain.
