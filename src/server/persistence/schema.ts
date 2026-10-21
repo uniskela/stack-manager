@@ -239,6 +239,7 @@ export const gitWebhookDeliveries = sqliteTable(
     provider: text('provider').notNull(),
     deliveryId: text('delivery_id').notNull(),
     eventType: text('event_type').notNull(),
+    bodyHash: text('body_hash'),
     ref: text('ref'),
     receivedAt: ts('received_at').notNull(),
     status: text('status', { enum: ['accepted', 'ignored'] }).notNull(),
@@ -246,6 +247,7 @@ export const gitWebhookDeliveries = sqliteTable(
   },
   (t) => [
     uniqueIndex('git_webhook_delivery_uq').on(t.repositoryId, t.provider, t.deliveryId),
+    uniqueIndex('git_webhook_body_uq').on(t.repositoryId, t.provider, t.bodyHash),
     index('git_webhook_received_idx').on(t.repositoryId, t.receivedAt),
   ],
 );

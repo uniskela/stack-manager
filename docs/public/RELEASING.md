@@ -49,7 +49,7 @@ All third-party actions are pinned to commit SHAs; Dependabot proposes weekly up
 
 ## v0.6.0 inbound webhook validation
 
-Issue #53 adds signed GitHub/Gitea/Forgejo ingress and an additive delivery-ledger migration.
+Issue #53 adds signed GitHub/Gitea/Forgejo ingress and additive delivery-ledger and accepted-body-fingerprint migrations (0007/0008).
 Before release, verify the provider/security/replay/queue/restart tests, production UI and rootless
 Docker smoke checks, plus live forge delivery from supported operator versions. No deployment is
 triggered by ingress. Follow [Git push webhooks](GIT_WEBHOOKS.md) for backup and rollback.

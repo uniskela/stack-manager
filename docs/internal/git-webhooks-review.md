@@ -17,8 +17,9 @@ Scope: signed inbound Git push → durable repository fetch. No deployment trigg
   Transactional credential nonce/connection checks fence concurrent rotation/disable/config changes.
 - No raw bodies/signatures/secrets in delivery rows, queue payloads, responses or audit. Mask is fixed.
   Unauthenticated failures stay outside the delivery ledger; use forge delivery history.
-- Native HMAC does not cover delivery headers or timestamps. A captured signed body can be replayed
-  with a changed ID; TLS and secret protection remain necessary. Metadata has no automatic retention.
+- Native HMAC does not cover delivery headers or timestamps. Accepted bodies have a persistent unique
+  SHA-256 fingerprint, preventing changed-ID replay. Unseen old signed bodies have no provable freshness;
+  TLS and secret protection remain necessary. Metadata has no automatic retention.
 
 ## Validation log
 
@@ -34,7 +35,7 @@ Scope: signed inbound Git push → durable repository fetch. No deployment trigg
 
 Live GitHub/Gitea/Forgejo deliveries against the operator's exact versions remain an installation check.
 No homelab access, production deployment, merge, release or image publication is authorized.
-Migration `0007_git_webhook_deliveries` is additive. Disable hooks and take a consistent SQLite/WAL backup
+Migrations `0007_git_webhook_deliveries` and `0008_git_webhook_body_replay` are additive. Disable hooks and take a consistent SQLite/WAL backup
 with the encryption key before upgrade; restore a compatible pre-upgrade backup before older-version
 rollback. Delivery history and encrypted credentials must be included in backup/recovery.
 
@@ -106,3 +107,18 @@ Provider version corroboration: Forgejo **v11.0.0** `services/webhook/shared/pay
 (`AddDefaultHeaders`) independently confirms bare hex SHA-256 in `X-Forgejo-Signature` plus native
 `X-Forgejo-Event` / `X-Forgejo-Delivery`; Gitea **v1.24.0** `services/webhook/deliver.go` confirms
 its distinct native contract. Current official docs and fixtures are linked in the user guide.
+
+## Kody business-logic replay fix
+
+Kody identified changed-ID replay of captured signed bodies. Three native-provider route regressions
+failed before the fix. Accepted raw bytes now receive a SHA-256 fingerprint with repository/provider
+uniqueness in the existing atomic delivery/enqueue transaction. Ignored bodies do not reserve fingerprints.
+Changed-ID duplicates cannot request follow-up work, including during a running fetch or after restart.
+Distinct pushes still coalesce/request follow-up normally. Fingerprints persist until repository removal;
+exact byte-identical legitimate repetitions are duplicates. Migration 0008 cannot backfill preexisting
+rows because raw bodies are never stored; those legacy rows retain delivery-ID protection.
+
+Replay-fix verification: `pnpm check` passed **483 tests** plus format/lint/types; focused provider,
+SQLite, route coverage and migration suite passed **75 tests**. Production build and migration drift
+passed. Independent review found no substantive issue in the fingerprint change. Full browser rerun
+and new-head CI/reviews follow below.

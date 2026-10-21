@@ -42,18 +42,21 @@ test('signing secret saves, rotates with confirmation and disables', async ({ pa
     repository: { clone_url: SAMPLE_REMOTE },
   });
   const delivery = randomUUID();
-  const send = (key: string) =>
+  const send = (key: string, deliveryId = delivery) =>
     page.request.post(`/api/webhooks/git/${workspaceId}/${repositoryId}`, {
       data: body,
       headers: {
         'content-type': 'application/json',
         'x-github-event': 'push',
-        'x-github-delivery': delivery,
+        'x-github-delivery': deliveryId,
         'x-hub-signature-256': 'sha256=' + createHmac('sha256', key).update(body).digest('hex'),
       },
     });
   expect((await send('synthetic-browser-secret-0123456789abcdef')).status()).toBe(202);
   expect((await send('synthetic-browser-secret-0123456789abcdef')).status()).toBe(200);
+  expect((await (await send('synthetic-browser-secret-0123456789abcdef', randomUUID())).json()).result).toBe(
+    'duplicate',
+  );
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
   await region.getByRole('button', { name: 'Copy webhook URL' }).click();
   await expect(region.getByRole('status')).toHaveText('Webhook URL copied.');
@@ -69,6 +72,9 @@ test('signing secret saves, rotates with confirmation and disables', async ({ pa
   await expect(region.getByLabel('New signing secret')).toHaveValue('');
   await expect(region.getByRole('status')).toContainText('Signing secret saved.');
   expect((await send('synthetic-browser-secret-0123456789abcdef')).status()).toBe(401);
+  expect((await (await send('synthetic-rotated-secret-9876543210abcdef', randomUUID())).json()).result).toBe(
+    'duplicate',
+  );
   await expectAccessible(page);
   await region.screenshot({ path: 'test-results/webhooks-configured.png' });
   await region.getByRole('button', { name: 'Disable webhook…' }).click();

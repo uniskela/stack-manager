@@ -195,6 +195,7 @@ export interface GitWebhookDelivery {
   provider: string;
   deliveryId: string;
   eventType: string;
+  bodyHash: string | null;
   ref: string | null;
   receivedAt: Date;
   status: 'accepted' | 'ignored';

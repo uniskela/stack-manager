@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { Clock } from '@/server/domain/clock';
 import { AuthenticationError, NotFoundError, ValidationError } from '@/server/domain/errors';
 import { normalizeRemoteUrl } from '@/server/domain/git-repository';
@@ -121,6 +122,7 @@ export class GitWebhookService {
       provider: conn.gitProviderType,
       deliveryId: event.deliveryId,
       eventType: event.eventType,
+      bodyHash: relevant ? createHash('sha256').update(bytes).digest('hex') : null,
       ref: push?.ref ?? null,
       receivedAt: this.clock.now(),
       status: relevant ? ('accepted' as const) : ('ignored' as const),

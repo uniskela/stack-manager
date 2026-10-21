@@ -1,4 +1,4 @@
-import { createHmac, randomUUID } from 'node:crypto';
+import { createHash, createHmac, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -91,14 +91,20 @@ async function deliver(
   } = {},
 ) {
   const provider = options.provider ?? 'github';
-  const body = options.body ?? JSON.stringify(payload(provider));
+  const id = options.id ?? randomUUID();
+  const body =
+    options.body ??
+    JSON.stringify({
+      ...payload(provider),
+      after: createHash('sha256').update(id).digest('hex').slice(0, 40),
+    });
   return call(ingress.POST, {
     method: options.method ?? 'POST',
     origin: null,
     path: `/api/webhooks/git/${workspaceId}/${repositoryId}`,
     params: params(),
     body,
-    headers: { ...headers(provider, body, options.id, options.secret), ...options.headers },
+    headers: { ...headers(provider, body, id, options.secret), ...options.headers },
   });
 }
 function db() {
@@ -514,4 +520,59 @@ describe('SQLite connection and configuration boundaries', () => {
     expect(operation).not.toHaveBeenCalled();
     expect(sync).not.toHaveBeenCalled();
   });
+});
+
+describe('signed-body replay protection', () => {
+  it('deduplicates simultaneous changed-ID bodies and retains fingerprints across rotation', async () => {
+    await configure();
+    const body = JSON.stringify(payload());
+    const results = await Promise.all([deliver({ body }), deliver({ body }), deliver({ body })]);
+    expect(results.map((r) => r.status).sort()).toEqual([200, 200, 202]);
+    expect(rows('git_webhook_deliveries')).toHaveLength(1);
+    await configure(ROTATED);
+    expect((await deliver({ body, secret: ROTATED })).json.result).toBe('duplicate');
+    expect(rows('jobs')).toHaveLength(1);
+  });
+  it('does not let an ignored event reserve a relevant push fingerprint', async () => {
+    await configure();
+    const body = JSON.stringify(payload());
+    expect((await deliver({ body, headers: { 'x-github-event': 'ping' } })).json.result).toBe('ignored');
+    expect((await deliver({ body })).status).toBe(202);
+    expect(rows('git_webhook_deliveries')).toMatchObject([
+      { body_hash: null },
+      { body_hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
+    ]);
+  });
+
+  it.each(providers)(
+    'deduplicates a captured %s body with a changed delivery ID, also while running',
+    async (provider) => {
+      const handle = db();
+      handle.db.$client
+        .prepare('UPDATE git_repository_connections SET git_provider_type = ?, remote_url = ? WHERE id = ?')
+        .run(
+          provider,
+          provider === 'github'
+            ? 'https://github.com/acme/infra.git'
+            : `https://${provider}.example/acme/infra.git`,
+          repositoryId,
+        );
+      handle.close();
+      await configure();
+      const body = JSON.stringify(payload(provider));
+      expect((await deliver({ provider, body })).status).toBe(202);
+      const running = await h.container.repos.jobs.claimNext('worker', h.clock.now(), 1000, [
+        'repository_sync',
+      ]);
+      expect(running).not.toBeNull();
+      expect((await deliver({ provider, body })).json.result).toBe('duplicate');
+      expect(rows('jobs')).toMatchObject([{ follow_up_requested: 0 }]);
+      expect(rows('git_webhook_deliveries')).toHaveLength(1);
+      await h.container.repos.jobs.markSucceeded(running!.id, 'worker', h.clock.now());
+      await h.container.close();
+      h = await createHarness({ dataDir: h.dataDir, config: h.config });
+      expect((await deliver({ provider, body })).json.result).toBe('duplicate');
+      expect(rows('jobs')).toHaveLength(1);
+    },
+  );
 });

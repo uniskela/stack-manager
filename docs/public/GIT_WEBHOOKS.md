@@ -87,14 +87,17 @@ Overview and Settings → Activity. Never paste signing secrets or raw webhook b
 Delivery IDs are persisted uniquely per repository/provider across process restarts. Recording an
 accepted delivery and inserting/coalescing its fetch are one SQLite transaction; a queue error rolls
 both back. An already pending fetch is reused. A new delivery during a running fetch durably requests
-one follow-up, preserving existing locks, recovery and retries. Duplicate IDs never request a follow-up.
+one follow-up, preserving existing locks, recovery and retries. Duplicate IDs or accepted body fingerprints never request a follow-up.
 Distinct pushes can coalesce into one fetch, which reads authoritative Git history. No deployment jobs
 are created. Ignored verified deliveries are recorded for troubleshooting and deduplicated too.
 
 Native provider signatures cover the body, not delivery/event headers, and have no freshness timestamp.
-Protect transport and signing secrets: a party holding a signed body may change delivery headers.
-Delivery-ID replay protection does not authenticate a timestamp or prevent a replay with a changed ID.
-Delivery metadata is retained until repository removal; monitor database size for busy repositories.
+Accepted raw bodies are SHA-256 fingerprinted persistently: an identical body with a changed delivery ID
+is still a duplicate, including after restart or secret rotation. Ignored events do not reserve body
+fingerprints. Exact byte-identical legitimate repetitions are treated as redeliveries; distinct push
+payloads request fetching. Polling and manual fetch remain available. An unseen old signed body has
+no provable freshness, so HTTPS and secret protection remain necessary. Delivery metadata and
+fingerprints are retained until repository removal; monitor database size for busy repositories.
 
 ## Rotate or disable
 
@@ -108,9 +111,10 @@ selecting a signing credential again. Polling continues according to its indepen
 
 ## Migration, backup and rollback
 
-The additive migration creates `git_webhook_deliveries` with repository/provider/delivery uniqueness,
-received timestamp, event, ref, accepted/ignored status and optional job reference. It stores no raw
-payload or secret. Existing repositories start with webhooks disabled; Git history, drafts and jobs are
+Additive migrations `0007` and `0008` create `git_webhook_deliveries` with repository/provider/delivery uniqueness,
+received timestamp, event, ref, accepted/ignored status, accepted-body fingerprint uniqueness and optional job reference. It stores no raw
+payload or secret. Legacy rows created before migration `0008` have no body fingerprint and retain
+delivery-ID protection only; historical bodies cannot be reconstructed. Existing repositories start with webhooks disabled; Git history, drafts and jobs are
 unchanged. The new credential kind uses the existing encrypted credential table.
 
 Back up SQLite consistently with its WAL and retain the existing encryption key securely; see
