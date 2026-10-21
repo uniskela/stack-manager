@@ -8,7 +8,9 @@ export interface DeploymentConfiguration {
 }
 
 export type DeploymentTriggerResult =
-  { status: 'accepted' | 'rejected'; httpStatus: number } | { status: 'unknown'; reason: string };
+  | { status: 'accepted'; httpStatus: number }
+  | { status: 'rejected'; httpStatus: number | null }
+  | { status: 'unknown'; reason: string };
 
 export interface DeploymentProvider {
   readonly type: DeploymentProviderType;

@@ -84,10 +84,7 @@ describe('deployment configuration and destination policy', () => {
       totalTimeoutMs: 30,
     }).get('generic-webhook')!;
     await expect(p.validateDestination({ url: endpoint })).rejects.toThrow('timed out');
-    await expect(p.trigger({ url: endpoint }, {})).resolves.toEqual({
-      status: 'unknown',
-      reason: 'request_timeout_or_cancelled',
-    });
+    await expect(p.trigger({ url: endpoint }, {})).resolves.toEqual({ status: 'rejected', httpStatus: null });
   });
 });
 
@@ -101,52 +98,67 @@ describe('local HTTPS webhook transport', () => {
   let calls: Array<{ method?: string; body: string; headers: Record<string, unknown> }> = [];
   const originalRequest = https.request;
 
+  async function cleanup() {
+    try {
+      if (server) {
+        server.closeAllConnections();
+        if (server.listening) await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    } finally {
+      if (directory) rmSync(directory, { recursive: true, force: true });
+    }
+  }
+
   beforeAll(async () => {
-    directory = mkdtempSync(path.join(tmpdir(), 'deployment-tls-'));
-    const key = path.join(directory, 'key.pem');
-    const cert = path.join(directory, 'cert.pem');
-    execFileSync(
-      'openssl',
-      [
-        'req',
-        '-x509',
-        '-newkey',
-        'rsa:2048',
-        '-nodes',
-        '-keyout',
-        key,
-        '-out',
-        cert,
-        '-days',
-        '1',
-        '-subj',
-        '/CN=webhook.example',
-        '-addext',
-        'subjectAltName=DNS:webhook.example',
-      ],
-      { stdio: 'ignore' },
-    );
-    certificate = readFileSync(cert);
-    server = https.createServer({ key: readFileSync(key), cert: certificate }, (request, response) => {
-      let body = '';
-      request.on('data', (chunk: Buffer) => {
-        body += chunk.toString();
+    try {
+      directory = mkdtempSync(path.join(tmpdir(), 'deployment-tls-'));
+      const key = path.join(directory, 'key.pem');
+      const cert = path.join(directory, 'cert.pem');
+      execFileSync(
+        'openssl',
+        [
+          'req',
+          '-x509',
+          '-newkey',
+          'rsa:2048',
+          '-nodes',
+          '-keyout',
+          key,
+          '-out',
+          cert,
+          '-days',
+          '1',
+          '-subj',
+          '/CN=webhook.example',
+          '-addext',
+          'subjectAltName=DNS:webhook.example',
+        ],
+        { stdio: 'ignore' },
+      );
+      certificate = readFileSync(cert);
+      server = https.createServer({ key: readFileSync(key), cert: certificate }, (request, response) => {
+        let body = '';
+        request.on('data', (chunk: Buffer) => {
+          body += chunk.toString();
+        });
+        request.on('end', () => {
+          calls.push({ method: request.method, body, headers: request.headers });
+          if (stall) return;
+          response.writeHead(status, { Location: `https://other.example:${port}/stolen` });
+          response.end('provider-response-secret');
+        });
       });
-      request.on('end', () => {
-        calls.push({ method: request.method, body, headers: request.headers });
-        if (stall) return;
-        response.writeHead(status, { Location: `https://other.example:${port}/stolen` });
-        response.end('provider-response-secret');
+      await new Promise<void>((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(0, '127.0.0.1', resolve);
       });
-    });
-    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-    port = (server.address() as { port: number }).port;
+      port = (server.address() as { port: number }).port;
+    } catch (error) {
+      await cleanup();
+      throw error;
+    }
   });
-  afterAll(async () => {
-    server.closeAllConnections();
-    await new Promise<void>((resolve) => server.close(() => resolve()));
-    rmSync(directory, { recursive: true, force: true });
-  });
+  afterAll(cleanup);
   afterEach(() => {
     vi.restoreAllMocks();
     calls = [];
@@ -300,15 +312,62 @@ describe('local HTTPS webhook transport', () => {
     }
   });
 
+  it('rejects preflight failures without opening an HTTP request', async () => {
+    const request = mockLocalConnection();
+    for (const config of [{ url: 'http://webhook.example/secret' }, { url: 'https://127.0.0.1/secret' }]) {
+      expect(await provider().get('generic-webhook')!.trigger(config, {})).toEqual({
+        status: 'rejected',
+        httpStatus: null,
+      });
+    }
+    const dnsFailure = provider(false, async () => {
+      throw new Error('resolver-secret');
+    }).get('generic-webhook')!;
+    expect(await dnsFailure.trigger({ url: endpoint }, {})).toEqual({ status: 'rejected', httpStatus: null });
+    expect(
+      await provider()
+        .get('generic-webhook')!
+        .trigger({ url: endpoint }, { idempotencyKey: 'invalid\r\nheader' }),
+    ).toEqual({ status: 'rejected', httpStatus: null });
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('rejects a synchronous failure to open a request before any send begins', async () => {
+    vi.spyOn(https, 'request').mockImplementation(() => {
+      throw new Error('request-setup-secret');
+    });
+    expect(await provider().get('generic-webhook')!.trigger({ url: endpoint }, {})).toEqual({
+      status: 'rejected',
+      httpStatus: null,
+    });
+    expect(calls).toHaveLength(0);
+  });
+
+  it('preserves an unknown outcome when ending the request throws after the send begins', async () => {
+    const request = mockLocalConnection();
+    const mock = request.getMockImplementation()!;
+    request.mockImplementation(((...args: Parameters<typeof https.request>) => {
+      const outgoing = mock(...args);
+      const end = outgoing.end.bind(outgoing);
+      outgoing.end = (() => {
+        end();
+        outgoing.destroy();
+        throw new Error('uncertain-send-secret');
+      }) as typeof outgoing.end;
+      return outgoing;
+    }) as typeof https.request);
+    expect(await provider().get('generic-webhook')!.trigger({ url: endpoint }, {})).toEqual({
+      status: 'unknown',
+      reason: 'request_failed',
+    });
+  });
+
   it('revalidates the destination at execution and never connects to a changed forbidden address', async () => {
     const request = mockLocalConnection();
     const resolver = vi.fn().mockResolvedValueOnce([publicAddress]).mockResolvedValue(['169.254.169.254']);
     const p = provider(false, resolver).get('generic-webhook')!;
     await p.validateDestination({ url: endpoint });
-    expect(await p.trigger({ url: endpoint }, {})).toEqual({
-      status: 'unknown',
-      reason: 'destination_unavailable',
-    });
+    expect(await p.trigger({ url: endpoint }, {})).toEqual({ status: 'rejected', httpStatus: null });
     expect(request).not.toHaveBeenCalled();
   });
 
@@ -318,7 +377,7 @@ describe('local HTTPS webhook transport', () => {
     controller.abort();
     expect(
       await provider().get('portainer-webhook')!.trigger({ url: endpoint }, { signal: controller.signal }),
-    ).toEqual({ status: 'unknown', reason: 'request_timeout_or_cancelled' });
+    ).toEqual({ status: 'rejected', httpStatus: null });
     expect(request).not.toHaveBeenCalled();
   });
 });

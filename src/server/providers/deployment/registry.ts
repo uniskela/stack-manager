@@ -95,6 +95,7 @@ class WebhookProvider implements DeploymentProvider {
   ): Promise<DeploymentTriggerResult> {
     const timeout = AbortSignal.timeout(this.options.totalTimeoutMs ?? 15000);
     const signal = options.signal ? AbortSignal.any([timeout, options.signal]) : timeout;
+    let sendStarted = false;
     try {
       const checked = this.validateConfiguration(config);
       const url = new URL(checked.url);
@@ -139,12 +140,14 @@ class WebhookProvider implements DeploymentProvider {
             reason: signal.aborted ? 'request_timeout_or_cancelled' : 'request_failed',
           }),
         );
+        sendStarted = true;
         request.end(body);
       });
     } catch {
+      if (!sendStarted) return { status: 'rejected', httpStatus: null };
       return {
         status: 'unknown',
-        reason: signal.aborted ? 'request_timeout_or_cancelled' : 'destination_unavailable',
+        reason: signal.aborted ? 'request_timeout_or_cancelled' : 'request_failed',
       };
     }
   }
