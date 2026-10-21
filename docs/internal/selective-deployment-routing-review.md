@@ -40,13 +40,17 @@ and published review records were inspected. No competing routing PR was open at
 - Production build and full Playwright/axe run against the public sample repository passed: 43 passed,
   13 intentional skips (duplicate viewport/shared mutations and separate worker-disabled/server scenarios).
   [Desktop screenshot](screenshots/issue-55-desktop.png) and [mobile screenshot](screenshots/issue-55-mobile.png).
-- CI on implementation commit `a334bbe` passed tests, migration drift, build and production smoke; remaining
-  CI/security jobs and Kody/SonarCloud disposition are pending. CodeQL's external PR analysis reported no new alerts.
+- [CI on correction commit `36bd40e`](https://github.com/uniskela/stack-manager/actions/runs/39618777802)
+  passed tests, migration drift, build, production smoke, full browser suite, workflow lint and dependency audit.
+  CodeQL Actions/TypeScript and Gitleaks passed; external CodeQL reported no new alerts.
+- [Container security on `36bd40e`](https://github.com/uniskela/stack-manager/actions/runs/39618798707)
+  passed configuration, production dependency and image gates, including the package-manager removal check.
 - Rootless Docker is configured. Low host disk space prevents a fresh local image build. CI now runs the
   production smoke script, restarts the container and verifies persisted workspace data and routing migration.
-  Initial restart reached healthy and preserved the database; its assertion used a package name unavailable
+  Initial restart reached healthy; its assertion used a package name unavailable
   from the traced standalone root. The assertion now uses Node 24's built-in read-only SQLite reader.
-  Corrected remote execution is pending; no host/network security settings were changed.
+  Corrected remote execution passed, confirming workspace persistence and the routing schema after restart.
+  Local assertion self-check and workflow shellcheck also passed; no host/network security settings were changed.
 
 ## External review dispositions
 
@@ -69,8 +73,12 @@ reported 35 findings and zero security hotspots. Each rule group was reviewed:
 | S7503 (7), synchronous SQLite implementations of async ports | Retained deliberately: Promise ports map synchronous failures to rejections, while transaction callbacks must remain synchronous. No meaningless await added. |
 | S3776 (5), complexity | Label mapping simplifies the UI render. Remaining orchestration/configuration/transaction/submit advisories are retained: the guarded safety transitions are kept together with integration coverage; no transaction split or behavior change solely to meet a threshold. |
 
-No Sonar suppression, quality-profile change or accepted-issue mutation was introduced. Corrected-head
-quality gate and maintained CI/security results will be recorded on the PR.
+Corrected-head Sonar quality gate passed: reliability/security/maintainability A, zero security hotspots,
+ten fixed findings and 25 reviewed advisories remaining (13 ordered awaits, seven Promise ports and five
+complexity findings). No suppression, quality-profile change or accepted-issue mutation was introduced.
+Sonar reports 0% coverage because the maintained pipeline does not import a coverage report; the 655
+passing tests are separate execution evidence. Latest maintained CI/security and Kody results are tracked
+on [PR #66](https://github.com/uniskela/stack-manager/pull/66).
 
 ## Operator acceptance and residual risk
 
