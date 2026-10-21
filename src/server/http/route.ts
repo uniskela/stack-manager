@@ -13,12 +13,13 @@ import { clientIpFrom } from './client-ip';
 import { parseCookies, sessionCookieName } from './cookies';
 import { isMutation, isSameOrigin } from './origin';
 
-export type AuthMode = 'public' | 'user';
+export type AuthMode = 'public' | 'user' | 'signed-webhook';
 
 export interface RouteContext<P, B, A extends AuthMode> {
   req: Request;
   params: P;
   body: B;
+  rawBody: Uint8Array;
   container: Container;
   session: A extends 'user' ? AuthenticatedSession : AuthenticatedSession | null;
   requestContext: RequestContext;
@@ -26,7 +27,7 @@ export interface RouteContext<P, B, A extends AuthMode> {
 }
 
 export interface RouteOptions<B, A extends AuthMode> {
-  /** Default-deny: every route must choose. Only setup, login and health are public. */
+  /** Default-deny: every route must choose. Public browser routes retain CSRF checks; signed-webhook ingress authenticates its raw body. */
   auth: A;
   body?: ZodType<B>;
   /** Request body cap in bytes (default 64 KiB). Raise only for routes that carry file content. */
@@ -70,9 +71,13 @@ const tooLarge = () => new AppError(413, 'payload_too_large', 'Request body too 
  * before reading, and streaming stops as soon as the accumulated size exceeds it.
  */
 export async function readBodyWithLimit(req: Request, limit: number): Promise<string> {
+  return (await readBytesWithLimit(req, limit)).toString('utf8');
+}
+
+export async function readBytesWithLimit(req: Request, limit: number): Promise<Buffer> {
   const declared = req.headers.get('content-length');
   if (declared !== null && (!/^\d+$/.test(declared) || Number(declared) > limit)) throw tooLarge();
-  if (!req.body) return '';
+  if (!req.body) return Buffer.alloc(0);
   const reader = req.body.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
@@ -86,7 +91,7 @@ export async function readBodyWithLimit(req: Request, limit: number): Promise<st
     }
     chunks.push(value);
   }
-  return Buffer.concat(chunks).toString('utf8');
+  return Buffer.concat(chunks);
 }
 
 /**
@@ -103,14 +108,34 @@ export function defineRoute<P = Record<string, string>, B = undefined, A extends
       container = getContainer();
       const { config } = container;
 
-      if (isMutation(req.method) && !isSameOrigin(req, config)) {
+      const signedWebhook = options.auth === 'signed-webhook';
+      if (signedWebhook && req.method !== 'POST')
+        return json(
+          { error: { code: 'method_not_allowed', message: 'Expected POST.' } },
+          { status: 405, headers: { Allow: 'POST' } },
+        );
+      if (!signedWebhook && isMutation(req.method) && !isSameOrigin(req, config)) {
         throw new ForbiddenError('Cross-origin request rejected.');
       }
 
-      const sessionToken = parseCookies(req.headers.get('cookie')).get(sessionCookieName(config)) ?? null;
-      const session = await container.auth.resolveSession(sessionToken);
+      const sessionToken = signedWebhook
+        ? null
+        : (parseCookies(req.headers.get('cookie')).get(sessionCookieName(config)) ?? null);
+      const session = signedWebhook ? null : await container.auth.resolveSession(sessionToken);
       if (options.auth === 'user' && !session) throw new AuthenticationError();
 
+      let rawBody: Uint8Array = new Uint8Array();
+      if (signedWebhook) {
+        if (options.body) throw new Error('Signed webhook bodies must be authenticated before parsing.');
+        const type = req.headers.get('content-type') ?? '';
+        if (
+          !/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(type.trim()) ||
+          (req.headers.get('content-encoding') ?? 'identity') !== 'identity'
+        ) {
+          throw new AppError(415, 'unsupported_media_type', 'Expected uncompressed UTF-8 application/json.');
+        }
+        rawBody = await readBytesWithLimit(req, 1024 * 1024);
+      }
       let body = undefined as B;
       if (options.body) {
         const contentType = req.headers.get('content-type') ?? '';
@@ -132,6 +157,7 @@ export function defineRoute<P = Record<string, string>, B = undefined, A extends
       const params = ((await segment?.params) ?? {}) as P;
       const result = await handler({
         req,
+        rawBody,
         params,
         body,
         container,

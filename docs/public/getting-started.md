@@ -154,3 +154,10 @@ with the worker disabled, requested fetch jobs wait until the worker is enabled 
 Fetching does not deploy a stack or indicate that it is healthy.
 The editor, docs and environment views read from the fetched commit plus your drafts. History lists only commits
 in the fetched repository; drafts and unpushed commits don't appear there. Fetching never changes or deletes drafts.
+
+## Optional Git push webhooks
+
+Repository Overview → **Git webhooks** accepts signed GitHub, Gitea and Forgejo push deliveries.
+Configure a separate encrypted signing secret and POST JSON webhook in the forge. Verified pushes
+queue a source fetch; they do not deploy stacks or verify container health. Polling remains available.
+See [Git push webhooks](GIT_WEBHOOKS.md) for HTTPS, proxy, signature, rotation and recovery instructions.

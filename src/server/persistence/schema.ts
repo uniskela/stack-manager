@@ -67,7 +67,7 @@ export const providerCredentials = sqliteTable(
     workspaceId: text('workspace_id')
       .notNull()
       .references(() => workspaces.id, { onDelete: 'cascade' }),
-    kind: text('kind', { enum: ['git', 'deployment', 'runtime', 'secret'] }).notNull(),
+    kind: text('kind', { enum: ['git', 'git_webhook', 'deployment', 'runtime', 'secret'] }).notNull(),
     providerType: text('provider_type').notNull(),
     label: text('label').notNull(),
     /** AES-256-GCM ciphertext||tag, base64. Never returned by any API. */
@@ -226,4 +226,26 @@ export const sourceDrafts = sqliteTable(
     updatedAt: ts('updated_at').notNull(),
   },
   (t) => [uniqueIndex('source_drafts_repo_path_uq').on(t.repositoryId, t.path)],
+);
+
+/** No payloads or signing material. Delivery IDs survive restarts for replay protection. */
+export const gitWebhookDeliveries = sqliteTable(
+  'git_webhook_deliveries',
+  {
+    id: text('id').primaryKey(),
+    repositoryId: text('repository_id')
+      .notNull()
+      .references(() => gitRepositoryConnections.id, { onDelete: 'cascade' }),
+    provider: text('provider').notNull(),
+    deliveryId: text('delivery_id').notNull(),
+    eventType: text('event_type').notNull(),
+    ref: text('ref'),
+    receivedAt: ts('received_at').notNull(),
+    status: text('status', { enum: ['accepted', 'ignored'] }).notNull(),
+    jobId: text('job_id').references(() => jobs.id, { onDelete: 'restrict' }),
+  },
+  (t) => [
+    uniqueIndex('git_webhook_delivery_uq').on(t.repositoryId, t.provider, t.deliveryId),
+    index('git_webhook_received_idx').on(t.repositoryId, t.receivedAt),
+  ],
 );

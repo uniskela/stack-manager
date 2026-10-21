@@ -8,6 +8,7 @@ import { CredentialService } from '@/server/application/credential-service';
 import { GitRepositoryService, REPOSITORY_SYNC_JOB } from '@/server/application/git-repository-service';
 import { GitWorkflowService } from '@/server/application/git-workflow-service';
 import { GitHistoryService } from '@/server/application/git-history-service';
+import { GitWebhookService } from '@/server/application/git-webhook-service';
 import { JobQueue } from '@/server/application/job-queue';
 import { RepositoryAutoFetch } from '@/server/application/repository-auto-fetch';
 import type { Repositories } from '@/server/application/ports';
@@ -52,6 +53,7 @@ export interface Container {
   source: SourceService;
   gitWorkflow: GitWorkflowService;
   gitHistory: GitHistoryService;
+  gitWebhooks: GitWebhookService;
   jobs: JobQueue;
   worker: JobWorker;
   autoFetch: RepositoryAutoFetch;
@@ -105,9 +107,19 @@ export function createContainer(config: AppConfig, overrides: ContainerOverrides
     });
     const workspaces = new WorkspaceService(repos.workspaces, audit, clock, newId);
     const credentials = new CredentialService(repos.credentials, box, audit, clock, newId, (kind, type) =>
-      kind === 'git' ? gitProviders.has(type) : false,
+      kind === 'git' || kind === 'git_webhook' ? gitProviders.has(type) : false,
     );
     const jobs = new JobQueue(repos.jobs, clock, newId);
+    const gitWebhooks = new GitWebhookService(
+      repos.gitRepositories,
+      credentials,
+      repos.credentials,
+      repos.gitWebhookDeliveries,
+      jobs,
+      audit,
+      clock,
+      newId,
+    );
     const repositories = new GitRepositoryService(
       repos.gitRepositories,
       credentials,
@@ -203,6 +215,7 @@ export function createContainer(config: AppConfig, overrides: ContainerOverrides
       gitWorkflow,
       gitHistory,
       jobs,
+      gitWebhooks,
       worker,
       autoFetch,
       ping: () => pingSqlite(handle.db),

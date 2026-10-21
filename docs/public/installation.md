@@ -104,3 +104,10 @@ docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 ```
 
 The locally built image is tagged `stack-manager:local`, so it can't be mistaken for a release.
+
+## Optional Git push webhooks
+
+Repository Overview → **Git webhooks** accepts signed GitHub, Gitea and Forgejo push deliveries.
+Configure a separate encrypted signing secret and POST JSON webhook in the forge. Verified pushes
+queue a source fetch; they do not deploy stacks or verify container health. Polling remains available.
+See [Git push webhooks](GIT_WEBHOOKS.md) for HTTPS, proxy, signature, rotation and recovery instructions.

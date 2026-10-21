@@ -1,8 +1,8 @@
 /**
  * GitProvider capability interface (docs/internal/providers/GIT_PROVIDER.md).
  *
- * Connection, source reads and isolated commit/push operations. Webhook
- * verification/parsing (PR #5) extend this interface later; `capabilities` advertises optional
+ * Connection, source reads and isolated commit/push operations. Native webhook
+ * verification/parsing lives in webhooks.ts; `capabilities` advertises optional
  * forge features so core code never branches on a specific forge name.
  */
 
