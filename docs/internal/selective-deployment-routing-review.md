@@ -34,13 +34,17 @@ and published review records were inspected. No competing routing PR was open at
 ## Validation
 
 - Frozen dependency install with ignored scripts and approved native rebuild completed; no dependency change.
-- `pnpm check`: format/lint/typecheck and 654 tests passed before the final branch-completion fence; updated
-  targeted/full evidence will be recorded below after final verification.
+- Final `pnpm check`: format/lint/typecheck and 654 tests passed, including the branch-completion fence.
+- Targeted Git/workflow/jobs/SQLite routing regressions: 79 passed.
 - Migration generation reports no schema changes after migration 0010.
-- Focused desktop/mobile deployment Playwright and axe: four checks passed on the initial UI implementation.
-- Full production build/browser run, final CI, Kody business review and SonarCloud disposition: pending.
-- Rootless Docker is configured. Local image rebuild is constrained by about 255 MB free on the host filesystem;
-  no host/network security settings were changed. Fresh remote Docker/container security checks are required.
+- Production build and full Playwright/axe run against the public sample repository passed: 43 passed,
+  13 intentional skips (duplicate viewport/shared mutations and separate worker-disabled/server scenarios).
+  [Desktop screenshot](screenshots/issue-55-desktop.png) and [mobile screenshot](screenshots/issue-55-mobile.png).
+- CI on implementation commit `a334bbe` passed tests, migration drift, build and production smoke; remaining
+  CI/security jobs and Kody/SonarCloud disposition are pending. CodeQL's external PR analysis reported no new alerts.
+- Rootless Docker is configured. Low host disk space prevents a fresh local image build. CI now runs the
+  production smoke script, restarts the container and verifies persisted workspace data and routing migration.
+  Its execution result is pending; no host/network security settings were changed.
 
 ## Operator acceptance and residual risk
 

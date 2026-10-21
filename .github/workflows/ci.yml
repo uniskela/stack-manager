@@ -91,9 +91,24 @@ jobs:
           docker run -d --name sm --read-only --tmpfs /tmp --cap-drop ALL \
             -e STACK_MANAGER_ENCRYPTION_KEY="$(openssl rand -base64 32)" \
             -e STACK_MANAGER_SESSION_SECRET="$(openssl rand -base64 48)" \
-            -v sm-data:/data -p 3000:3000 stack-manager:ci
+            -e STACK_MANAGER_COOKIE_SECURE=false \
+            -v sm-data:/data -p 127.0.0.1:3000:3000 stack-manager:ci
           for _ in $(seq 1 30); do [ "$(docker inspect -f '{{.State.Health.Status}}' sm)" = healthy ] && break; sleep 2; done
           docker inspect -f '{{.State.Health.Status}}' sm | grep -q healthy || (docker logs sm; exit 1)
+      - name: Production smoke and persistent database survive restart
+        run: |
+          BASE_URL=http://127.0.0.1:3000 scripts/smoke.sh
+          docker restart --timeout 10 sm
+          for _ in $(seq 1 30); do [ "$(docker inspect -f '{{.State.Health.Status}}' sm)" = healthy ] && break; sleep 2; done
+          docker inspect -f '{{.State.Health.Status}}' sm | grep -q healthy || (docker logs sm; exit 1)
+          docker exec sm node -e '
+            const db = require("better-sqlite3")("/data/stack-manager.sqlite", { readonly: true });
+            if (db.prepare("SELECT count(*) AS n FROM workspaces WHERE slug = ?").get("smoke").n !== 1)
+              throw new Error("Workspace was not preserved across restart");
+            if (!db.prepare("SELECT name FROM sqlite_master WHERE type = ? AND name = ?").get("table", "deployment_routing_decisions"))
+              throw new Error("Routing migration missing after restart");
+            db.close();
+          '
       - name: Refuses to start without an encryption key
         run: |
           if docker run --rm -e STACK_MANAGER_SESSION_SECRET="$(openssl rand -base64 48)" stack-manager:ci; then
