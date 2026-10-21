@@ -36,6 +36,23 @@ known acceptance never causes a resend. Atomic queue/attempt insert and an activ
 requests per stack. A new deliberate operator action is required after uncertainty. HTTP acceptance
 never means deployment completion, running containers or health.
 
+## BREAKING CHANGE: planned deployment retry contract
+
+The former ADR plan retried an attempt with persisted send intent but no recorded acceptance using
+its existing idempotency key. #54 replaces that planned behavior: such an uncertain attempt becomes
+**unknown** and is never resent automatically. Known HTTP acceptance is also never resent; an unsent
+queued attempt can still make its first request.
+
+This affects integrations built against the earlier deployment-trigger plan for Portainer and generic
+webhooks. #54 introduces the first shipped implementation, so existing released deployment consumers
+do not need migration. Repository synchronization retries are unchanged.
+
+To adapt an integration or retry safely, inspect the attempt history and the destination's own records
+first. If another request is appropriate, use **Deploy now** and confirm it deliberately; this creates
+a new attempt. Do not infer failure from a timeout or clear recorded intent to force an automatic resend.
+For Portainer, inspect the stack or receiver before retrying because webhook acceptance does not
+verify deployment completion or container health.
+
 ## Independent review dispositions
 
 - Fixed: DNS failures prevented disabling an unchanged binding. Disabled settings now retain credential
@@ -136,3 +153,8 @@ Final focused desktop/mobile deployment+axe run: 4/4 passed, screenshots refresh
 configuration only. Final production build and 32 service regressions pass after the small readability
 and status-layout changes. All maintained PR checks at b8f661a pass; final documentation/layout head
 is rechecked by CI. No merge, release, image publication or production deployment was performed.
+
+Follow-up Kody audit finding: destination validation now records `deployment.destination_validated`
+with safe status metadata and success/failure outcome. Configuration updates retain their own action.
+Regression coverage checks both validation outcomes, unchanged binding revision, no misleading
+binding-update event, and absence of the secret URL in audit records.

@@ -76,9 +76,10 @@ Rules:
 5. Adapters SHOULD send the key to the remote when supported (e.g. `Idempotency-Key` header on generic webhooks). Portainer stack webhooks may ignore headers; acceptance recording still prevents blind double-fire after known acceptance.
 6. For #54, every uncertain pre-acceptance crash is conservative: require a new deliberate operator confirmation before another attempt. A persisted per-stack guard prevents a second active attempt while the prior job still owns its lease. Known acceptance never causes another outbound request.
 
-## Compatibility clarification for #54
+## BREAKING CHANGE: planned deployment retry contract
 
-The intent-without-acceptance retry described in the earlier ADR was a planned contract, not a shipped
+The earlier plan retried intent-without-acceptance under the same idempotency key. The new contract
+records unknown and never resends automatically. This is a change to a planned contract, not a shipped
 deployment-trigger implementation. #54 introduces the first deployment consumers: Portainer webhook
 and generic webhook bindings. Both require a new manual confirmation after an unknown outcome;
 there are no existing deployment consumers to migrate. Integrations built against the earlier plan

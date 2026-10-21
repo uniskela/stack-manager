@@ -104,7 +104,8 @@ export class DeploymentService {
       { at: this.clock.now(), status, message },
     );
     await this.audit.record({
-      action: 'deployment.binding_updated',
+      action: 'deployment.destination_validated',
+      outcome: status === 'ok' ? 'success' : 'failure',
       actorUserId,
       workspaceId,
       entityType: 'stack',

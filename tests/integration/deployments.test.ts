@@ -516,7 +516,7 @@ describe('per-stack deployment bindings', () => {
   it.each(['ok', 'failed'] as const)(
     'records safe non-sending destination validation: %s',
     async (status) => {
-      await configure({ enabled: false });
+      const binding = (await configure({ enabled: false })).binding!;
       const validateDestination = vi.fn(async () => {
         if (status === 'failed') throw new Error(URL);
       });
@@ -548,6 +548,19 @@ describe('per-stack deployment bindings', () => {
       expect(trigger).not.toHaveBeenCalled();
       expect(validateDestination).toHaveBeenCalledTimes(1);
       expect((await service.settings(workspaceId, stackId)).binding?.lastTestStatus).toBe(status);
+      expect(result.binding?.revision).toBe(binding.revision);
+      const events = await h.container.audit.list({ workspaceId, limit: 100 });
+      expect(events.filter((event) => event.action === 'deployment.destination_validated')).toEqual([
+        expect.objectContaining({
+          outcome: status === 'ok' ? 'success' : 'failure',
+          actorUserId: actor,
+          entityType: 'stack',
+          entityId: stackId,
+          meta: { destinationValidation: status },
+        }),
+      ]);
+      expect(events.some((event) => event.action === 'deployment.binding_updated')).toBe(false);
+      expect(JSON.stringify(events)).not.toContain(URL);
     },
   );
   it.each(['rotation', 'removal', 'binding-update'] as const)(

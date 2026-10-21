@@ -1,6 +1,7 @@
 export type AuditAction =
   | 'deployment.binding_created'
   | 'deployment.binding_updated'
+  | 'deployment.destination_validated'
   | 'deployment.binding_disabled'
   | 'deployment.binding_removed'
   | 'deployment.secret_rotated'
