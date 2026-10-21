@@ -99,6 +99,13 @@ export interface GitRepositoryConnectionRepository {
       >
     > & { updatedAt: Date },
   ): Promise<void>;
+  /** Compare-and-swap protects signing configuration against concurrent saves/disables. */
+  setWebhookCredential(
+    id: string,
+    expectedId: string | null,
+    nextId: string | null,
+    updatedAt: Date,
+  ): Promise<boolean>;
   delete(id: string): Promise<void>;
 }
 

@@ -111,7 +111,10 @@ fingerprints are retained until repository removal; monitor database size for bu
 
 Enter a new independently generated secret, choose **Rotate signing secret…**, and confirm. The old
 secret stops working immediately, including verification in progress. Update the forge to the new
-secret and redeliver any rejected pushes. There is no grace period. **Disable webhook…** unlinks the
+secret and redeliver any rejected pushes. There is no grace period. Concurrent first-time saves or
+credential relinks return 409 when the link changed; reload before retrying. Concurrent rotations of
+the same existing credential follow the credential API’s last-write-wins behavior: only the last
+committed secret works. Coordinate rotation with the forge configuration. **Disable webhook…** unlinks the
 credential and rejects future deliveries immediately; disable/remove the hook in the forge too.
 Already queued fetches continue. Unlinked credentials remain encrypted and can be deleted from the
 credential API; linked credentials are protected against deletion. Re-enabling requires saving or

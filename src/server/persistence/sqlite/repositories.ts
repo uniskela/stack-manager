@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gt, inArray, lt, lte, ne, notInArray, or } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, inArray, isNull, lt, lte, ne, notInArray, or } from 'drizzle-orm';
 import type {
   AuditRepository,
   CredentialRepository,
@@ -302,6 +302,23 @@ class SqliteGitRepositoryConnectionRepository implements GitRepositoryConnection
 
   async update(id: string, patch: Parameters<GitRepositoryConnectionRepository['update']>[1]) {
     this.db.update(gitRepositoryConnections).set(patch).where(eq(gitRepositoryConnections.id, id)).run();
+  }
+
+  async setWebhookCredential(id: string, expectedId: string | null, nextId: string | null, updatedAt: Date) {
+    return (
+      this.db
+        .update(gitRepositoryConnections)
+        .set({ webhookCredentialId: nextId, updatedAt })
+        .where(
+          and(
+            eq(gitRepositoryConnections.id, id),
+            expectedId === null
+              ? isNull(gitRepositoryConnections.webhookCredentialId)
+              : eq(gitRepositoryConnections.webhookCredentialId, expectedId),
+          ),
+        )
+        .run().changes === 1
+    );
   }
 
   async delete(id: string) {

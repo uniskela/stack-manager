@@ -616,3 +616,25 @@ describe('public webhook request throttling', () => {
     expect((await deliver({ headers: { 'x-forwarded-for': '203.0.113.9' } })).status).toBe(202);
   });
 });
+
+describe('concurrent signing configuration', () => {
+  it('accepts one first-time save across SQLite connections without orphaning the loser', async () => {
+    const second = await createHarness({ dataDir: h.dataDir, config: h.config });
+    try {
+      setContainer(h.container);
+      const first = configure();
+      setContainer(second.container);
+      const other = configure(ROTATED);
+      const results = await Promise.all([first, other]);
+      expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
+      expect(rows('provider_credentials')).toHaveLength(1);
+      const winner = results[0].status === 200 ? SECRET : ROTATED;
+      const loser = winner === SECRET ? ROTATED : SECRET;
+      expect((await deliver({ secret: winner })).status).toBe(202);
+      expect((await deliver({ secret: loser })).status).toBe(401);
+    } finally {
+      await second.cleanup();
+      setContainer(h.container);
+    }
+  });
+});

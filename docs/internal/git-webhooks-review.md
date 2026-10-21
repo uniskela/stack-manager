@@ -139,3 +139,25 @@ Independent follow-up review identified attacker-controlled repository fallback 
 now has one fixed webhook key: random URL IDs cannot bypass it or allocate limiter entries. Trusted
 IP quotas still use the existing sanitized proxy policy. This intentionally bounds all unattributed
 webhook traffic together; configure the trusted proxy correctly to isolate real client quotas.
+
+
+Kody business-logic [re-review](https://github.com/uniskela/stack-manager/pull/64#issuecomment-6306425989)
+reports **Compliant**, high confidence, with no requirement gaps. Kody separately confirmed the ingress
+throttle finding addressed in [its inline reply](https://github.com/uniskela/stack-manager/pull/64#discussion_r4332381596).
+
+Additional inline findings: concurrent first-time saves could orphan a credential, and a browser assertion
+failure could skip settings cleanup. A failing two-connection regression reproduced the save race.
+Configuration now compare-and-swaps the expected credential link; a losing first-time save removes
+its newly created credential and returns 409. Disable uses the same link fence. The browser test
+uses finally cleanup; integration tests already clean their isolated harness in afterEach.
+
+The full pre-CAS check passed 486 tests. Two subsequent local reruns hit host ENOSPC (Docker image
+build and browser artifact creation). Only this task's identified BuildKit records and failed browser
+artifacts were reclaimed; no unrelated images, volumes, caches or host settings were changed.
+Final rerun results and CI dispositions are recorded in PR #64 and the issue status comments.
+
+Independent review confirmed first-time/relink fencing and browser cleanup. Concurrent rotations of
+the same credential retain the existing credential API’s last-write-wins semantics (now explicit in
+the operator guide); each replacement immediately supersedes earlier secrets, and the incoming
+delivery nonce fence still rejects verification using superseded material. No rotation grace period
+or multi-operator credential-version protocol is introduced.

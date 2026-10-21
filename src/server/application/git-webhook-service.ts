@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { Clock } from '@/server/domain/clock';
 import {
   AuthenticationError,
+  ConflictError,
   NotFoundError,
   RateLimitedError,
   ValidationError,
@@ -88,7 +89,19 @@ export class GitWebhookService {
     } else {
       throw new ValidationError('Choose a signing credential or supply a signing secret.');
     }
-    await this.repositories.update(repositoryId, { webhookCredentialId: id, updatedAt: this.clock.now() });
+    if (
+      !(await this.repositories.setWebhookCredential(
+        repositoryId,
+        conn.webhookCredentialId,
+        id,
+        this.clock.now(),
+      ))
+    ) {
+      if (!conn.webhookCredentialId && !input.credentialId) {
+        await this.credentials.delete(workspaceId, id, actor);
+      }
+      throw new ConflictError('Webhook settings changed; reload and try again.');
+    }
     await this.audit.record({
       action: 'repository.update',
       actorUserId: actor,
@@ -101,8 +114,17 @@ export class GitWebhookService {
   }
 
   async disable(workspaceId: string, repositoryId: string, actor: string) {
-    await this.#connection(workspaceId, repositoryId);
-    await this.repositories.update(repositoryId, { webhookCredentialId: null, updatedAt: this.clock.now() });
+    const conn = await this.#connection(workspaceId, repositoryId);
+    if (
+      !(await this.repositories.setWebhookCredential(
+        repositoryId,
+        conn.webhookCredentialId,
+        null,
+        this.clock.now(),
+      ))
+    ) {
+      throw new ConflictError('Webhook settings changed; reload and try again.');
+    }
     await this.audit.record({
       action: 'repository.update',
       actorUserId: actor,
