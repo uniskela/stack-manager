@@ -36,7 +36,7 @@ Use each forge's native hook type. Compatibility headers do not substitute for n
 All three verify HMAC-SHA256 over the unchanged request bytes with a constant-time comparison before
 JSON parsing. SHA-1, absent/empty signatures, alternate encodings and unsupported formats fail closed.
 The contract follows GitHub's current documentation, Gitea's documented native SHA-256 contract
-(including 1.24), and Forgejo's current documented native contract. Older Forgejo installations that
+(including 1.24), and Forgejo's current documented native contract (also confirmed in 11.0.0). Older Forgejo installations that
 lack `X-Forgejo-*` headers must be upgraded; there is no Gitea-header fallback.
 Provider-format fixtures and adapter tests validate these contracts; a live delivery from the
 operator's exact forge version remains an installation check.

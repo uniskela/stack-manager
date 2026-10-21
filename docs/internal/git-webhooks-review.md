@@ -95,3 +95,14 @@ notes, not security findings; their external issue statuses are not changed by t
 Local Gitleaks v8.30.1 scanned all 148 reachable commits without leaks after the exact fixture exception.
 Temporary control repositories verified the exact test value/path is allowed, the same value in a different
 path is detected, and a different value in that test file is detected. The default rules remain enabled.
+
+The first follow-up CI scan still flagged the synthetic fixture: the pinned action defaults to Gitleaks
+**8.24.3**, which predates `[[allowlists]]` (introduced in 8.25). CI now explicitly selects **8.30.1**,
+the locally validated version. This makes the existing narrowly scoped redaction-fixture configuration
+and the new exact HMAC fixture exception effective without broadening any path/value exception.
+The action SHA, default rules and read-only workflow permissions are unchanged.
+
+Provider version corroboration: Forgejo **v11.0.0** `services/webhook/shared/payloader.go`
+(`AddDefaultHeaders`) independently confirms bare hex SHA-256 in `X-Forgejo-Signature` plus native
+`X-Forgejo-Event` / `X-Forgejo-Delivery`; Gitea **v1.24.0** `services/webhook/deliver.go` confirms
+its distinct native contract. Current official docs and fixtures are linked in the user guide.

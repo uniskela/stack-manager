@@ -9,4 +9,5 @@ Published payload examples, retained with their provider-specific fields. Only `
 
 Header behavior is independently checked against the official current docs through Context7.
 Gitea v1.24.0 `services/webhook/deliver.go` also confirms native bare SHA-256 and compatibility
-headers. These are deterministic contract fixtures, not a claim of live provider testing.
+headers. Forgejo v11.0.0 `services/webhook/shared/payloader.go` confirms its own native
+headers and bare SHA-256 digest. These are deterministic contract fixtures, not a claim of live provider testing.
