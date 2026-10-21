@@ -46,9 +46,10 @@ export class CredentialService {
     private readonly clock: Clock,
     private readonly newId: () => string,
     private readonly isSupportedProvider: ProviderTypeCheck,
+    private readonly validateDeploymentSecret?: (providerType: string, secret: string) => Promise<string>,
   ) {}
 
-  async create(input: CreateCredentialInput, actorUserId: string): Promise<CredentialView> {
+  async prepare(input: CreateCredentialInput, actorUserId: string): Promise<CredentialRecord> {
     if (!CREDENTIAL_KINDS.includes(input.kind)) {
       throw new ValidationError('Invalid credential kind.', { kind: 'Unknown kind.' });
     }
@@ -58,8 +59,15 @@ export class CredentialService {
       });
     }
     const label = validateLabel(input.label);
-    const secret =
+    let secret =
       input.kind === 'git_webhook' ? validateWebhookSecret(input.secret) : validateSecretValue(input.secret);
+    if (input.kind === 'deployment') {
+      if (!this.validateDeploymentSecret)
+        throw new ValidationError('Deployment credentials are unavailable.');
+      secret = await this.validateDeploymentSecret(input.providerType, secret);
+      if (Object.keys(input.meta ?? {}).length)
+        throw new ValidationError('Deployment credentials do not support metadata.');
+    }
     const meta = validateSecretMeta(input.meta);
     const id = this.newId();
     const now = this.clock.now();
@@ -73,7 +81,7 @@ export class CredentialService {
       secretCiphertext: encrypted.ciphertext,
       secretNonce: encrypted.nonce,
       secretKeyVersion: encrypted.keyVersion,
-      secretHint: input.kind === 'git_webhook' ? '••••' : maskSecret(secret),
+      secretHint: ['git_webhook', 'deployment'].includes(input.kind) ? '••••' : maskSecret(secret),
       secretMeta: meta,
       lastTestedAt: null,
       lastTestStatus: null,
@@ -82,15 +90,19 @@ export class CredentialService {
       createdAt: now,
       updatedAt: now,
     };
+    return record;
+  }
+
+  async create(input: CreateCredentialInput, actorUserId: string): Promise<CredentialView> {
+    const record = await this.prepare(input, actorUserId);
     await this.repo.insert(record);
     await this.audit.record({
       action: 'credential.create',
       actorUserId,
       workspaceId: input.workspaceId,
       entityType: 'credential',
-      entityId: id,
-      meta: { kind: input.kind, providerType: input.providerType, label },
-      knownSecrets: [secret],
+      entityId: record.id,
+      meta: { kind: input.kind, providerType: input.providerType },
     });
     return toCredentialView(record);
   }
@@ -110,6 +122,8 @@ export class CredentialService {
     actorUserId: string,
   ): Promise<CredentialView> {
     const existing = await this.#find(workspaceId, id);
+    if (existing.kind === 'deployment' && input.meta !== undefined)
+      throw new ValidationError('Deployment credentials do not support metadata.');
     const label = input.label === undefined ? undefined : validateLabel(input.label);
     const secretMeta = input.meta === undefined ? undefined : validateSecretMeta(input.meta);
     const updatedAt = this.clock.now();
@@ -133,14 +147,19 @@ export class CredentialService {
     actorUserId: string,
   ): Promise<CredentialView> {
     const existing = await this.#find(workspaceId, id);
-    const secret =
+    let secret =
       existing.kind === 'git_webhook' ? validateWebhookSecret(secretInput) : validateSecretValue(secretInput);
+    if (existing.kind === 'deployment') {
+      if (!this.validateDeploymentSecret)
+        throw new ValidationError('Deployment credentials are unavailable.');
+      secret = await this.validateDeploymentSecret(existing.providerType, secret);
+    }
     const encrypted = this.box.encrypt(secret, credentialAad(workspaceId, id));
     await this.repo.updateSecret(id, {
       secretCiphertext: encrypted.ciphertext,
       secretNonce: encrypted.nonce,
       secretKeyVersion: encrypted.keyVersion,
-      secretHint: existing.kind === 'git_webhook' ? '••••' : maskSecret(secret),
+      secretHint: ['git_webhook', 'deployment'].includes(existing.kind) ? '••••' : maskSecret(secret),
       updatedAt: this.clock.now(),
     });
     await this.audit.record({
@@ -157,7 +176,10 @@ export class CredentialService {
   async delete(workspaceId: string, id: string, actorUserId: string): Promise<void> {
     await this.#find(workspaceId, id);
     if ((await this.repo.countReferences(id)) > 0) {
-      throw new ConflictError('Credential is in use by a repository connection.', 'credential_in_use');
+      throw new ConflictError(
+        'Credential is in use by a repository connection or deployment binding.',
+        'credential_in_use',
+      );
     }
     await this.repo.delete(id);
     await this.audit.record({
@@ -177,10 +199,15 @@ export class CredentialService {
     workspaceId: string,
     id: string,
     fn: (secret: string, credential: CredentialView) => T | Promise<T>,
-    expected?: { kind: CredentialKind; providerType: string },
+    expected?: { kind: CredentialKind; providerType: string; nonce?: string },
   ): Promise<T> {
     const record = await this.#find(workspaceId, id);
-    if (expected && (record.kind !== expected.kind || record.providerType !== expected.providerType)) {
+    if (
+      expected &&
+      (record.kind !== expected.kind ||
+        record.providerType !== expected.providerType ||
+        (expected.nonce !== undefined && record.secretNonce !== expected.nonce))
+    ) {
       throw new ValidationError('Credential kind or provider does not match this operation.');
     }
     const secret = this.box.decrypt(

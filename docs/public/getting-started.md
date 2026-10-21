@@ -161,3 +161,13 @@ Repository Overview → **Git webhooks** accepts signed GitHub, Gitea and Forgej
 Configure a separate encrypted signing secret and POST JSON webhook in the forge. Verified pushes
 queue a source fetch; they do not deploy stacks or verify container health. Polling remains available.
 See [Git push webhooks](GIT_WEBHOOKS.md) for HTTPS, proxy, signature, rotation and recovery instructions.
+
+## Optional manual deployment webhooks
+
+Open an explicitly registered stack’s **Deployment** tab to save a Portainer or generic HTTPS webhook.
+The complete URL and optional bearer token are encrypted and masked after saving. **Deploy now** requires
+a deliberate confirmation and records queued, running, accepted, rejected or unknown outcomes. Acceptance
+is not container health. Automatic deployment remains off; Git pushes and fetches do not deploy.
+Private homelab destinations require the existing operator network opt-in; TLS verification stays enabled.
+See [Deployment webhooks](DEPLOYMENT_WEBHOOKS.md) for setup, request contracts, rotation, uncertainty,
+network security, migrations, backups and rollback.

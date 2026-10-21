@@ -29,6 +29,8 @@ describe('migrations', () => {
       .map((r) => (r as { name: string }).name);
     expect(tables).toEqual([
       'audit_events',
+      'deployment_attempts',
+      'deployment_bindings',
       'git_repository_connections',
       'git_webhook_deliveries',
       'jobs',
@@ -66,6 +68,36 @@ describe('migrations', () => {
     handle.close();
   });
 
+  it('upgrades the existing 0008 schema without modifying earlier migrations', () => {
+    const file = tmpDb();
+    const folder = path.join(path.dirname(file), 'migration-0008');
+    fs.mkdirSync(path.join(folder, 'meta'), { recursive: true });
+    const journal = JSON.parse(fs.readFileSync('drizzle/meta/_journal.json', 'utf8'));
+    journal.entries = journal.entries.filter((e: { idx: number }) => e.idx <= 8);
+    fs.writeFileSync(path.join(folder, 'meta/_journal.json'), JSON.stringify(journal));
+    for (const { tag } of journal.entries)
+      fs.copyFileSync(`drizzle/${tag}.sql`, path.join(folder, `${tag}.sql`));
+    const old = openSqlite(file);
+    try {
+      runMigrations(old.db, folder);
+      old.db.$client.exec("INSERT INTO workspaces VALUES ('retained','Home','home',1000,2000)");
+    } finally {
+      old.close();
+    }
+    const upgraded = openSqlite(file);
+    try {
+      runMigrations(upgraded.db);
+      expect(upgraded.db.$client.prepare('SELECT id FROM workspaces').get()).toEqual({ id: 'retained' });
+      expect(upgraded.db.$client.prepare('SELECT COUNT(*) AS n FROM deployment_bindings').get()).toEqual({
+        n: 0,
+      });
+      expect(upgraded.db.$client.prepare('SELECT COUNT(*) AS n FROM deployment_attempts').get()).toEqual({
+        n: 0,
+      });
+    } finally {
+      upgraded.close();
+    }
+  });
   it('upgrades a populated PR #59 database without changing history and survives reopening', async () => {
     const file = tmpDb();
     const previous = path.join(path.dirname(file), 'previous-migrations');

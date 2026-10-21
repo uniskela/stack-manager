@@ -98,3 +98,18 @@ Assume: operator places stack-manager on a trusted homelab network behind auth a
 ## Incident expectations
 
 If a Portainer token with excess privileges is configured, the **application** must still refuse to expose destructive actions. Compromised tokens remain a Portainer-side risk — document rotation steps.
+
+## Outbound deployment webhooks
+
+Deployment bindings store the entire webhook URL and optional bearer token in the existing encrypted
+credential store. Portainer URLs are credentials, including their path and query. Deployment settings
+return a fixed mask; attempt history and jobs contain identifiers and safe outcome information only.
+
+Both providers require HTTPS and valid TLS hostname verification. DNS results pass the existing network
+policy and connections pin a validated address. Redirects are never followed. Private homelab addresses
+require `STACK_MANAGER_ALLOW_PRIVATE_NETWORKS=true`; loopback, link-local and metadata endpoints
+remain forbidden. This opt-in expands the trust boundary for all configured operators and endpoints.
+
+Authenticated same-origin manual confirmation queues a durable per-stack attempt. Intent is recorded
+before sending. A timeout or interrupted send is an unknown outcome and is never automatically retried.
+HTTP acceptance does not establish runtime health. See [Deployment webhooks](DEPLOYMENT_WEBHOOKS.md).

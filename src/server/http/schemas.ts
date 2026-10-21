@@ -68,3 +68,25 @@ export const GitCommitSchema = z
 
 const objectId = z.string().regex(/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/);
 export const GitPushSchema = z.object({ commitSha: objectId, expectedRemoteSha: objectId }).strict();
+
+export const DeploymentBindingSchema = z
+  .object({
+    providerType: z.enum(['portainer-webhook', 'generic-webhook']),
+    enabled: z.boolean(),
+    deployOnPush: z.literal(false).optional(),
+    expectedRevision: z.string().min(1).max(128).nullable(),
+    configuration: z
+      .object({ url: z.string().min(1).max(4096), bearerToken: z.string().min(1).max(16384).optional() })
+      .strict()
+      .optional(),
+    credentialId: z.string().min(1).max(64).optional(),
+  })
+  .strict()
+  .refine(
+    (input) => !(input.configuration && input.credentialId),
+    'Supply configuration or a credential, not both.',
+  )
+  .refine(
+    (input) => input.providerType !== 'portainer-webhook' || !input.configuration?.bearerToken,
+    'Portainer uses its webhook URL for authentication.',
+  );

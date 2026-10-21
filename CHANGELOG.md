@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### BREAKING CHANGE: planned deployment provider result contract
+
+The per-stack webhook provider API introduced by #54 permits `httpStatus: null` on a rejected result
+when a local failure prevents sending. Integrations built against the earlier numeric-only plan must
+check for null before processing HTTP codes and distinguish local rejection from an HTTP refusal.
+Accepted results retain numeric HTTP statuses. No released deployment provider is affected because
+#54 is the first implementation; this note documents compatibility for integrations based on the plan.
+
 ## [0.5.0](https://github.com/uniskela/stack-manager/compare/v0.4.0...v0.5.0) (2026-10-07)
 
 

@@ -251,3 +251,63 @@ export const gitWebhookDeliveries = sqliteTable(
     index('git_webhook_received_idx').on(t.repositoryId, t.receivedAt),
   ],
 );
+
+export const deploymentBindings = sqliteTable(
+  'deployment_bindings',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    stackId: text('stack_id')
+      .notNull()
+      .references(() => stacks.id, { onDelete: 'cascade' }),
+    providerType: text('provider_type', { enum: ['portainer-webhook', 'generic-webhook'] }).notNull(),
+    credentialId: text('credential_id')
+      .notNull()
+      .references(() => providerCredentials.id, { onDelete: 'restrict' }),
+    managedCredential: integer('managed_credential', { mode: 'boolean' }).notNull().default(false),
+    enabled: integer('enabled', { mode: 'boolean' }).notNull(),
+    deployOnPush: integer('deploy_on_push', { mode: 'boolean' }).notNull().default(false),
+    revision: text('revision').notNull(),
+    lastAttemptAt: ts('last_attempt_at'),
+    lastAcceptedAt: ts('last_accepted_at'),
+    lastFailedAt: ts('last_failed_at'),
+    createdAt: ts('created_at').notNull(),
+    updatedAt: ts('updated_at').notNull(),
+  },
+  (t) => [uniqueIndex('deployment_binding_stack_uq').on(t.stackId)],
+);
+
+export const deploymentAttempts = sqliteTable(
+  'deployment_attempts',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    stackId: text('stack_id')
+      .notNull()
+      .references(() => stacks.id, { onDelete: 'cascade' }),
+    bindingId: text('binding_id').notNull(),
+    providerType: text('provider_type', { enum: ['portainer-webhook', 'generic-webhook'] }).notNull(),
+    actorUserId: text('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
+    triggerType: text('trigger_type', { enum: ['manual'] }).notNull(),
+    requestedAt: ts('requested_at').notNull(),
+    status: text('status', { enum: ['queued', 'running', 'accepted', 'rejected', 'unknown'] }).notNull(),
+    httpStatus: integer('http_status'),
+    reason: text('reason'),
+    completedAt: ts('completed_at'),
+    bindingRevision: text('binding_revision').notNull(),
+    credentialNonce: text('credential_nonce').notNull(),
+    jobId: text('job_id')
+      .notNull()
+      .references(() => jobs.id, { onDelete: 'restrict' }),
+  },
+  (t) => [
+    index('deployment_attempt_history_idx').on(t.stackId, t.requestedAt),
+    uniqueIndex('deployment_attempt_active_uq')
+      .on(t.stackId)
+      .where(sql`${t.status} IN ('queued','running')`),
+  ],
+);

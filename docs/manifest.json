@@ -42,6 +42,13 @@
       "kind": "doc"
     },
     {
+      "source": "docs/public/DEPLOYMENT_WEBHOOKS.md",
+      "slug": "deployment-webhooks",
+      "title": "Deployment webhooks",
+      "group": "Start here",
+      "kind": "doc"
+    },
+    {
       "source": "docs/public/SELF_HOSTING.md",
       "slug": "self-hosting",
       "title": "Self-hosting reference",
