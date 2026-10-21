@@ -1,37 +1,40 @@
-import { FolderGit2, Layers, Settings } from 'lucide-react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { getContainer } from '@/server/container';
+import { loadDashboardDraftCounts } from '@/server/application/dashboard-draft-counts';
+import { safeErrorMessage } from '@/server/security/redact';
+import {
+  DASHBOARD_ROUTINE_ACTIONS,
+  dashboardRecentActivity,
+  dashboardSyncSummary,
+  dashboardWork,
+} from '@/shared/dashboard/overview';
 import { auditActionLabel } from '@/shared/audit/labels';
 import { auditEntityHref } from '@/shared/audit/links';
+import { DashboardFetchAction } from '@/ui/dashboard-fetch-action';
 import { LocalTime } from '@/ui/local-time';
 import { ButtonLink } from '@/ui/primitives/button';
 import { EmptyState } from '@/ui/primitives/empty-state';
 import { PageHeader } from '@/ui/primitives/page-header';
 import { SectionTitle } from '@/ui/primitives/section';
-import { TableWrap } from '@/ui/primitives/table-wrap';
+import { FolderGit2 } from 'lucide-react';
 
 export const metadata: Metadata = { title: 'Dashboard' };
-
-type SyncStatus = 'pending' | 'syncing' | 'ready' | 'error';
-
-function syncBreakdown(repositories: { syncStatus: SyncStatus }[]) {
-  const counts: Record<SyncStatus, number> = { ready: 0, syncing: 0, error: 0, pending: 0 };
-  for (const r of repositories) counts[r.syncStatus]++;
-  return counts;
-}
 
 export default async function DashboardPage({ params }: { params: Promise<{ workspaceId: string }> }) {
   const { workspaceId } = await params;
   const container = getContainer();
-  const connectHref = `/w/${workspaceId}/repositories/new`;
   const base = `/w/${workspaceId}`;
 
   const [workspace, repositories, stackList, events, outdatedDrafts] = await Promise.all([
     container.workspaces.get(workspaceId),
     container.repositories.list(workspaceId),
     container.stacks.list(workspaceId),
-    container.audit.list({ workspaceId, limit: 8 }),
+    container.audit.list({
+      workspaceId,
+      limit: 5,
+      excludeSuccessfulActions: DASHBOARD_ROUTINE_ACTIONS,
+    }),
     container.source.listOutdatedDraftSummaries(workspaceId),
   ]);
 
@@ -42,7 +45,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ work
         headingLevel={1}
         title="Connect your Compose repository"
         actions={
-          <ButtonLink variant="primary" href={connectHref}>
+          <ButtonLink variant="primary" href={`${base}/repositories/new`}>
             Connect repository
           </ButtonLink>
         }
@@ -53,138 +56,180 @@ export default async function DashboardPage({ params }: { params: Promise<{ work
     );
   }
 
-  // Stack-scoped counts drive attention rows; repo-wide totals include drafts outside any stack.
-  const [draftCounts, openDrafts] = await Promise.all([
-    Promise.all(
-      stackList.map((s) =>
-        s.repository.headSha ? container.source.countDrafts(s.repository.id, s.rootPath) : Promise.resolve(0),
-      ),
-    ),
-    Promise.all(
-      repositories.map((r) => (r.headSha ? container.source.countDrafts(r.id, '') : Promise.resolve(0))),
-    ).then((counts) => counts.reduce((n, c) => n + c, 0)),
-  ]);
-  const stacksWithDrafts = stackList.filter((_, i) => (draftCounts[i] ?? 0) > 0);
-  const sync = syncBreakdown(repositories);
-  const errorRepos = repositories.filter((r) => r.syncStatus === 'error');
+  // Source draft counting is best-effort. Failed counts never masquerade as complete totals.
+  const {
+    stackCounts: draftCounts,
+    openDrafts,
+    failedCounts,
+  } = await loadDashboardDraftCounts(
+    stackList,
+    repositories,
+    (repositoryIds) => container.source.listDraftPaths(repositoryIds),
+    ({ scope, repositoryId, error }) =>
+      container.logger.warn('dashboard draft count failed', {
+        scope,
+        repositoryId,
+        error: safeErrorMessage(error),
+      }),
+  );
 
-  type AttentionRow = { key: string; label: string; detail?: string; href: string };
-  const attention: AttentionRow[] = [];
-  for (const repo of errorRepos) {
-    attention.push({
-      key: `sync-${repo.id}`,
-      label: repo.name,
-      detail: repo.lastSyncError ?? 'Fetch failed',
-      href: `${base}/repositories/${repo.id}`,
-    });
-  }
-  for (const stack of stacksWithDrafts) {
-    const i = stackList.indexOf(stack);
-    attention.push({
-      key: `drafts-${stack.id}`,
-      label: stack.name,
-      detail: `${draftCounts[i] ?? 0} open draft${(draftCounts[i] ?? 0) === 1 ? '' : 's'}`,
-      href: `${base}/stacks/${stack.id}`,
-    });
-  }
-  for (const item of outdatedDrafts) {
-    const stack = item.stackId ? stackList.find((s) => s.id === item.stackId) : undefined;
-    attention.push({
-      key: `outdated-${item.repositoryId}-${item.path}`,
-      label: stack?.name ?? item.path,
-      detail: stack ? `Outdated draft · ${item.path}` : 'Outdated draft',
-      href: item.stackId ? `${base}/stacks/${item.stackId}` : `${base}/repositories/${item.repositoryId}`,
-    });
-  }
+  const sync = dashboardSyncSummary(repositories);
+  const work = dashboardWork(repositories, stackList, draftCounts, outdatedDrafts);
+  const activity = dashboardRecentActivity(events);
+  const oneRepository = repositories.length === 1 ? repositories[0] : null;
+  const visibleAttention = work.attention.slice(0, 8);
+  const visibleDrafts = work.draftsInProgress.slice(0, 4);
 
   return (
     <>
-      <PageHeader title={workspace.name} description="Source workspace overview" />
+      <PageHeader
+        title={workspace.name}
+        description="Git source workspace · Sync status, drafts and recent changes"
+        actions={
+          oneRepository ? (
+            <DashboardFetchAction workspaceId={workspaceId} repositoryId={oneRepository.id} />
+          ) : undefined
+        }
+      />
 
-      <div className="card flush dashboard-summary">
-        <p className="dashboard-summary-line">
-          <strong>{repositories.length}</strong> {repositories.length === 1 ? 'repository' : 'repositories'}
-          {' · '}
-          <strong>{stackList.length}</strong> {stackList.length === 1 ? 'stack' : 'stacks'}
-          {' · '}
-          <strong>{openDrafts}</strong> open {openDrafts === 1 ? 'draft' : 'drafts'}
+      <section aria-label="Workspace summary" className="dashboard-overview">
+        <dl className="dashboard-metrics">
+          <div className="dashboard-metric">
+            <dt>Repositories</dt>
+            <dd>{repositories.length}</dd>
+          </div>
+          <div className="dashboard-metric">
+            <dt>Stacks</dt>
+            <dd>{stackList.length}</dd>
+          </div>
+          <div className="dashboard-metric">
+            <dt>Open drafts</dt>
+            <dd>{openDrafts ?? '—'}</dd>
+          </div>
+          <div className="dashboard-metric">
+            <dt>Sync errors</dt>
+            <dd>{sync.error}</dd>
+          </div>
+        </dl>
+        <div className="dashboard-source-status">
+          <span>
+            <strong>Source sync:</strong> {sync.ready} ready · {sync.syncing} syncing · {sync.pending} queued
+            {sync.error ? ` · ${sync.error} failed` : ''}
+          </span>
+          <span>
+            <strong>Latest sync attempt:</strong> <LocalTime iso={sync.latestAttempt} />
+          </span>
+        </div>
+        <p className="fine-print dashboard-source-note">
+          These are Git source states, not container health or deployment status.
         </p>
-        <p className="fine-print dashboard-sync-line">
-          Sync: {sync.ready} ready · {sync.syncing} syncing · {sync.error} error · {sync.pending} pending
-        </p>
-      </div>
+        {failedCounts > 0 ? (
+          <p className="dashboard-count-warning" role="status">
+            Some draft counts could not be loaded. Totals or work-in-progress rows may be incomplete.
+          </p>
+        ) : null}
+      </section>
 
-      <SectionTitle id="dash-attention" title="Needs attention" />
-      {attention.length === 0 ? (
-        <p className="muted">Nothing needs attention.</p>
+      <SectionTitle
+        id="dash-attention"
+        title="Needs attention"
+        aside={`${work.attention.length} ${work.attention.length === 1 ? 'item' : 'items'}`}
+      />
+      {work.attention.length === 0 ? (
+        <p className="muted">No sync failures or outdated drafts need action.</p>
       ) : (
-        <ul className="list" aria-labelledby="dash-attention">
-          {attention.map((row) => (
-            <li key={row.key}>
-              <Link className="list-row stack-on-mobile" href={row.href}>
-                <div className="grow">
-                  <div className="title">{row.label}</div>
-                  {row.detail ? <div className="list-row-sub muted">{row.detail}</div> : null}
-                </div>
-              </Link>
-            </li>
-          ))}
-        </ul>
+        <>
+          <ul className="list dashboard-attention-list" aria-labelledby="dash-attention">
+            {visibleAttention.map((item) => (
+              <li key={item.key}>
+                <Link
+                  className="list-row dashboard-attention-row"
+                  href={`${base}/${item.target.type === 'stack' ? 'stacks' : 'repositories'}/${item.target.id}`}
+                >
+                  <div className="grow">
+                    <span className="dashboard-row-heading">
+                      <span className="title">{item.label}</span>
+                      <span
+                        className={
+                          item.kind === 'sync-error'
+                            ? 'dashboard-kind dashboard-kind-error'
+                            : 'dashboard-kind'
+                        }
+                      >
+                        {item.kind === 'sync-error' ? 'Sync failed' : 'Outdated drafts'}
+                      </span>
+                    </span>
+                    <span className="list-row-sub muted">{item.detail}</span>
+                  </div>
+                </Link>
+              </li>
+            ))}
+          </ul>
+          {work.attention.length > visibleAttention.length ? (
+            <p className="dashboard-list-more muted">
+              Showing {visibleAttention.length} of {work.attention.length} issues. Review{' '}
+              <Link href={`${base}/stacks`}>Stacks</Link> and{' '}
+              <Link href={`${base}/repositories`}>Repositories</Link> for the rest.
+            </p>
+          ) : null}
+        </>
       )}
 
-      <SectionTitle id="dash-shortcuts" title="Shortcuts" />
-      <div className="actions dashboard-shortcuts" aria-labelledby="dash-shortcuts">
-        <ButtonLink href={`${base}/stacks`} icon={<Layers className="icon" aria-hidden="true" />}>
-          Stacks
-        </ButtonLink>
-        <ButtonLink href={`${base}/repositories`} icon={<FolderGit2 className="icon" aria-hidden="true" />}>
-          Repositories
-        </ButtonLink>
-        <ButtonLink href={`${base}/settings`} icon={<Settings className="icon" aria-hidden="true" />}>
-          Settings
-        </ButtonLink>
-      </div>
+      {work.draftsInProgress.length > 0 ? (
+        <>
+          <SectionTitle
+            id="dash-drafts"
+            title="Work in progress"
+            aside={<Link href={`${base}/stacks?drafts=1`}>View stacks with drafts</Link>}
+          />
+          <ul className="list" aria-labelledby="dash-drafts">
+            {visibleDrafts.map((item) => (
+              <li key={item.id}>
+                <Link className="list-row" href={`${base}/stacks/${item.id}`}>
+                  <span className="grow title">{item.label}</span>
+                  <span className="list-row-meta">
+                    {item.draftCount} open {item.draftCount === 1 ? 'draft' : 'drafts'}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+          {work.draftsInProgress.length > visibleDrafts.length ? (
+            <p className="dashboard-list-more muted">
+              Showing {visibleDrafts.length} of {work.draftsInProgress.length} stacks with drafts.
+            </p>
+          ) : null}
+        </>
+      ) : null}
 
-      <SectionTitle id="dash-activity" title="Recent activity" />
-      {events.length === 0 ? (
-        <p className="muted">No activity yet.</p>
+      <SectionTitle
+        id="dash-activity"
+        title="Recent activity"
+        aside={<Link href={`${base}/settings/activity`}>View all activity</Link>}
+      />
+      {activity.length === 0 ? (
+        <p className="muted">No meaningful changes yet. Full audit events remain in Settings → Activity.</p>
       ) : (
-        <TableWrap labelledBy="dash-activity">
-          <table className="simple" aria-labelledby="dash-activity">
-            <thead>
-              <tr>
-                <th scope="col">When</th>
-                <th scope="col">Action</th>
-                <th scope="col">Target</th>
-                <th scope="col">Outcome</th>
-              </tr>
-            </thead>
-            <tbody>
-              {events.map((e) => {
-                const href = auditEntityHref(workspaceId, e.entityType, e.entityId);
-                const pathMeta = typeof e.meta.path === 'string' ? e.meta.path : null;
-                return (
-                  <tr key={e.id}>
-                    <td>
-                      <LocalTime iso={e.createdAt.toISOString()} />
-                    </td>
-                    <td>{auditActionLabel(e.action)}</td>
-                    <td>
-                      {href ? (
-                        <Link href={href}>{pathMeta ? `${e.entityType} · ${pathMeta}` : e.entityType}</Link>
-                      ) : pathMeta ? (
-                        <span className="mono">{pathMeta}</span>
-                      ) : (
-                        <span className="muted">—</span>
-                      )}
-                    </td>
-                    <td>{e.outcome}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </TableWrap>
+        <ol className="list dashboard-activity" aria-labelledby="dash-activity">
+          {activity.map((event) => {
+            const href = auditEntityHref(workspaceId, event.entityType, event.entityId);
+            return (
+              <li key={event.id} className="dashboard-activity-row">
+                <span className="dashboard-activity-main">
+                  {href ? (
+                    <Link href={href}>{auditActionLabel(event.action)}</Link>
+                  ) : (
+                    <span>{auditActionLabel(event.action)}</span>
+                  )}
+                  {event.outcome === 'failure' ? (
+                    <span className="dashboard-kind dashboard-kind-error">Failed</span>
+                  ) : null}
+                </span>
+                <LocalTime iso={event.createdAt.toISOString()} />
+              </li>
+            );
+          })}
+        </ol>
       )}
     </>
   );

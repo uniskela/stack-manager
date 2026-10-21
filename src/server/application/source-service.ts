@@ -209,6 +209,11 @@ export class SourceService {
     return (await this.drafts.list(repositoryId, root || undefined)).length;
   }
 
+  /** Draft metadata for workspace dashboard counts. Loads no draft content. */
+  async listDraftPaths(repositoryIds: readonly string[]) {
+    return this.drafts.listPaths(repositoryIds);
+  }
+
   /** Drafts outdated vs current tree blobs (no draft content). */
   async listOutdatedDraftSummaries(
     workspaceId: string,

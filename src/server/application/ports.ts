@@ -1,4 +1,4 @@
-import type { AuditEvent } from '@/server/domain/audit';
+import type { AuditAction, AuditEvent } from '@/server/domain/audit';
 import type { CredentialRecord, CredentialTestStatus } from '@/server/domain/credential';
 import type { SourceDraft } from '@/server/domain/draft';
 import type { GitRepositoryConnection } from '@/server/domain/git-repository';
@@ -145,7 +145,11 @@ export interface JobRepository {
 
 export interface AuditRepository {
   insert(event: AuditEvent): Promise<void>;
-  list(filter: { workspaceId?: string; limit: number }): Promise<AuditEvent[]>;
+  list(filter: {
+    workspaceId?: string;
+    limit: number;
+    excludeSuccessfulActions?: readonly AuditAction[];
+  }): Promise<AuditEvent[]>;
 }
 
 export interface StackRepository {
@@ -161,6 +165,8 @@ export interface StackRepository {
 }
 
 export interface SourceDraftRepository {
+  /** Fetch only repository IDs and paths in one query; never load draft contents for counters. */
+  listPaths(repositoryIds: readonly string[]): Promise<Array<{ repositoryId: string; path: string }>>;
   find(repositoryId: string, path: string): Promise<SourceDraft | null>;
   /** Drafts of a repository, optionally only those at or under `rootPath`. */
   list(repositoryId: string, rootPath?: string): Promise<SourceDraft[]>;

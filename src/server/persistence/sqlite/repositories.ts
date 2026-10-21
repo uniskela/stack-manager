@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gt, inArray, lt, lte, ne, or } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, inArray, lt, lte, ne, notInArray, or } from 'drizzle-orm';
 import type {
   AuditRepository,
   CredentialRepository,
@@ -12,7 +12,7 @@ import type {
   UserRepository,
   WorkspaceRepository,
 } from '@/server/application/ports';
-import type { AuditEvent } from '@/server/domain/audit';
+import type { AuditAction, AuditEvent } from '@/server/domain/audit';
 import type { CredentialRecord } from '@/server/domain/credential';
 import type { SourceDraft } from '@/server/domain/draft';
 import type { GitRepositoryConnection } from '@/server/domain/git-repository';
@@ -528,9 +528,25 @@ class SqliteAuditRepository implements AuditRepository {
     this.db.insert(auditEvents).values(event).run();
   }
 
-  async list(filter: { workspaceId?: string; limit: number }) {
-    const q = this.db.select().from(auditEvents);
-    const rows = (filter.workspaceId ? q.where(eq(auditEvents.workspaceId, filter.workspaceId)) : q)
+  async list(filter: {
+    workspaceId?: string;
+    limit: number;
+    excludeSuccessfulActions?: readonly AuditAction[];
+  }) {
+    // Retain failures of excluded actions: they are meaningful attention events.
+    const relevant = filter.excludeSuccessfulActions?.length
+      ? or(
+          eq(auditEvents.outcome, 'failure'),
+          notInArray(auditEvents.action, [...filter.excludeSuccessfulActions]),
+        )
+      : undefined;
+    const where = filter.workspaceId
+      ? and(eq(auditEvents.workspaceId, filter.workspaceId), relevant)
+      : relevant;
+    const rows = this.db
+      .select()
+      .from(auditEvents)
+      .where(where)
       .orderBy(desc(auditEvents.createdAt))
       .limit(filter.limit)
       .all();
@@ -584,6 +600,15 @@ class SqliteStackRepository implements StackRepository {
 
 class SqliteSourceDraftRepository implements SourceDraftRepository {
   constructor(private readonly db: SqliteDb) {}
+
+  async listPaths(repositoryIds: readonly string[]) {
+    if (repositoryIds.length === 0) return [];
+    return this.db
+      .select({ repositoryId: sourceDrafts.repositoryId, path: sourceDrafts.path })
+      .from(sourceDrafts)
+      .where(inArray(sourceDrafts.repositoryId, [...repositoryIds]))
+      .all();
+  }
 
   async find(repositoryId: string, path: string) {
     return (
