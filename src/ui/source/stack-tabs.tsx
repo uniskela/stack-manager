@@ -1,11 +1,11 @@
 'use client';
 
-import { BookOpen, Code2, GitCompareArrows, History, Settings2, Variable } from 'lucide-react';
+import { BookOpen, Code2, GitCompareArrows, History, Rocket, Settings2, Variable } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
-/** Stack page sections (docs/internal/UX.md). Deployments, runtime and secrets join in later phases. */
+/** Stack page sections (docs/internal/UX.md). Runtime and secrets join in later phases. */
 export function StackTabs({ base, drafts }: { base: string; drafts: number }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -15,6 +15,7 @@ export function StackTabs({ base, drafts }: { base: string; drafts: number }) {
     { href: `${base}/environment`, label: 'Environment', Icon: Variable },
     { href: `${base}/changes`, label: 'Changes', Icon: GitCompareArrows, count: drafts },
     { href: `${base}/history`, label: 'History', Icon: History },
+    { href: `${base}/deployment`, label: 'Deployment', Icon: Rocket },
     { href: `${base}/settings`, label: 'Settings', Icon: Settings2 },
   ];
 
