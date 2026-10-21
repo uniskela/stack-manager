@@ -16,6 +16,7 @@ type Attempt = {
   httpStatus: number | null;
   failureReason: string | null;
 };
+type Message = { error: boolean; text: string } | null;
 const providers: Record<Provider, string> = {
   'portainer-webhook': 'Portainer webhook',
   'generic-webhook': 'Generic HTTP webhook',
@@ -44,7 +45,7 @@ export function DeploymentSettings(
   const [attempts, setAttempts] = useState(props.attempts);
   const [busy, setBusy] = useState(false);
   const [action, setAction] = useState<'trigger' | 'remove'>('trigger');
-  const [message, setMessage] = useState<{ error: boolean; text: string } | null>(null);
+  const [message, setMessage] = useState<Message>(null);
   const endpoint = `/api/workspaces/${props.workspaceId}/stacks/${props.stackId}/deployment`;
   const active = attempts.some((attempt) => attempt.status === 'queued' || attempt.status === 'running');
 
@@ -62,6 +63,39 @@ export function DeploymentSettings(
     }, 2000);
     return () => clearInterval(timer);
   }, [active, endpoint]);
+
+  async function saveConfiguration(operation: 'save' | 'remove') {
+    let request: { method: string; body: unknown };
+    if (operation === 'remove') {
+      request = { method: 'DELETE', body: { expectedRevision: binding!.revision } };
+    } else {
+      let configuration: { url: string; bearerToken?: string } | undefined;
+      if (url.current?.value) {
+        configuration = { url: url.current.value };
+        if (provider === 'generic-webhook' && token.current?.value) {
+          configuration.bearerToken = token.current.value;
+        }
+      }
+      request = {
+        method: 'PUT',
+        body: {
+          providerType: provider,
+          enabled,
+          deployOnPush: false,
+          expectedRevision: binding?.revision ?? null,
+          configuration,
+        },
+      };
+    }
+    const value = await api<{ binding: Binding | null }>(endpoint, request);
+    setBinding(value.binding);
+    if (url.current) url.current.value = '';
+    if (token.current) token.current.value = '';
+    setMessage({
+      error: false,
+      text: operation === 'remove' ? 'Binding removed.' : 'Deployment binding saved.',
+    });
+  }
 
   async function mutate(operation: 'save' | 'trigger' | 'remove') {
     if (inFlight.current || (active && operation === 'trigger')) return;
@@ -81,37 +115,7 @@ export function DeploymentSettings(
           text: 'Deployment request recorded. HTTP acceptance does not verify container health.',
         });
       } else {
-        const value = await api<{ binding: Binding | null }>(
-          endpoint,
-          operation === 'remove'
-            ? { method: 'DELETE', body: { expectedRevision: binding!.revision } }
-            : {
-                method: 'PUT',
-                body: {
-                  providerType: provider,
-                  enabled,
-                  deployOnPush: false,
-                  expectedRevision: binding?.revision ?? null,
-                  ...(url.current?.value
-                    ? {
-                        configuration: {
-                          url: url.current.value,
-                          ...(provider === 'generic-webhook' && token.current?.value
-                            ? { bearerToken: token.current.value }
-                            : {}),
-                        },
-                      }
-                    : {}),
-                },
-              },
-        );
-        setBinding(value.binding);
-        if (url.current) url.current.value = '';
-        if (token.current) token.current.value = '';
-        setMessage({
-          error: false,
-          text: operation === 'remove' ? 'Binding removed.' : 'Deployment binding saved.',
-        });
+        await saveConfiguration(operation);
       }
       dialog.current?.close();
     } catch (error) {
@@ -274,34 +278,45 @@ export function DeploymentSettings(
           </div>
         </div>
       </dialog>
-      <section aria-labelledby={`${id}-history`} className="stack">
-        <h3 id={`${id}-history`}>Recent deployments</h3>
-        {!attempts.length ? (
-          <p className="muted">No deployment requests yet.</p>
-        ) : (
-          <ol className="stack">
-            {attempts.map((attempt) => (
-              <li key={attempt.id}>
-                <LocalTime iso={attempt.requestedAt} /> · {providers[attempt.providerType]} ·{' '}
-                <strong>{attempt.status.charAt(0).toUpperCase() + attempt.status.slice(1)}</strong>
-                {attempt.httpStatus ? ` (HTTP ${attempt.httpStatus})` : ''}
-                {attempt.failureReason ? <p>{attempt.failureReason}</p> : null}
-                {attempt.status === 'unknown' ? (
-                  <p className="hint">
-                    The destination may have received this request. Verify there before deliberately sending
-                    another request.
-                  </p>
-                ) : null}
-              </li>
-            ))}
-          </ol>
-        )}
-      </section>
-      {message ? (
-        <Alert tone={message.error ? 'error' : 'ok'} role={message.error ? 'alert' : 'status'}>
-          {message.text}
-        </Alert>
-      ) : null}
+      <DeploymentHistory id={`${id}-history`} attempts={attempts} />
+      <DeploymentFeedback message={message} />
     </div>
+  );
+}
+
+function DeploymentHistory({ id, attempts }: Readonly<{ id: string; attempts: Attempt[] }>) {
+  return (
+    <section aria-labelledby={id} className="stack">
+      <h3 id={id}>Recent deployments</h3>
+      {!attempts.length ? (
+        <p className="muted">No deployment requests yet.</p>
+      ) : (
+        <ol className="stack">
+          {attempts.map((attempt) => (
+            <li key={attempt.id}>
+              <LocalTime iso={attempt.requestedAt} /> · {providers[attempt.providerType]} ·{' '}
+              <strong>{attempt.status.charAt(0).toUpperCase() + attempt.status.slice(1)}</strong>
+              {attempt.httpStatus ? ` (HTTP ${attempt.httpStatus})` : ''}
+              {attempt.failureReason ? <p>{attempt.failureReason}</p> : null}
+              {attempt.status === 'unknown' ? (
+                <p className="hint">
+                  The destination may have received this request. Verify there before deliberately sending
+                  another request.
+                </p>
+              ) : null}
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
+  );
+}
+
+function DeploymentFeedback({ message }: Readonly<{ message: Message }>) {
+  if (!message) return null;
+  return (
+    <Alert tone={message.error ? 'error' : 'ok'} role={message.error ? 'alert' : 'status'}>
+      {message.text}
+    </Alert>
   );
 }

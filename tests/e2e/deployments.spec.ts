@@ -5,6 +5,7 @@ import { AUTH_STATE, expectAccessible, SAMPLE_REMOTE, SAMPLE_STATE } from './sup
 test.use({ storageState: AUTH_STATE });
 
 test('deployment settings and confirmation are accessible on desktop and mobile', async ({ page }, info) => {
+  // Local runs may omit repository onboarding; CI always provides the public sample repository.
   test.skip(!SAMPLE_REMOTE, 'Requires the optional sample repository.');
   const { workspaceId, stackId } = JSON.parse(fs.readFileSync(SAMPLE_STATE, 'utf8'));
   const endpoint = `/api/workspaces/${workspaceId}/stacks/${stackId}/deployment`;

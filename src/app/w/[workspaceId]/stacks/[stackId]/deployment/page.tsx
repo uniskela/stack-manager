@@ -6,9 +6,9 @@ import { Section } from '@/ui/primitives/section';
 export const metadata: Metadata = { title: 'Stack deployment' };
 export default async function DeploymentPage({
   params,
-}: {
+}: Readonly<{
   params: Promise<{ workspaceId: string; stackId: string }>;
-}) {
+}>) {
   const { workspaceId, stackId } = await params;
   const { stacks, deployments, config } = getContainer();
   const [stack, settings, history] = await Promise.all([
