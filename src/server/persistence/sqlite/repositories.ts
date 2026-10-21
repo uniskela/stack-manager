@@ -1,5 +1,6 @@
 import { and, asc, count, desc, eq, gt, inArray, isNull, lt, lte, ne, notInArray, or } from 'drizzle-orm';
 import type {
+  DeploymentRepository,
   AuditRepository,
   CredentialRepository,
   EnqueueJobInput,
@@ -21,6 +22,8 @@ import type { Job } from '@/server/domain/job';
 import type { Stack } from '@/server/domain/stack';
 import type { User } from '@/server/domain/user';
 import {
+  deploymentBindings,
+  deploymentAttempts,
   auditEvents,
   gitRepositoryConnections,
   gitWebhookDeliveries,
@@ -32,7 +35,7 @@ import {
   users,
   workspaces,
 } from '../schema';
-import { AuthenticationError } from '@/server/domain/errors';
+import { ConflictError, AuthenticationError } from '@/server/domain/errors';
 import type { SqliteDb } from './database';
 
 type UserRow = typeof users.$inferSelect;
@@ -232,8 +235,15 @@ class SqliteCredentialRepository implements CredentialRepository {
   }
 
   async countReferences(id: string) {
-    return (
+    const deploymentCount =
       this.db
+        .select({ n: count() })
+        .from(deploymentBindings)
+        .where(eq(deploymentBindings.credentialId, id))
+        .get()?.n ?? 0;
+    return (
+      deploymentCount +
+      (this.db
         .select({ n: count() })
         .from(gitRepositoryConnections)
         .where(
@@ -242,7 +252,7 @@ class SqliteCredentialRepository implements CredentialRepository {
             eq(gitRepositoryConnections.webhookCredentialId, id),
           ),
         )
-        .get()?.n ?? 0
+        .get()?.n ?? 0)
     );
   }
 
@@ -697,6 +707,7 @@ class SqliteSourceDraftRepository implements SourceDraftRepository {
 
 export function createSqliteRepositories(db: SqliteDb): Repositories {
   return {
+    deployments: new SqliteDeploymentRepository(db),
     users: new SqliteUserRepository(db),
     sessions: new SqliteSessionRepository(db),
     workspaces: new SqliteWorkspaceRepository(db),
@@ -772,5 +783,234 @@ class SqliteGitWebhookDeliveryRepository implements GitWebhookDeliveryRepository
         .orderBy(desc(gitWebhookDeliveries.receivedAt))
         .get() ?? null
     );
+  }
+}
+
+class SqliteDeploymentRepository implements DeploymentRepository {
+  constructor(private readonly db: SqliteDb) {}
+  async binding(workspaceId: string, stackId: string) {
+    return (
+      this.db
+        .select()
+        .from(deploymentBindings)
+        .where(and(eq(deploymentBindings.workspaceId, workspaceId), eq(deploymentBindings.stackId, stackId)))
+        .get() ?? null
+    );
+  }
+  async save(
+    binding: Parameters<DeploymentRepository['save']>[0],
+    expectedRevision: string | null,
+    credential?: CredentialRecord,
+  ) {
+    this.db.transaction(
+      (tx) => {
+        const current = tx
+          .select()
+          .from(deploymentBindings)
+          .where(eq(deploymentBindings.stackId, binding.stackId))
+          .get();
+        if ((current?.revision ?? null) !== expectedRevision)
+          throw new ConflictError('Deployment settings changed. Reload and try again.');
+        if (credential) tx.insert(providerCredentials).values(credential).run();
+        const secret = tx
+          .select()
+          .from(providerCredentials)
+          .where(eq(providerCredentials.id, binding.credentialId))
+          .get();
+        const stack = tx.select().from(stacks).where(eq(stacks.id, binding.stackId)).get();
+        if (
+          stack?.workspaceId !== binding.workspaceId ||
+          secret?.workspaceId !== binding.workspaceId ||
+          secret.kind !== 'deployment' ||
+          secret.providerType !== binding.providerType
+        )
+          throw new ConflictError('Deployment credential is unavailable or incompatible.');
+        const managedOwner = tx
+          .select({ id: deploymentBindings.id })
+          .from(deploymentBindings)
+          .where(
+            and(
+              eq(deploymentBindings.credentialId, binding.credentialId),
+              eq(deploymentBindings.managedCredential, true),
+            ),
+          )
+          .get();
+        const next = { ...binding, managedCredential: binding.managedCredential || Boolean(managedOwner) };
+        if (current)
+          tx.update(deploymentBindings)
+            .set({
+              ...next,
+              lastAttemptAt: current.lastAttemptAt,
+              lastAcceptedAt: current.lastAcceptedAt,
+              lastFailedAt: current.lastFailedAt,
+            })
+            .where(eq(deploymentBindings.id, current.id))
+            .run();
+        else tx.insert(deploymentBindings).values(next).run();
+      },
+      { behavior: 'immediate' },
+    );
+  }
+  async remove(workspaceId: string, stackId: string, expectedRevision: string) {
+    const result = this.db
+      .delete(deploymentBindings)
+      .where(
+        and(
+          eq(deploymentBindings.workspaceId, workspaceId),
+          eq(deploymentBindings.stackId, stackId),
+          eq(deploymentBindings.revision, expectedRevision),
+        ),
+      )
+      .run();
+    if (!result.changes) throw new ConflictError('Deployment settings changed. Reload and try again.');
+  }
+  async enqueue(attempt: Parameters<DeploymentRepository['enqueue']>[0], job: EnqueueJobInput) {
+    this.db.transaction(
+      (tx) => {
+        const b = tx
+          .select()
+          .from(deploymentBindings)
+          .where(eq(deploymentBindings.id, attempt.bindingId))
+          .get();
+        const c =
+          b && tx.select().from(providerCredentials).where(eq(providerCredentials.id, b.credentialId)).get();
+        if (
+          !b?.enabled ||
+          b.revision !== attempt.bindingRevision ||
+          c?.secretNonce !== attempt.credentialNonce
+        )
+          throw new ConflictError('Deployment settings changed.');
+        const active = tx
+          .select()
+          .from(deploymentAttempts)
+          .where(
+            and(
+              eq(deploymentAttempts.stackId, attempt.stackId),
+              inArray(deploymentAttempts.status, ['queued', 'running']),
+            ),
+          )
+          .get();
+        const activeJob = tx
+          .select()
+          .from(jobs)
+          .where(and(eq(jobs.dedupeKey, job.dedupeKey!), inArray(jobs.status, ['pending', 'running'])))
+          .get();
+        if (active || activeJob) throw new ConflictError('A deployment request is already active.');
+        new SqliteJobRepository(tx).enqueueSync(job);
+        tx.insert(deploymentAttempts).values(attempt).run();
+        tx.update(deploymentBindings)
+          .set({ lastAttemptAt: attempt.requestedAt })
+          .where(eq(deploymentBindings.id, b.id))
+          .run();
+      },
+      { behavior: 'immediate' },
+    );
+  }
+  async findAttempt(id: string) {
+    return this.db.select().from(deploymentAttempts).where(eq(deploymentAttempts.id, id)).get() ?? null;
+  }
+  async history(workspaceId: string, stackId: string) {
+    return this.db
+      .select()
+      .from(deploymentAttempts)
+      .where(and(eq(deploymentAttempts.workspaceId, workspaceId), eq(deploymentAttempts.stackId, stackId)))
+      .orderBy(desc(deploymentAttempts.requestedAt))
+      .limit(20)
+      .all();
+  }
+  async begin(id: string, owner: string, now: Date) {
+    return this.db.transaction(
+      (tx) => {
+        const a = tx.select().from(deploymentAttempts).where(eq(deploymentAttempts.id, id)).get();
+        if (!a || a.status !== 'queued') return false;
+        const j = tx.select().from(jobs).where(eq(jobs.id, a.jobId)).get();
+        const b = tx.select().from(deploymentBindings).where(eq(deploymentBindings.id, a.bindingId)).get();
+        const c =
+          b && tx.select().from(providerCredentials).where(eq(providerCredentials.id, b.credentialId)).get();
+        const actor = a.actorUserId && tx.select().from(users).where(eq(users.id, a.actorUserId)).get();
+        if (j?.leaseOwner !== owner || j.status !== 'running' || !j.leaseExpiresAt || j.leaseExpiresAt <= now)
+          return false;
+        if (
+          !b?.enabled ||
+          b.revision !== a.bindingRevision ||
+          c?.secretNonce !== a.credentialNonce ||
+          !actor ||
+          actor.disabledAt
+        ) {
+          tx.update(deploymentAttempts)
+            .set({
+              status: 'rejected',
+              reason: 'Binding, credential or operator changed before execution.',
+              completedAt: now,
+            })
+            .where(eq(deploymentAttempts.id, id))
+            .run();
+          tx.update(deploymentBindings)
+            .set({ lastFailedAt: now })
+            .where(eq(deploymentBindings.id, a.bindingId))
+            .run();
+          return false;
+        }
+        tx.update(deploymentAttempts).set({ status: 'running' }).where(eq(deploymentAttempts.id, id)).run();
+        return true;
+      },
+      { behavior: 'immediate' },
+    );
+  }
+  async finish(id: string, owner: string, result: Parameters<DeploymentRepository['finish']>[2], now: Date) {
+    return this.db.transaction(
+      (tx) => {
+        const a = tx.select().from(deploymentAttempts).where(eq(deploymentAttempts.id, id)).get();
+        if (!a || !['queued', 'running'].includes(a.status)) return false;
+        const j = tx.select().from(jobs).where(eq(jobs.id, a.jobId)).get();
+        if (j?.leaseOwner !== owner || j.status !== 'running' || !j.leaseExpiresAt || j.leaseExpiresAt <= now)
+          return false;
+        tx.update(deploymentAttempts)
+          .set({ ...result, completedAt: now })
+          .where(eq(deploymentAttempts.id, id))
+          .run();
+        tx.update(deploymentBindings)
+          .set(result.status === 'accepted' ? { lastAcceptedAt: now } : { lastFailedAt: now })
+          .where(eq(deploymentBindings.id, a.bindingId))
+          .run();
+        return true;
+      },
+      { behavior: 'immediate' },
+    );
+  }
+  async recover(stackId: string, now: Date) {
+    return this.db.transaction((tx) => {
+      const attempts = tx
+        .select()
+        .from(deploymentAttempts)
+        .where(
+          and(
+            eq(deploymentAttempts.stackId, stackId),
+            inArray(deploymentAttempts.status, ['queued', 'running']),
+          ),
+        )
+        .all();
+      const recovered: typeof attempts = [];
+      for (const a of attempts) {
+        const j = tx.select().from(jobs).where(eq(jobs.id, a.jobId)).get();
+        if (!j || ['dead', 'failed', 'succeeded'].includes(j.status)) {
+          tx.update(deploymentAttempts)
+            .set({
+              status: 'unknown',
+              reason:
+                'Worker interrupted; the request may have been sent. Confirm the destination before retrying.',
+              completedAt: now,
+            })
+            .where(eq(deploymentAttempts.id, a.id))
+            .run();
+          tx.update(deploymentBindings)
+            .set({ lastFailedAt: now })
+            .where(eq(deploymentBindings.id, a.bindingId))
+            .run();
+          recovered.push({ ...a, status: 'unknown', completedAt: now });
+        }
+      }
+      return recovered;
+    });
   }
 }

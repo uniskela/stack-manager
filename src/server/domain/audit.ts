@@ -1,4 +1,13 @@
 export type AuditAction =
+  | 'deployment.binding_created'
+  | 'deployment.binding_updated'
+  | 'deployment.binding_disabled'
+  | 'deployment.binding_removed'
+  | 'deployment.secret_rotated'
+  | 'deployment.requested'
+  | 'deployment.accepted'
+  | 'deployment.rejected'
+  | 'deployment.unknown'
   | 'auth.setup'
   | 'auth.login'
   | 'auth.login_failed'

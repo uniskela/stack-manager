@@ -1,3 +1,4 @@
+import type { DeploymentBinding, DeploymentAttempt } from '@/server/domain/deployment';
 import type { AuditAction, AuditEvent } from '@/server/domain/audit';
 import type { CredentialRecord, CredentialTestStatus } from '@/server/domain/credential';
 import type { SourceDraft } from '@/server/domain/draft';
@@ -184,6 +185,7 @@ export interface SourceDraftRepository {
 }
 
 export interface Repositories {
+  deployments: DeploymentRepository;
   users: UserRepository;
   sessions: SessionRepository;
   workspaces: WorkspaceRepository;
@@ -222,4 +224,25 @@ export interface GitWebhookDeliveryRepository {
     },
   ): Promise<{ duplicate: boolean }>;
   latestAccepted(repositoryId: string): Promise<GitWebhookDelivery | null>;
+}
+
+export interface DeploymentRepository {
+  binding(workspaceId: string, stackId: string): Promise<DeploymentBinding | null>;
+  save(
+    binding: DeploymentBinding,
+    expectedRevision: string | null,
+    credential?: CredentialRecord,
+  ): Promise<void>;
+  remove(workspaceId: string, stackId: string, expectedRevision: string): Promise<void>;
+  enqueue(attempt: DeploymentAttempt, job: EnqueueJobInput): Promise<void>;
+  findAttempt(id: string): Promise<DeploymentAttempt | null>;
+  history(workspaceId: string, stackId: string): Promise<DeploymentAttempt[]>;
+  begin(id: string, owner: string, now: Date): Promise<boolean>;
+  finish(
+    id: string,
+    owner: string,
+    result: { status: 'accepted' | 'rejected' | 'unknown'; httpStatus: number | null; reason: string | null },
+    now: Date,
+  ): Promise<boolean>;
+  recover(stackId: string, now: Date): Promise<DeploymentAttempt[]>;
 }

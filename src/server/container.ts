@@ -4,6 +4,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { AuditService } from '@/server/application/audit-service';
 import { AuthService } from '@/server/application/auth-service';
+import { DeploymentService, DEPLOYMENT_TRIGGER_JOB } from '@/server/application/deployment-service';
+import { createDeploymentProviders } from '@/server/providers/deployment/registry';
+import { ValidationError } from '@/server/domain/errors';
 import { CredentialService } from '@/server/application/credential-service';
 import { GitRepositoryService, REPOSITORY_SYNC_JOB } from '@/server/application/git-repository-service';
 import { GitWorkflowService } from '@/server/application/git-workflow-service';
@@ -47,6 +50,7 @@ export interface Container {
   auth: AuthService;
   workspaces: WorkspaceService;
   credentials: CredentialService;
+  deployments: DeploymentService;
   gitProviders: GitProviderRegistry;
   repositories: GitRepositoryService;
   stacks: StackService;
@@ -106,10 +110,44 @@ export function createContainer(config: AppConfig, overrides: ContainerOverrides
       setupToken: config.setupToken,
     });
     const workspaces = new WorkspaceService(repos.workspaces, audit, clock, newId);
-    const credentials = new CredentialService(repos.credentials, box, audit, clock, newId, (kind, type) =>
-      kind === 'git' || kind === 'git_webhook' ? gitProviders.has(type) : false,
+    const deploymentProviders = createDeploymentProviders({
+      allowPrivateNetworks: config.allowPrivateNetworks,
+      resolver: overrides.resolver,
+    });
+    const credentials = new CredentialService(
+      repos.credentials,
+      box,
+      audit,
+      clock,
+      newId,
+      (kind, type) =>
+        kind === 'git' || kind === 'git_webhook'
+          ? gitProviders.has(type)
+          : kind === 'deployment' && deploymentProviders.has(type as 'portainer-webhook' | 'generic-webhook'),
+      async (type, secret) => {
+        const provider = deploymentProviders.get(type as 'portainer-webhook' | 'generic-webhook');
+        if (!provider) throw new ValidationError('Unsupported deployment provider.');
+        let value: unknown;
+        try {
+          value = JSON.parse(secret);
+        } catch {
+          throw new ValidationError('Invalid deployment configuration.');
+        }
+        const configuration = provider.validateConfiguration(value);
+        await provider.validateDestination(configuration);
+        return JSON.stringify(configuration);
+      },
     );
     const jobs = new JobQueue(repos.jobs, clock, newId);
+    const deployments = new DeploymentService(
+      repos,
+      credentials,
+      deploymentProviders,
+      jobs,
+      audit,
+      clock,
+      newId,
+    );
     const gitWebhooks = new GitWebhookService(
       repos.gitRepositories,
       credentials,
@@ -157,6 +195,7 @@ export function createContainer(config: AppConfig, overrides: ContainerOverrides
 
     const syncLogger = logger.child({ component: 'stacks' });
     const handlers = new Map<string, JobHandler>([
+      [DEPLOYMENT_TRIGGER_JOB, (job, ctx) => deployments.execute(job, ctx)],
       [
         REPOSITORY_SYNC_JOB,
         async (job, ctx) => {
@@ -208,6 +247,7 @@ export function createContainer(config: AppConfig, overrides: ContainerOverrides
       auth,
       workspaces,
       credentials,
+      deployments,
       gitProviders,
       repositories,
       stacks,
