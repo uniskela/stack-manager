@@ -331,6 +331,7 @@ export class DeploymentService {
     }
   }
   private async send(a: DeploymentAttempt, ctx: JobContext): Promise<TriggerOutcome> {
+    let providerInvoked = false;
     try {
       const b = await this.repos.deployments.binding(a.workspaceId, a.stackId);
       const c = b && (await this.repos.credentials.findById(a.workspaceId, b.credentialId));
@@ -347,6 +348,7 @@ export class DeploymentService {
           const provider = this.providers.get(b.providerType)!;
           const config = provider.validateConfiguration(JSON.parse(secret));
           ctx.signal.throwIfAborted();
+          providerInvoked = true;
           const r = await provider.trigger(config, { signal: ctx.signal, idempotencyKey: a.id });
           return {
             status: r.status,
@@ -354,16 +356,20 @@ export class DeploymentService {
             reason:
               r.status === 'unknown'
                 ? 'Request outcome uncertain; verify destination before retrying.'
-                : null,
+                : r.httpStatus === null
+                  ? 'Destination validation prevented the request.'
+                  : null,
           };
         },
         { kind: 'deployment', providerType: b.providerType, nonce: a.credentialNonce },
       );
     } catch {
       return {
-        status: 'unknown',
+        status: providerInvoked ? 'unknown' : 'rejected',
         httpStatus: null,
-        reason: 'Request outcome uncertain; verify destination before retrying.',
+        reason: providerInvoked
+          ? 'Request outcome uncertain; verify destination before retrying.'
+          : 'Local validation prevented the request.',
       };
     }
   }

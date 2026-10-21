@@ -78,19 +78,25 @@ describe('migrations', () => {
     for (const { tag } of journal.entries)
       fs.copyFileSync(`drizzle/${tag}.sql`, path.join(folder, `${tag}.sql`));
     const old = openSqlite(file);
-    runMigrations(old.db, folder);
-    old.db.$client.exec("INSERT INTO workspaces VALUES ('retained','Home','home',1000,2000)");
-    old.close();
+    try {
+      runMigrations(old.db, folder);
+      old.db.$client.exec("INSERT INTO workspaces VALUES ('retained','Home','home',1000,2000)");
+    } finally {
+      old.close();
+    }
     const upgraded = openSqlite(file);
-    runMigrations(upgraded.db);
-    expect(upgraded.db.$client.prepare('SELECT id FROM workspaces').get()).toEqual({ id: 'retained' });
-    expect(upgraded.db.$client.prepare('SELECT COUNT(*) AS n FROM deployment_bindings').get()).toEqual({
-      n: 0,
-    });
-    expect(upgraded.db.$client.prepare('SELECT COUNT(*) AS n FROM deployment_attempts').get()).toEqual({
-      n: 0,
-    });
-    upgraded.close();
+    try {
+      runMigrations(upgraded.db);
+      expect(upgraded.db.$client.prepare('SELECT id FROM workspaces').get()).toEqual({ id: 'retained' });
+      expect(upgraded.db.$client.prepare('SELECT COUNT(*) AS n FROM deployment_bindings').get()).toEqual({
+        n: 0,
+      });
+      expect(upgraded.db.$client.prepare('SELECT COUNT(*) AS n FROM deployment_attempts').get()).toEqual({
+        n: 0,
+      });
+    } finally {
+      upgraded.close();
+    }
   });
   it('upgrades a populated PR #59 database without changing history and survives reopening', async () => {
     const file = tmpDb();

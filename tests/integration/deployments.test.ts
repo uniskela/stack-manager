@@ -178,6 +178,7 @@ describe('per-stack deployment bindings', () => {
   });
   it.each([
     { status: 'rejected', httpStatus: 403 },
+    { status: 'rejected', httpStatus: null },
     { status: 'unknown', reason: 'request_timeout_or_cancelled' },
   ])('records $status without automatic retry', async (result) => {
     await configure();
@@ -217,6 +218,25 @@ describe('per-stack deployment bindings', () => {
     await execute();
     expect(trigger).not.toHaveBeenCalled();
     expect((await service.history(workspaceId, stackId)).attempts[0]!.status).toBe('unknown');
+  });
+  it('persists recovery despite an isolated audit storage failure', async () => {
+    await configure();
+    const requested = await service.trigger(workspaceId, stackId, actor);
+    await h.container.repos.jobs.claimNext('crashed', h.clock.now(), 1000, ['deployment_trigger']);
+    await h.container.repos.deployments.begin(requested.attempt.id, 'crashed', h.clock.now());
+    h.clock.advance(1001);
+    await h.container.repos.jobs.reclaimExpired(h.clock.now(), () => 0);
+    const insert = vi
+      .spyOn(h.container.repos.audit, 'insert')
+      .mockRejectedValue(new Error('audit storage unavailable'));
+    try {
+      await execute();
+      expect((await service.history(workspaceId, stackId)).attempts[0]!.status).toBe('unknown');
+      expect(h.logs.join('')).toContain('audit write failed');
+      expect(trigger).not.toHaveBeenCalled();
+    } finally {
+      insert.mockRestore();
+    }
   });
   it('cleans bindings and attempts when stack is deleted', async () => {
     await configure();
@@ -315,10 +335,13 @@ describe('per-stack deployment bindings', () => {
     await configure();
     await service.trigger(workspaceId, stackId, actor);
     const db = openSqlite(h.config.databasePath);
-    db.db.$client
-      .prepare('UPDATE users SET disabled_at = ? WHERE id = ?')
-      .run(h.clock.now().getTime(), actor);
-    db.close();
+    try {
+      db.db.$client
+        .prepare('UPDATE users SET disabled_at = ? WHERE id = ?')
+        .run(h.clock.now().getTime(), actor);
+    } finally {
+      db.close();
+    }
     await execute();
     expect(trigger).not.toHaveBeenCalled();
     expect((await service.history(workspaceId, stackId)).attempts[0]!.status).toBe('rejected');

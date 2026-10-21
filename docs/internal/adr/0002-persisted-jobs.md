@@ -66,15 +66,25 @@ Inbound forge webhook **delivery IDs** prevent duplicate job creation. That alon
 
 Rules:
 
-1. `TriggerDeploymentInput.idempotencyKey` is **required** (stable `job.id`, optionally combined with forge delivery id).
+1. A manual #54 trigger uses its stable deployment attempt ID as the idempotency key. Future forge routing must derive one stable key per queued attempt.
 2. Before calling `DeploymentProvider.trigger`, persist an intent row / set job payload flag `triggerAttemptedAt`.
 3. After provider returns `accepted=true` (or equivalent), set `Job.acceptanceRecordedAt` **before** marking succeeded.
 4. On reclaim/retry:
-   - If `acceptanceRecordedAt` is set → **do not** call the provider again; continue to enqueue Deployment Watch / mark succeeded.
+   - If `acceptanceRecordedAt` is set → **do not** call the provider again; mark succeeded (runtime watch remains a later phase).
    - If intent was recorded but acceptance is absent → record **unknown**, never resend automatically.
    - Only a queued attempt with no persisted send intent may proceed to its first send.
 5. Adapters SHOULD send the key to the remote when supported (e.g. `Idempotency-Key` header on generic webhooks). Portainer stack webhooks may ignore headers; acceptance recording still prevents blind double-fire after known acceptance.
 6. For #54, every uncertain pre-acceptance crash is conservative: require a new deliberate operator confirmation before another attempt. A persisted per-stack guard prevents a second active attempt while the prior job still owns its lease. Known acceptance never causes another outbound request.
+
+## Compatibility clarification for #54
+
+The intent-without-acceptance retry described in the earlier ADR was a planned contract, not a shipped
+deployment-trigger implementation. #54 introduces the first deployment consumers: Portainer webhook
+and generic webhook bindings. Both require a new manual confirmation after an unknown outcome;
+there are no existing deployment consumers to migrate. Integrations built against the earlier plan
+must inspect the receiver and request another attempt deliberately instead of expecting an automatic
+resend. Repository synchronization retains its existing retry behavior. HTTP acceptance never
+establishes container health.
 
 ## When to revisit
 

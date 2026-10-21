@@ -19,60 +19,65 @@ describe('authenticated deployment HTTP to durable worker to local TLS receiver'
     'sends %s once and exposes only safe history',
     async (providerType) => {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sm-deploy-journey-'));
-      const certPath = path.join(dir, 'cert.pem');
-      const keyPath = path.join(dir, 'key.pem');
-      execFileSync(
-        'openssl',
-        [
-          'req',
-          '-x509',
-          '-newkey',
-          'rsa:2048',
-          '-nodes',
-          '-keyout',
-          keyPath,
-          '-out',
-          certPath,
-          '-days',
-          '1',
-          '-subj',
-          '/CN=deploy.example.test',
-          '-addext',
-          'subjectAltName=DNS:deploy.example.test',
-        ],
-        { stdio: 'ignore' },
-      );
-      const cert = fs.readFileSync(certPath);
-      const received: Array<{ body: string; auth: string | undefined; key: string | string[] | undefined }> =
-        [];
-      const server = https.createServer({ key: fs.readFileSync(keyPath), cert }, (req, res) => {
-        let body = '';
-        req.on('data', (chunk: Buffer) => {
-          body += chunk.toString();
-        });
-        req.on('end', () => {
-          received.push({ body, auth: req.headers.authorization, key: req.headers['idempotency-key'] });
-          res.writeHead(202);
-          res.end('synthetic-private-provider-response');
-        });
-      });
-      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-      const port = (server.address() as { port: number }).port;
-      const original = https.request;
-      // Only tests route a vetted synthetic hostname to the local mock; TLS hostname checks stay enabled.
-      vi.spyOn(https, 'request').mockImplementation(((
-        url: URL,
-        options: RequestOptions,
-        callback: (res: import('node:http').IncomingMessage) => void,
-      ) => {
-        const lookup: LookupFunction = (_hostname, opts, done) => {
-          if (opts.all) done(null, [{ address: '127.0.0.1', family: 4 }]);
-          else done(null, '127.0.0.1', 4);
-        };
-        return original(url, { ...options, lookup, port, ca: cert }, callback);
-      }) as typeof https.request);
-      const h = await createHarness();
+      let server: https.Server | undefined;
+      let h: Awaited<ReturnType<typeof createHarness>> | undefined;
       try {
+        const certPath = path.join(dir, 'cert.pem');
+        const keyPath = path.join(dir, 'key.pem');
+        execFileSync(
+          'openssl',
+          [
+            'req',
+            '-x509',
+            '-newkey',
+            'rsa:2048',
+            '-nodes',
+            '-keyout',
+            keyPath,
+            '-out',
+            certPath,
+            '-days',
+            '1',
+            '-subj',
+            '/CN=deploy.example.test',
+            '-addext',
+            'subjectAltName=DNS:deploy.example.test',
+          ],
+          { stdio: 'ignore' },
+        );
+        const cert = fs.readFileSync(certPath);
+        const received: Array<{
+          body: string;
+          auth: string | undefined;
+          key: string | string[] | undefined;
+        }> = [];
+        server = https.createServer({ key: fs.readFileSync(keyPath), cert }, (req, res) => {
+          let body = '';
+          req.on('data', (chunk: Buffer) => {
+            body += chunk.toString();
+          });
+          req.on('end', () => {
+            received.push({ body, auth: req.headers.authorization, key: req.headers['idempotency-key'] });
+            res.writeHead(202);
+            res.end('synthetic-private-provider-response');
+          });
+        });
+        await new Promise<void>((resolve) => server!.listen(0, '127.0.0.1', resolve));
+        const port = (server.address() as { port: number }).port;
+        const original = https.request;
+        // Only tests route a vetted synthetic hostname to the local mock; TLS hostname checks stay enabled.
+        vi.spyOn(https, 'request').mockImplementation(((
+          url: URL,
+          options: RequestOptions,
+          callback: (res: import('node:http').IncomingMessage) => void,
+        ) => {
+          const lookup: LookupFunction = (_hostname, opts, done) => {
+            if (opts.all) done(null, [{ address: '127.0.0.1', family: 4 }]);
+            else done(null, '127.0.0.1', 4);
+          };
+          return original(url, { ...options, lookup, port, ca: cert }, callback);
+        }) as typeof https.request);
+        h = await createHarness();
         const auth = await call(setup.POST, {
           method: 'POST',
           body: { username: 'admin', password: 'correct horse battery staple' },
@@ -167,10 +172,15 @@ describe('authenticated deployment HTTP to durable worker to local TLS receiver'
         expect((await call(history.GET, { cookie, params })).json.attempts[0].status).toBe('accepted');
         expect((await call(trigger.POST, { method: 'POST', cookie, params, body: {} })).status).toBe(409);
       } finally {
-        await h.cleanup();
-        server.closeAllConnections();
-        await new Promise<void>((resolve) => server.close(() => resolve()));
-        fs.rmSync(dir, { recursive: true, force: true });
+        try {
+          await h?.cleanup();
+        } finally {
+          if (server) {
+            server.closeAllConnections();
+            await new Promise<void>((resolve) => server!.close(() => resolve()));
+          }
+          fs.rmSync(dir, { recursive: true, force: true });
+        }
       }
     },
   );

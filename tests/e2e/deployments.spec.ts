@@ -15,6 +15,7 @@ test('deployment settings and confirmation are accessible on desktop and mobile'
   let triggers = 0;
   let validations = 0;
   let failSave = true;
+  let changeDuringValidation = false;
   const attempts: object[] = [];
   await page.route(`**${endpoint}**`, async (route) => {
     const request = route.request();
@@ -22,6 +23,7 @@ test('deployment settings and confirmation are accessible on desktop and mobile'
     if (path.endsWith('/history')) return route.fulfill({ json: { attempts } });
     if (path.endsWith('/test')) {
       validations++;
+      if (changeDuringValidation) binding = { ...binding, revision: String(++revision), enabled: false };
       binding = {
         ...binding,
         lastTestedAt: new Date().toISOString(),
@@ -53,6 +55,12 @@ test('deployment settings and confirmation are accessible on desktop and mobile'
         });
       }
       const body = request.postDataJSON();
+      if (binding && body.expectedRevision !== String(revision)) {
+        return route.fulfill({
+          status: 409,
+          json: { error: { code: 'conflict', message: 'Settings changed in another tab.' } },
+        });
+      }
       binding = {
         id: 'binding',
         providerType: body.providerType,
@@ -127,8 +135,26 @@ test('deployment settings and confirmation are accessible on desktop and mobile'
   expect(triggers).toBe(1);
   await expectAccessible(page);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await section.screenshot({ path: `test-results/deployment-${info.project.name}.png` });
+  await section.screenshot({
+    path: `test-results/deployment-${info.project.name}.png`,
+    style: '.mobile-bar { visibility: hidden; }',
+  });
   await section.getByRole('button', { name: 'Remove binding…' }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Remove binding', exact: true }).click();
   await expect(section.getByText('Not configured', { exact: true })).toBeVisible();
+  await section.getByLabel('Binding enabled').check();
+  await section.getByLabel('Webhook URL', { exact: true }).fill('https://generic.example/recreated');
+  await section.getByRole('button', { name: 'Save binding' }).click();
+  await expect(section.getByText('Configured (••••)', { exact: true })).toBeVisible();
+  await section.getByLabel('Replacement webhook URL').fill('https://unsaved.example/keep');
+  changeDuringValidation = true;
+  await section.getByRole('button', { name: 'Validate destination' }).click();
+  await expect(section.getByRole('alert')).toHaveText(
+    'Deployment settings changed. Reload before saving or deploying.',
+  );
+  await expect(section.getByLabel('Replacement webhook URL')).toHaveValue('https://unsaved.example/keep');
+  await expect(section.getByLabel('Binding enabled')).toBeChecked();
+  await section.getByRole('button', { name: 'Save binding' }).click();
+  await expect(section.getByRole('alert')).toHaveText('Settings changed in another tab.');
+  await expect(section.getByLabel('Replacement webhook URL')).toHaveValue('https://unsaved.example/keep');
 });

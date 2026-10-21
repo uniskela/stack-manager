@@ -128,6 +128,13 @@ export function DeploymentSettings(
           method: 'POST',
           body: {},
         });
+        if (result.binding?.id !== binding?.id || result.binding?.revision !== binding?.revision) {
+          setMessage({
+            error: true,
+            text: 'Deployment settings changed. Reload before saving or deploying.',
+          });
+          return;
+        }
         setBinding(result.binding);
       } else {
         await saveConfiguration(operation);
@@ -352,13 +359,13 @@ function DestinationValidation({
         Validate destination
       </Button>
       {binding?.lastTestStatus ? (
-        <div role="status">
-          <p>Destination validation: {binding.lastTestStatus === 'ok' ? 'Passed' : 'Failed'}</p>
-          <p>
+        <output className="stack">
+          <span>Destination validation: {binding.lastTestStatus === 'ok' ? 'Passed' : 'Failed'}</span>
+          <span>
             <LocalTime iso={binding.lastTestedAt} />
-          </p>
-          {binding.lastTestMessage ? <p>{binding.lastTestMessage}</p> : null}
-        </div>
+          </span>
+          {binding.lastTestMessage ? <span>{binding.lastTestMessage}</span> : null}
+        </output>
       ) : null}
     </section>
   );

@@ -77,8 +77,9 @@ SonarCloud initial quality gate passes, zero new security hotspots. Readability/
 were fixed in `9c3182a` and `ac15087`. SQLite S7503 advisories are intentionally retained: persistence ports are Promise-based
 for PostgreSQL portability and async functions turn synchronous SQLite exceptions into rejected Promises.
 Removing async changes error behavior; adding dummy await hides the design. No rule is suppressed.
-Recovery audit writes remain sequential so audit errors stop the operation predictably; this path is bounded
-by the per-stack active-attempt invariant and is not a throughput loop (S9382).
+Recovery audit writes remain sequential and bounded to at most one active attempt per stack (S9382).
+Recovery persists before auditing; the central AuditService catches and logs redacted write failures,
+so audit storage errors do not abort recovery. A batch/concurrency API would add no throughput here.
 
 ## Kody business validation
 
@@ -100,3 +101,24 @@ backup cannot undo remote deployment requests. Keep issue #54 open until merged 
 Ruling: the operator's complete task was the approved implementation specification; no separate design
 approval pause. If that interpretation was wrong, the cost is reversible branch rework. No merge,
 release, image publication or production deployment performed.
+
+## Final review follow-up
+
+- Fixed scoped review P2: validation no longer adopts a changed binding revision while retaining stale
+  form values. It reports a reload conflict and preserves the old revision and unsaved inputs. The
+  desktop/mobile browser fixture verifies that a later save cannot undo another tab's disable.
+- Fixed Sonar semantic-status advice: native output element replaces the explicit status role.
+- Kody preflight semantics: DNS/policy/configuration failures before sending are rejected with no HTTP
+  status; after a request may have started, failures remain unknown. No automatic retries were added.
+- Kody resource cleanup: protected TLS fixture setup and SQLite handles now close on setup/assertion
+  failure, including the real API/worker/TLS journey.
+- Kody audit-failure and N+1 suggestions declined: recovery updates all matching state transactionally
+  before auditing, the active-attempt invariant bounds this to one row per stack, and AuditService
+  already catches/logs redacted insert failures. A regression verifies unknown recovery survives audit
+  storage failure without sending again. No batching abstraction is needed.
+- Kody breaking-change warning clarified in ADR0002: the earlier retry behavior was a plan; #54 adds
+  the first deployment-trigger consumers. There is no shipped deployment API to migrate. Repository
+  sync retries remain unchanged; operators/integrations must explicitly reconfirm unknown outcomes.
+- Final local Docker rebuild was cancelled when the VPS approached disk capacity. Earlier local
+  Docker smoke/restart/missing-key checks passed; final-head Docker CI and the separate configuration,
+  dependency and image security workflow at run 39590233264 passed without publication.
