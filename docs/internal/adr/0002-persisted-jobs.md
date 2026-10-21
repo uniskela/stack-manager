@@ -71,9 +71,10 @@ Rules:
 3. After provider returns `accepted=true` (or equivalent), set `Job.acceptanceRecordedAt` **before** marking succeeded.
 4. On reclaim/retry:
    - If `acceptanceRecordedAt` is set → **do not** call the provider again; continue to enqueue Deployment Watch / mark succeeded.
-   - If not set → retry `trigger` with the same `idempotencyKey`.
+   - If intent was recorded but acceptance is absent → record **unknown**, never resend automatically.
+   - Only a queued attempt with no persisted send intent may proceed to its first send.
 5. Adapters SHOULD send the key to the remote when supported (e.g. `Idempotency-Key` header on generic webhooks). Portainer stack webhooks may ignore headers; acceptance recording still prevents blind double-fire after known acceptance.
-6. Providers that cannot dedupe must document that uncertain pre-acceptance crashes may double-trigger; keep lease TTL short and prefer recording acceptance promptly.
+6. For #54, every uncertain pre-acceptance crash is conservative: require a new deliberate operator confirmation before another attempt. A persisted per-stack guard prevents a second active attempt while the prior job still owns its lease. Known acceptance never causes another outbound request.
 
 ## When to revisit
 
