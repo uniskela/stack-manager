@@ -24,6 +24,13 @@ test('signing secret saves, rotates with confirmation and disables', async ({ pa
   // Desktop and mobile share a repository; mutations run once to avoid racing signing changes.
   test.skip(info.project.name !== 'desktop', 'Shared settings mutate once.');
   const { workspaceId, repositoryId } = JSON.parse(fs.readFileSync(SAMPLE_STATE, 'utf8'));
+  const settings = await page.request.get(
+    `/api/workspaces/${workspaceId}/repositories/${repositoryId}/webhook`,
+  );
+  expect(settings.ok()).toBe(true);
+  const { configured } = await settings.json();
+  expect(typeof configured).toBe('boolean');
+  test.skip(configured, 'Existing signing secrets cannot be restored; leave configuration untouched.');
   await page.goto(`/w/${workspaceId}/repositories/${repositoryId}`);
   const region = page.getByRole('region', { name: 'Git webhooks', exact: true });
   try {

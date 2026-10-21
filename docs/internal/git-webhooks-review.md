@@ -178,3 +178,16 @@ or multi-operator credential-version protocol is introduced.
 Follow-up verification: `pnpm check` passed 487 tests plus format/lint/types; production build passed.
 Targeted production webhook browser/axe checks passed 5 tests with 1 expected shared mobile mutation
 skip. The updated unknown-client regression failed before the fix and passes in the full suite.
+
+The further Kody finding [4332551087](https://github.com/uniskela/stack-manager/pull/64#discussion_r4332551087)
+revises its earlier browser cleanup advice: a reused sample repository may already have a signing
+secret that the test cannot restore. Before navigation, mutation or entering finally cleanup, the
+test now reads authenticated webhook settings, validates the response, and skips if configured.
+Unconfigured repositories retain the existing save/rotate/disable assertions and failure cleanup.
+
+Verification: `pnpm check` passed 487 tests plus format/lint/types. Targeted production browser/axe
+passed 5 tests with 1 expected mobile mutation skip. A temporary production-browser self-check
+configured the sample before invoking the unchanged test body, observed its skip, and then proved
+the original signing secret still accepted a push (202); 3 tests passed and 1 intentionally skipped.
+The temporary self-check fixture was removed. Production code is unchanged; the existing production
+build was reused. New-head CI/security/Kody results are tracked in PR #64.
