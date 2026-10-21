@@ -30,6 +30,7 @@ test('signing secret saves, rotates with confirmation and disables', async ({ pa
   expect(settings.ok()).toBe(true);
   const { configured } = await settings.json();
   expect(typeof configured).toBe('boolean');
+  // Existing secrets are write-only and cannot be restored after this test.
   test.skip(configured, 'Existing signing secrets cannot be restored; leave configuration untouched.');
   await page.goto(`/w/${workspaceId}/repositories/${repositoryId}`);
   const region = page.getByRole('region', { name: 'Git webhooks', exact: true });
