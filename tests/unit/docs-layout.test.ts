@@ -12,6 +12,7 @@ const PUBLIC_SLUGS = [
   'getting-started',
   'git-workflow',
   'git-webhooks',
+  'deployment-webhooks',
   'self-hosting',
   'backup-restore',
   'auth-and-credentials',

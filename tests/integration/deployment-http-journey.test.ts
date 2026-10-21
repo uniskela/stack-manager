@@ -156,6 +156,16 @@ describe('authenticated deployment HTTP to durable worker to local TLS receiver'
         );
         expect(await h.container.worker.runOnce()).toBe(false);
         expect(received).toHaveLength(1);
+        const removed = await call(binding.DELETE, {
+          method: 'DELETE',
+          cookie,
+          params,
+          body: { expectedRevision: saved.json.binding.revision },
+        });
+        expect(removed.status).toBe(200);
+        expect((await call(binding.GET, { cookie, params })).json.binding).toBeNull();
+        expect((await call(history.GET, { cookie, params })).json.attempts[0].status).toBe('accepted');
+        expect((await call(trigger.POST, { method: 'POST', cookie, params, body: {} })).status).toBe(409);
       } finally {
         await h.cleanup();
         server.closeAllConnections();
