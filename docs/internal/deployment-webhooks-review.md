@@ -88,7 +88,8 @@ Added **Validate destination**, which checks the saved configuration and DNS/net
 sending any HTTP request. Status/time persist in the existing credential test fields, with binding
 revision and credential nonce fencing so concurrent rotation/removal cannot stamp stale results.
 The UI preserves unsaved input and explicitly excludes TLS, HTTP acceptance and health verification.
-Disabled bindings may be validated. Rotation resets the status. Final revalidation is requested after push.
+Disabled bindings may be validated. Rotation resets the status. Kody revalidation reports **Compliant**, high confidence, with no missing or partial requirements:
+https://github.com/uniskela/stack-manager/pull/65#issuecomment-6314688187
 
 ## Remaining operational acceptance
 
@@ -122,3 +123,16 @@ release, image publication or production deployment performed.
 - Final local Docker rebuild was cancelled when the VPS approached disk capacity. Earlier local
   Docker smoke/restart/missing-key checks passed; final-head Docker CI and the separate configuration,
   dependency and image security workflow at run 39590233264 passed without publication.
+
+Latest maintained local check: 544/544 tests and format/lint/types passed. Full browser/axe rerun:
+43 passed, 13 expected skips with the public sample repository. One interrupted run failed when a
+concurrent rebuild replaced the server assets; the isolated rerun above passed. Final semantic output
+layout was visually checked and given block layout to keep status/date/message readable on phones.
+Sonar gate remains green, with ten Promise-port S7503 and one bounded recovery S9382 advisory
+retained with the dispositions above; no security hotspots. Sonar coverage is not imported by the
+maintained workflow, so its 0% display is not a test execution result.
+
+Final focused desktop/mobile deployment+axe run: 4/4 passed, screenshots refreshed with synthetic
+configuration only. Final production build and 32 service regressions pass after the small readability
+and status-layout changes. All maintained PR checks at b8f661a pass; final documentation/layout head
+is rechecked by CI. No merge, release, image publication or production deployment was performed.

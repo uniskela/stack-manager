@@ -796,3 +796,8 @@ table.simple th {
 .deployment-dialog::backdrop {
   background: rgb(0 0 0 / 55%);
 }
+
+.deployment-validation,
+.deployment-validation > span {
+  display: block;
+}

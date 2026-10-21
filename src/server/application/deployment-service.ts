@@ -350,16 +350,11 @@ export class DeploymentService {
           ctx.signal.throwIfAborted();
           providerInvoked = true;
           const r = await provider.trigger(config, { signal: ctx.signal, idempotencyKey: a.id });
-          return {
-            status: r.status,
-            httpStatus: 'httpStatus' in r ? r.httpStatus : null,
-            reason:
-              r.status === 'unknown'
-                ? 'Request outcome uncertain; verify destination before retrying.'
-                : r.httpStatus === null
-                  ? 'Destination validation prevented the request.'
-                  : null,
-          };
+          let reason: string | null = null;
+          if (r.status === 'unknown')
+            reason = 'Request outcome uncertain; verify destination before retrying.';
+          else if (r.httpStatus === null) reason = 'Destination validation prevented the request.';
+          return { status: r.status, httpStatus: 'httpStatus' in r ? r.httpStatus : null, reason };
         },
         { kind: 'deployment', providerType: b.providerType, nonce: a.credentialNonce },
       );

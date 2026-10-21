@@ -359,7 +359,7 @@ function DestinationValidation({
         Validate destination
       </Button>
       {binding?.lastTestStatus ? (
-        <output className="stack">
+        <output className="deployment-validation stack">
           <span>Destination validation: {binding.lastTestStatus === 'ok' ? 'Passed' : 'Failed'}</span>
           <span>
             <LocalTime iso={binding.lastTestedAt} />
