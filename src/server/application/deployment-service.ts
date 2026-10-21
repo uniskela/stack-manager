@@ -3,6 +3,7 @@ import type { Clock } from '@/server/domain/clock';
 import {
   deploymentAttemptView,
   type DeploymentBinding,
+  type DeploymentAttempt,
   type DeploymentProviderType,
 } from '@/server/domain/deployment';
 import { ConflictError, NotFoundError, ValidationError } from '@/server/domain/errors';
@@ -27,6 +28,12 @@ const inputSchema = z
   .strict()
   .refine((v) => !(v.configuration && v.credentialId), 'Choose configuration or credential.');
 export type ConfigureDeploymentInput = z.infer<typeof inputSchema>;
+
+type TriggerOutcome = {
+  status: 'accepted' | 'rejected' | 'unknown';
+  httpStatus: number | null;
+  reason: string | null;
+};
 
 export class DeploymentService {
   constructor(
@@ -110,13 +117,16 @@ export class DeploymentService {
         { kind: 'deployment', providerType: input.providerType },
       );
     const now = this.clock.now();
+    let managedCredential = existing?.managedCredential ?? false;
+    if (record) managedCredential = true;
+    else if (input.credentialId) managedCredential = false;
     const binding: DeploymentBinding = {
       id: existing?.id ?? this.newId(),
       workspaceId,
       stackId,
       providerType: input.providerType,
       credentialId,
-      managedCredential: record ? true : input.credentialId ? false : (existing?.managedCredential ?? false),
+      managedCredential,
       enabled: input.enabled,
       deployOnPush: false,
       revision: this.newId(),
@@ -127,12 +137,9 @@ export class DeploymentService {
       updatedAt: now,
     };
     await this.repos.deployments.save(binding, input.expectedRevision, record);
+    const updateAction = binding.enabled ? 'deployment.binding_updated' : 'deployment.binding_disabled';
     await this.audit.record({
-      action: !existing
-        ? 'deployment.binding_created'
-        : !binding.enabled
-          ? 'deployment.binding_disabled'
-          : 'deployment.binding_updated',
+      action: existing ? updateAction : 'deployment.binding_created',
       actorUserId,
       workspaceId,
       entityType: 'stack',
@@ -162,6 +169,7 @@ export class DeploymentService {
     });
   }
   private async recover(stackId: string) {
+    // Keep recovery audit writes ordered and avoid concurrent writes on the single SQLite connection.
     for (const a of await this.repos.deployments.recover(stackId, this.clock.now())) {
       await this.audit.record({
         action: 'deployment.unknown',
@@ -181,7 +189,7 @@ export class DeploymentService {
     const actor = await this.repos.users.findById(actorUserId);
     if (!actor || actor.disabledAt) throw new ConflictError('Operator is no longer active.');
     const c = await this.repos.credentials.findById(workspaceId, b.credentialId);
-    if (!c || c.kind !== 'deployment' || c.providerType !== b.providerType)
+    if (c?.kind !== 'deployment' || c.providerType !== b.providerType)
       throw new ConflictError('Deployment credential unavailable.');
     await this.credentials.withPlaintext(
       workspaceId,
@@ -243,11 +251,7 @@ export class DeploymentService {
     const a = await this.repos.deployments.findAttempt(id);
     if (!a) return;
     if (a.status !== 'queued' && a.status !== 'running') return;
-    let result: {
-      status: 'accepted' | 'rejected' | 'unknown';
-      httpStatus: number | null;
-      reason: string | null;
-    };
+    let result: TriggerOutcome;
     if (a.status === 'running')
       result = {
         status: 'unknown',
@@ -267,42 +271,7 @@ export class DeploymentService {
           });
         return;
       }
-      try {
-        const b = await this.repos.deployments.binding(a.workspaceId, a.stackId);
-        const c = b && (await this.repos.credentials.findById(a.workspaceId, b.credentialId));
-        if (!b?.enabled || b.revision !== a.bindingRevision || c?.secretNonce !== a.credentialNonce)
-          result = {
-            status: 'rejected',
-            httpStatus: null,
-            reason: 'Deployment settings changed before send.',
-          };
-        else
-          result = await this.credentials.withPlaintext(
-            a.workspaceId,
-            b.credentialId,
-            async (secret) => {
-              const provider = this.providers.get(b.providerType)!;
-              const config = provider.validateConfiguration(JSON.parse(secret));
-              ctx.signal.throwIfAborted();
-              const r = await provider.trigger(config, { signal: ctx.signal, idempotencyKey: id });
-              return {
-                status: r.status,
-                httpStatus: 'httpStatus' in r ? r.httpStatus : null,
-                reason:
-                  r.status === 'unknown'
-                    ? 'Request outcome uncertain; verify destination before retrying.'
-                    : null,
-              };
-            },
-            { kind: 'deployment', providerType: b.providerType, nonce: a.credentialNonce },
-          );
-      } catch {
-        result = {
-          status: 'unknown',
-          httpStatus: null,
-          reason: 'Request outcome uncertain; verify destination before retrying.',
-        };
-      }
+      result = await this.send(a, ctx);
     }
     if (await this.repos.deployments.finish(id, job.leaseOwner, result, this.clock.now())) {
       if (result.status === 'accepted') await ctx.recordAcceptance();
@@ -314,6 +283,43 @@ export class DeploymentService {
         entityId: id,
         meta: { httpStatus: result.httpStatus },
       });
+    }
+  }
+  private async send(a: DeploymentAttempt, ctx: JobContext): Promise<TriggerOutcome> {
+    try {
+      const b = await this.repos.deployments.binding(a.workspaceId, a.stackId);
+      const c = b && (await this.repos.credentials.findById(a.workspaceId, b.credentialId));
+      if (!b?.enabled || b.revision !== a.bindingRevision || c?.secretNonce !== a.credentialNonce)
+        return {
+          status: 'rejected',
+          httpStatus: null,
+          reason: 'Deployment settings changed before send.',
+        };
+      return await this.credentials.withPlaintext(
+        a.workspaceId,
+        b.credentialId,
+        async (secret) => {
+          const provider = this.providers.get(b.providerType)!;
+          const config = provider.validateConfiguration(JSON.parse(secret));
+          ctx.signal.throwIfAborted();
+          const r = await provider.trigger(config, { signal: ctx.signal, idempotencyKey: a.id });
+          return {
+            status: r.status,
+            httpStatus: 'httpStatus' in r ? r.httpStatus : null,
+            reason:
+              r.status === 'unknown'
+                ? 'Request outcome uncertain; verify destination before retrying.'
+                : null,
+          };
+        },
+        { kind: 'deployment', providerType: b.providerType, nonce: a.credentialNonce },
+      );
+    } catch {
+      return {
+        status: 'unknown',
+        httpStatus: null,
+        reason: 'Request outcome uncertain; verify destination before retrying.',
+      };
     }
   }
 }

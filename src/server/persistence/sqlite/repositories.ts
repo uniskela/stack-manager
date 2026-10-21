@@ -922,7 +922,7 @@ class SqliteDeploymentRepository implements DeploymentRepository {
     return this.db.transaction(
       (tx) => {
         const a = tx.select().from(deploymentAttempts).where(eq(deploymentAttempts.id, id)).get();
-        if (!a || a.status !== 'queued') return false;
+        if (a?.status !== 'queued') return false;
         const j = tx.select().from(jobs).where(eq(jobs.id, a.jobId)).get();
         const b = tx.select().from(deploymentBindings).where(eq(deploymentBindings.id, a.bindingId)).get();
         const c =
