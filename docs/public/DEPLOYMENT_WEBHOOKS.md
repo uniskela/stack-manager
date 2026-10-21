@@ -51,6 +51,15 @@ Requests have connection and total deadlines. Response content is discarded and 
 logged. A successful HTTP response means the provider accepted the request, not that containers
 are running or healthy.
 
+## Validate a saved destination
+
+Choose **Validate destination** to check the saved provider configuration and current DNS/network
+policy without sending a webhook. The last validation time and a safe pass/fail message are saved;
+disabled bindings can also be validated. This check does not test TLS, connectivity, HTTP acceptance
+or container health. Replacing credentials clears their previous validation status. A changed
+binding during validation requires a fresh check. A passing check never bypasses execution-time
+network policy or enables automatic deployment.
+
 ## Manual deployment
 
 1. Review the stack and its saved provider in **Deployment**.
