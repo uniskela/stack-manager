@@ -7,9 +7,8 @@ import fs from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as setup from '@/app/api/setup/route';
 import { DEFAULT_ROUTING_POLICY } from '@/shared/deployment-routing';
-import { DeploymentService } from '@/server/application/deployment-service';
-import { openSqlite } from '@/server/persistence/sqlite/database';
 import { createHarness, type TestHarness } from '../support/container';
+import { mockDeploymentSend, sqlRows } from '../support/routing';
 import { startGitServer, gitServerOverrides, type GitServer } from '../support/git-server';
 import { call } from '../support/http';
 
@@ -20,17 +19,8 @@ const secrets: Record<string, string> = {};
 const trigger = vi.fn();
 const policy = { ...DEFAULT_ROUTING_POLICY, dependencies: ['shared/proxy/**', 'shared/ünï cødé/**'] };
 
-function sql<T = Record<string, unknown>>(statement: string, ...values: unknown[]): T[] {
-  const handle = openSqlite(h.config.databasePath);
-  try {
-    const prepared = handle.db.$client.prepare(statement);
-    if (prepared.reader) return prepared.all(...values) as T[];
-    prepared.run(...values);
-    return [];
-  } finally {
-    handle.close();
-  }
-}
+const sql = <T = Record<string, unknown>>(statement: string, ...values: unknown[]) =>
+  sqlRows<T>(h, statement, ...values);
 async function drain() {
   for (let i = 0; i < 40 && (await h.container.worker.runOnce()); i++) {
     /* bounded test drain */
@@ -74,24 +64,7 @@ const attempts = async (stackId: string) =>
 const binding = async (stackId: string) =>
   (await h.container.deployments.settings(workspaceId, stackId)).binding!;
 
-function mockSend() {
-  const provider = {
-    type: 'generic-webhook' as const,
-    validateConfiguration: (v: unknown) => v as { url: string },
-    validateDestination: async () => {},
-    trigger,
-  };
-  const service = new DeploymentService(
-    h.container.repos,
-    h.container.credentials,
-    new Map([['generic-webhook', provider]]),
-    h.container.jobs,
-    h.container.audit,
-    h.clock,
-    randomUUID,
-  );
-  vi.spyOn(h.container.deployments, 'execute').mockImplementation((job, ctx) => service.execute(job, ctx));
-}
+const mockSend = () => mockDeploymentSend(h, trigger);
 
 async function connect(repositoryId: string) {
   const now = h.clock.now();
