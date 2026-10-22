@@ -29,4 +29,15 @@ test('dashboard stays focused, accessible and responsive with a connected reposi
 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: `test-results/dashboard-${info.project.name}.png`, fullPage: true });
+
+  // Keyboard: the activity link is reachable with Tab and opens the full activity log with Enter.
+  const activity = page.getByRole('link', { name: 'View all activity' });
+  let reached = false;
+  for (let i = 0; i < 60 && !reached; i++) {
+    await page.keyboard.press('Tab');
+    reached = await activity.evaluate((el) => el === document.activeElement);
+  }
+  expect(reached).toBe(true);
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(new RegExp(`/w/${workspaceId}/settings/activity$`));
 });
