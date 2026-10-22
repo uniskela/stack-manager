@@ -118,6 +118,18 @@ export class SqliteDeploymentRoutingRepository implements DeploymentRoutingRepos
           .where(eq(gitWebhookDeliveries.id, source.id))
           .get();
         if (!delivery || delivery.processedAt) return [];
+        const conn = tx
+          .select()
+          .from(gitRepositoryConnections)
+          .where(eq(gitRepositoryConnections.id, source.repositoryId))
+          .get();
+        const signing =
+          source.signingCredentialId &&
+          tx
+            .select()
+            .from(providerCredentials)
+            .where(eq(providerCredentials.id, source.signingCredentialId))
+            .get();
         const results = [];
         for (const r of records) {
           const b = tx
@@ -134,18 +146,6 @@ export class SqliteDeploymentRoutingRepository implements DeploymentRoutingRepos
           if (!tx.select().from(stacks).where(eq(stacks.id, r.decision.stackId)).get()) continue;
           const d = { ...r.decision };
           if (r.attempt && r.job) {
-            const conn = tx
-              .select()
-              .from(gitRepositoryConnections)
-              .where(eq(gitRepositoryConnections.id, source.repositoryId))
-              .get();
-            const signing =
-              source.signingCredentialId &&
-              tx
-                .select()
-                .from(providerCredentials)
-                .where(eq(providerCredentials.id, source.signingCredentialId))
-                .get();
             if (
               !b?.deployOnPush ||
               b.automationHold ||
@@ -183,7 +183,7 @@ export class SqliteDeploymentRoutingRepository implements DeploymentRoutingRepos
                   'A deployment is active. This later routing intent is saved; inspect its outcome, then use Deploy now deliberately.';
                 d.attemptId = null;
               } else {
-                // Nested savepoint reuses the same atomic binding/credential and per-stack constraints.
+                // Reuse guarded enqueue per stack; the outer transaction rolls all stacks back on failure.
                 new SqliteDeploymentRepository(tx).enqueueSync(r.attempt, r.job);
               }
             }

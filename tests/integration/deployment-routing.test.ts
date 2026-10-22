@@ -283,24 +283,69 @@ describe('durable selective deployment worker', () => {
     await drain();
     expect(trigger).toHaveBeenCalledTimes(1);
   });
-  it('rolls back decisions, attempts and cursor together on interrupted routing transaction', async () => {
+  it('retries lookup failures without skipping sources or advancing shared checkpoints across restart', async () => {
     await optIn();
+    await optIn('notes');
     const baseline = (await h.container.deployments.settings(workspaceId, 'wiki')).binding!.routingHeadSha;
     await deliver(change({ 'apps/wiki/config/a': 'a' }));
+    h.clock.advance(1);
+    await deliver(change({ 'apps/notes/config/b': 'b' }));
     await h.container.worker.runOnce();
-    sql(
-      "CREATE TRIGGER routing_test_abort BEFORE INSERT ON deployment_routing_decisions BEGIN SELECT RAISE(ABORT, 'simulated crash'); END",
-    );
+    const lookup = vi
+      .spyOn(h.container.repos.gitRepositories, 'findByIdUnscoped')
+      .mockRejectedValueOnce(new Error('simulated repository lookup failure'));
     await h.container.worker.runOnce();
     expect(await decisions()).toEqual([]);
+    expect(await decisions('notes')).toEqual([]);
     expect(sql('SELECT * FROM deployment_attempts')).toEqual([]);
-    expect((await h.container.deployments.settings(workspaceId, 'wiki')).binding!.routingHeadSha).toBe(
-      baseline,
+    expect(sql("SELECT * FROM jobs WHERE type = 'deployment_trigger'")).toEqual([]);
+    expect(sql('SELECT * FROM git_webhook_deliveries WHERE processed_at IS NULL')).toHaveLength(2);
+    expect(sql("SELECT status, attempts, last_error FROM jobs WHERE type = 'deployment_route'")).toEqual([
+      { status: 'pending', attempts: 1, last_error: 'Error: simulated repository lookup failure' },
+    ]);
+    for (const stackId of ['wiki', 'notes'])
+      expect((await h.container.deployments.settings(workspaceId, stackId)).binding!.routingHeadSha).toBe(
+        baseline,
+      );
+    lookup.mockRestore();
+    await restart();
+    h.clock.advance(6000);
+    await drain();
+    expect(trigger).toHaveBeenCalledTimes(2);
+    for (const stackId of ['wiki', 'notes']) {
+      expect(await decisions(stackId)).toHaveLength(2);
+      expect((await decisions(stackId)).filter((d) => d.decision === 'deploy')).toHaveLength(1);
+    }
+    expect(sql('SELECT * FROM git_webhook_deliveries WHERE processed_at IS NULL')).toEqual([]);
+    await h.container.deploymentRouting.schedule(repositoryId);
+    await drain();
+    expect(trigger).toHaveBeenCalledTimes(2);
+  });
+  it('rolls back earlier stacks when a later enqueue interrupts the routing transaction', async () => {
+    await optIn();
+    await optIn('notes');
+    const baseline = (await h.container.deployments.settings(workspaceId, 'wiki')).binding!.routingHeadSha;
+    await deliver(change({ 'shared/proxy/nginx.conf': 'config' }));
+    await h.container.worker.runOnce();
+    // Notes is enqueued first; failing Wiki must roll back that earlier attempt and job too.
+    sql(
+      "CREATE TRIGGER routing_test_abort BEFORE INSERT ON deployment_attempts WHEN NEW.stack_id = 'wiki' BEGIN SELECT RAISE(ABORT, 'simulated crash'); END",
     );
+    await h.container.worker.runOnce();
+    for (const stackId of ['wiki', 'notes']) {
+      expect(await decisions(stackId)).toEqual([]);
+      expect((await h.container.deployments.settings(workspaceId, stackId)).binding!.routingHeadSha).toBe(
+        baseline,
+      );
+    }
+    expect(sql('SELECT * FROM deployment_attempts')).toEqual([]);
+    expect(sql("SELECT * FROM jobs WHERE type = 'deployment_trigger'")).toEqual([]);
+    expect(sql('SELECT * FROM git_webhook_deliveries WHERE processed_at IS NULL')).toHaveLength(1);
     sql('DROP TRIGGER routing_test_abort');
     h.clock.advance(6000);
     await drain();
-    expect(trigger).toHaveBeenCalledTimes(1);
+    expect(trigger).toHaveBeenCalledTimes(2);
+    for (const stackId of ['wiki', 'notes']) expect((await decisions(stackId))[0]!.decision).toBe('deploy');
   });
   it.each(['disable', 'remove', 'rotate', 'signing'] as const)(
     'blocks %s between queue and execution',

@@ -34,7 +34,7 @@ and published review records were inspected. No competing routing PR was open at
 ## Validation
 
 - Frozen dependency install with ignored scripts and approved native rebuild completed; no dependency change.
-- Final `pnpm check`: format/lint/typecheck and 655 tests passed, including branch fencing and Unicode ordering.
+- Latest `pnpm check` after Kody corrections: format/lint/typecheck and 656 tests passed, including branch fencing and Unicode ordering.
 - Targeted Git/workflow/jobs/SQLite routing regressions: 79 passed.
 - Migration generation reports no schema changes after migration 0010.
 - Production build and full Playwright/axe run against the public sample repository passed: 43 passed,
@@ -56,7 +56,14 @@ and published review records were inspected. No competing routing PR was open at
 
 [Kody business validation](https://github.com/uniskela/stack-manager/pull/66#issuecomment-6318713869)
 reports **Compliant**, high confidence, with no missing acceptance criteria. Final independent read-only
-review through `bee03c3` found no critical/important defects. Inline Kody findings, if any, remain pending.
+review through `bee03c3` found no critical/important defects. The three subsequent inline Kody findings
+were individually reviewed:
+
+| Finding | Disposition and evidence |
+| --- | --- |
+| Repository lookup failure aborts remaining sources ([4338608761](https://github.com/uniskela/stack-manager/pull/66#discussion_r4338608761)) | Retained ordered failure propagation. Sources share checkpoints, so skipping a failed source can advance a baseline past it. The existing worker records the redacted error and retries. Added real SQLite/worker regression for two pending sources, unchanged checkpoints, durable retry state, restart and one send per affected stack. |
+| Per-record deployment enqueue ([4338609365](https://github.com/uniskela/stack-manager/pull/66#discussion_r4338609365)) | Hoisted shared repository/signing reads outside the stack loop within the immediate transaction. Retained the existing guarded enqueue for each stack to preserve binding/credential/active-attempt and job constraints. Strengthened SQLite rollback coverage: a later stack insert fails after an earlier enqueue; all decisions, attempts, jobs and checkpoints roll back, then retry requests each stack once. No second batch deployment path introduced. |
+| SQLite smoke handle cleanup ([4338674111](https://github.com/uniskela/stack-manager/pull/66#discussion_r4338674111)) | Fixed failure-path close while preserving the original exception even if cleanup fails. Self-check executes the actual workflow script with success, missing workspace, missing schema, query failure and cleanup failure fixtures; all five pass. |
 
 Initial [Sonar analysis](https://sonarcloud.io/dashboard?id=uniskela_stack-manager&pullRequest=66)
 reported 35 findings and zero security hotspots. Each rule group was reviewed:
@@ -79,6 +86,11 @@ complexity findings). No suppression, quality-profile change or accepted-issue m
 Sonar reports 0% coverage because the maintained pipeline does not import a coverage report; the 655
 passing tests are separate execution evidence. Latest maintained CI/security and Kody results are tracked
 on [PR #66](https://github.com/uniskela/stack-manager/pull/66).
+
+Kody correction validation: routing integration suite 31/31, full suite 656/656, format/lint/types,
+production build, five workflow cleanup fixtures and extracted Docker workflow shellcheck all passed.
+The UI and dependency graph are unchanged; fresh full browser/Docker/security evidence is supplied by
+PR CI, with the earlier local browser run retained above.
 
 ## Operator acceptance and residual risk
 

@@ -104,10 +104,15 @@ jobs:
           docker exec sm node -e '
             const { DatabaseSync } = require("node:sqlite");
             const db = new DatabaseSync("/data/stack-manager.sqlite", { readOnly: true });
-            if (db.prepare("SELECT count(*) AS n FROM workspaces WHERE slug = ?").get("smoke").n !== 1)
-              throw new Error("Workspace was not preserved across restart");
-            if (!db.prepare("SELECT name FROM sqlite_master WHERE type = ? AND name = ?").get("table", "deployment_routing_decisions"))
-              throw new Error("Routing migration missing after restart");
+            try {
+              if (db.prepare("SELECT count(*) AS n FROM workspaces WHERE slug = ?").get("smoke").n !== 1)
+                throw new Error("Workspace was not preserved across restart");
+              if (!db.prepare("SELECT name FROM sqlite_master WHERE type = ? AND name = ?").get("table", "deployment_routing_decisions"))
+                throw new Error("Routing migration missing after restart");
+            } catch (error) {
+              try { db.close(); } catch {}
+              throw error;
+            }
             db.close();
           '
       - name: Refuses to start without an encryption key

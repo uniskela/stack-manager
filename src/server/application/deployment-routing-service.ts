@@ -31,6 +31,7 @@ export class DeploymentRoutingService {
     for (let page = 0; page < 10; page++) {
       const sources = await this.repos.routing.pending(repositoryId);
       if (!sources.length) return;
+      // Sources share checkpoints; propagate lookup failures for job retry instead of skipping ahead.
       for (const source of sources) {
         ctx.signal.throwIfAborted();
         const conn = await this.repos.gitRepositories.findByIdUnscoped(repositoryId);
