@@ -74,13 +74,16 @@ describe('dashboard draft metadata query', () => {
     }
 
     const query = await h.container.source.listDraftPaths(['r1', 'r2']);
+    // Pin the exact set: three in-scope rows and never the r3 draft.
     expect(query).toEqual(
       expect.arrayContaining([
         { repositoryId: 'r1', path: 'apps/wiki/compose.yaml' },
+        { repositoryId: 'r1', path: 'apps/wiki-extra/compose.yaml' },
         { repositoryId: 'r2', path: 'apps/web/compose.yaml' },
       ]),
     );
     expect(query).toHaveLength(3);
+    expect(query.some((row) => row.repositoryId === 'r3')).toBe(false);
     expect(JSON.stringify(query)).not.toContain('sensitive content');
 
     const counts = await loadDashboardDraftCounts(

@@ -34,6 +34,7 @@ test('signing secret saves, rotates with confirmation and disables', async ({ pa
   test.skip(configured, 'Existing signing secrets cannot be restored; leave configuration untouched.');
   await page.goto(`/w/${workspaceId}/repositories/${repositoryId}`);
   const region = page.getByRole('region', { name: 'Git webhooks', exact: true });
+  let bodyPassed = false;
   try {
     await region
       .getByLabel('Signing secret', { exact: true })
@@ -89,13 +90,14 @@ test('signing secret saves, rotates with confirmation and disables', async ({ pa
     await region.getByRole('button', { name: 'Disable webhook…' }).click();
     await region.getByRole('button', { name: 'Confirm disable' }).click();
     await expect(region.getByText('Disabled', { exact: true })).toBeVisible();
+    bodyPassed = true;
   } finally {
-    const cleanup = await page.request.delete(
-      `/api/workspaces/${workspaceId}/repositories/${repositoryId}/webhook`,
-      {
+    // Never let cleanup mask the original failure; assert cleanup only after a passing body.
+    const cleanup = await page.request
+      .delete(`/api/workspaces/${workspaceId}/repositories/${repositoryId}/webhook`, {
         headers: { origin: new URL(page.url()).origin },
-      },
-    );
-    expect(cleanup.ok()).toBe(true);
+      })
+      .catch(() => null);
+    if (bodyPassed) expect(cleanup?.ok()).toBe(true);
   }
 });
