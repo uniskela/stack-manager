@@ -92,12 +92,22 @@ test('signing secret saves, rotates with confirmation and disables', async ({ pa
     await expect(region.getByText('Disabled', { exact: true })).toBeVisible();
     bodyPassed = true;
   } finally {
-    // Never let cleanup mask the original failure; assert cleanup only after a passing body.
-    const cleanup = await page.request
-      .delete(`/api/workspaces/${workspaceId}/repositories/${repositoryId}/webhook`, {
-        headers: { origin: new URL(page.url()).origin },
-      })
-      .catch(() => null);
-    if (bodyPassed) expect(cleanup?.ok()).toBe(true);
+    // Never let cleanup mask the original failure: assert it after a passing body, otherwise report it
+    // alongside the original error (a leftover signing secret makes later runs skip this test).
+    let cleanupProblem: string | null = null;
+    try {
+      const cleanup = await page.request.delete(
+        `/api/workspaces/${workspaceId}/repositories/${repositoryId}/webhook`,
+        { headers: { origin: new URL(page.url()).origin } },
+      );
+      if (!cleanup.ok()) cleanupProblem = `webhook cleanup returned HTTP ${cleanup.status()}`;
+    } catch (error) {
+      cleanupProblem = `webhook cleanup failed: ${error instanceof Error ? error.message : String(error)}`;
+    }
+    if (bodyPassed) expect(cleanupProblem).toBeNull();
+    else if (cleanupProblem) {
+      info.annotations.push({ type: 'cleanup-failed', description: cleanupProblem });
+      console.warn(`${cleanupProblem}; the sample repository may keep a signing secret.`);
+    }
   }
 });
