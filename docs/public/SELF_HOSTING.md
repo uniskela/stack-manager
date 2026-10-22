@@ -104,8 +104,10 @@ once; afterwards `/setup` redirects to sign-in.
 
 ## Upgrades
 
-Back up the data volume, change `STACK_MANAGER_VERSION`, then `docker compose up -d`. Migrations run automatically. Back up the data volume first
-(see [BACKUP_RESTORE.md](BACKUP_RESTORE.md)).
+Stop the app and back up the data volume (see [BACKUP_RESTORE.md](BACKUP_RESTORE.md)), change
+`STACK_MANAGER_VERSION`, then `docker compose up -d`. Migrations run automatically and only move forward: to roll
+back, restore the pre-upgrade backup and run the previous version. See [Upgrading to v0.6.0](UPGRADING_0_6.md)
+for the v0.6.0 notes and acceptance checklist.
 
 ## Scaling notes
 

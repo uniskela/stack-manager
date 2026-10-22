@@ -63,6 +63,13 @@
       "kind": "doc"
     },
     {
+      "source": "docs/public/UPGRADING_0_6.md",
+      "slug": "upgrading-0-6",
+      "title": "Upgrading to v0.6.0",
+      "group": "Deploy & operate",
+      "kind": "doc"
+    },
+    {
       "source": "docs/public/AUTH_AND_CREDENTIALS.md",
       "slug": "auth-and-credentials",
       "title": "Authentication and credentials",

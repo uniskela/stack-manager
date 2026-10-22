@@ -98,6 +98,8 @@ Regular Stack Manager mutations still require a browser session and same-origin 
 Last accepted time appears in Overview. Failed unauthenticated deliveries are not stored as delivery
 records or reflected in the UI: inspect the forge's HTTP delivery history. Fetch failures appear in
 Overview and Settings → Activity. Never paste signing secrets or raw webhook bodies into support logs.
+A 202 means the fetch was queued, not that it succeeded. If that fetch then fails on every retry, the push
+is not routed to deployments; see [Deployment webhooks troubleshooting](DEPLOYMENT_WEBHOOKS.md#troubleshooting).
 
 Delivery IDs are persisted uniquely per repository/provider across process restarts. Recording an
 accepted delivery and inserting/coalescing its fetch are one SQLite transaction; a queue error rolls

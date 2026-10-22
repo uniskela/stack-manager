@@ -118,7 +118,9 @@ The initial form includes standard Compose filenames, the selected Compose file,
 an explicit dependency such as `shared/proxy/**`. Exclude a shared file with its repository-relative path.
 
 Supported wildcards are `*` (within one path segment), `?` (one character) and whole-segment `**`
-(zero or more segments). Brace expansion, character classes, negation and extended globs are unsupported.
+(zero or more segments). Brace expansion, character classes, negation and extended globs are unsupported,
+so patterns cannot contain `{ } [ ] ( ) ! :` even as literal characters. Match such a character with `?`
+(for example `config/?prod?/**` for files under `config/(prod)/`). Unicode and spaces in paths are matched exactly.
 Paths must be relative POSIX paths without traversal, `.git`, backslashes or control characters.
 Each list accepts at most **32 patterns**, each at most **256 characters**. Comparisons accept at most
 **1,000 commits** and **10,000 changed paths**, with bounded Git execution, output and wildcard matching work (50 million estimated steps per stack, 100 million per source).
@@ -175,6 +177,14 @@ concurrent saves must reload rather than silently overwrite a newer binding.
 - **Unknown:** check the receiver before retrying. A failure response does not prove a deployment did
   not start. A new Deploy now confirmation is required for another attempt.
 - **Settings changed:** reload the latest settings, review the provider and replace configuration again.
+- **No routing decision after a push:** a verified push is routed only after its own fetch succeeds. If that
+  fetch fails on every retry (the forge is unreachable for a minute or more), the push is not routed, and a
+  later scheduled or manual fetch does not route it either. Nothing is deployed and the binding's baseline does
+  not move, so the next verified push includes those changes. Check the fetch error in Overview and use
+  **Deploy now** if the change should not wait. Redelivering the same push from the forge does not help:
+  an identical body is recognised as a duplicate.
+- **Blocked: history unavailable:** the repository was not ready when routing ran, for example because a
+  later fetch failed. Fetch, inspect, then use **Deploy now** if the change needs deploying.
 
 ## Migration, backups and rollback
 
@@ -191,4 +201,7 @@ that backup: restoring encrypted webhook URLs requires the same key material. Te
 relying on it. Migrations run on startup; do not edit previous migrations or apply hand-written down
 migrations. To roll back, stop all workers, inspect destinations for any in-flight requests, restore the
 pre-upgrade data backup and matching encryption configuration, then run the prior pinned application
-version. Restoring a database cannot undo a deployment request already sent to another system.
+version. Restoring a database cannot undo a deployment request already sent to another system. Do not run
+the prior version on the migrated database instead of restoring: queued deployment jobs stay dormant there
+and can be sent after a later re-upgrade. See [Backup and restore](BACKUP_RESTORE.md#rolling-back-an-upgrade),
+including what restoring an older replay ledger means for automation.

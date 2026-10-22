@@ -15,6 +15,7 @@ const PUBLIC_SLUGS = [
   'deployment-webhooks',
   'self-hosting',
   'backup-restore',
+  'upgrading-0-6',
   'auth-and-credentials',
   'security',
   'product',
