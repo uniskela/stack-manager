@@ -10,6 +10,44 @@ check for null before processing HTTP codes and distinguish local rejection from
 Accepted results retain numeric HTTP statuses. No released deployment provider is affected because
 #54 is the first implementation; this note documents compatibility for integrations based on the plan.
 
+## [0.6.0](https://github.com/uniskela/stack-manager/compare/v0.5.0...v0.6.0) (2026-10-22)
+
+
+### Features
+
+* **dashboard:** simplify source workspace overview ([#63](https://github.com/uniskela/stack-manager/issues/63)) ([dc117cb](https://github.com/uniskela/stack-manager/commit/dc117cb5b79c6aa2e5a9af8221bb8f5f453cc8cd))
+* **deployment:** add per-stack webhook bindings and manual triggers ([#65](https://github.com/uniskela/stack-manager/issues/65)) ([e75bda3](https://github.com/uniskela/stack-manager/commit/e75bda346a9b4dc00df9c6f9fe305c7687accd7f))
+* **deployment:** add selective Git change routing and idempotency ([#66](https://github.com/uniskela/stack-manager/issues/66)) ([8333dd8](https://github.com/uniskela/stack-manager/commit/8333dd88d87834890dfcd58e7745e4c8d9994f20))
+* **sync:** add durable-job repository fetch scheduler ([49f6cf3](https://github.com/uniskela/stack-manager/commit/49f6cf32df0498caec19e553eb437423356e8bc9))
+* **sync:** add per-repository automatic fetch settings ([#62](https://github.com/uniskela/stack-manager/issues/62)) ([da55d99](https://github.com/uniskela/stack-manager/commit/da55d99c3616bc340d5a886b56a518fb1640bb10))
+* **sync:** enqueue post-push refresh without changing push outcome ([5831a6c](https://github.com/uniskela/stack-manager/commit/5831a6c80cca8083eea42f2cd5d26578aa7cdbc6))
+* **sync:** refresh source automatically after successful Git push ([f86c720](https://github.com/uniskela/stack-manager/commit/f86c72096dbf686d6be80819e464bd1a365ce83a))
+* **sync:** schedule background Git fetches and refresh after push ([4c581a7](https://github.com/uniskela/stack-manager/commit/4c581a7a69b3b5dea595bf3f7713d37689aa1fb5))
+* **sync:** start automatic repository fetch with worker ([62a1d62](https://github.com/uniskela/stack-manager/commit/62a1d6294365d006a4c9a574891925e47e7874f8))
+* **sync:** validate automatic repository fetch settings ([818b1de](https://github.com/uniskela/stack-manager/commit/818b1de9a163b314b0c16fa1f7c6ad4b40f2c8fd))
+* **sync:** wire automatic fetch scheduler into app container ([03fe969](https://github.com/uniskela/stack-manager/commit/03fe9690bac7e4c4c4e98822049c55bd30c3598d))
+* **webhooks:** receive verified Git push events ([#64](https://github.com/uniskela/stack-manager/issues/64)) ([3e37b62](https://github.com/uniskela/stack-manager/commit/3e37b622e3d4ab1fb4cda3e181ab297c508e4ae1))
+
+
+### Bug Fixes
+
+* **ci:** send docs notifications to uniskela/com ([#44](https://github.com/uniskela/stack-manager/issues/44)) ([3c35f28](https://github.com/uniskela/stack-manager/commit/3c35f288501fb8da6174fdfc2a2023dd0a87e393))
+* harden v0.6.0 release audit labels, tests and upgrade docs ([#67](https://github.com/uniskela/stack-manager/issues/67)) ([8ac0249](https://github.com/uniskela/stack-manager/commit/8ac0249406b1eb18be1e1e2914d8bef15f23645f))
+* **security:** restrict dependency scripts and image publishing permissions ([#61](https://github.com/uniskela/stack-manager/issues/61)) ([dabf0c4](https://github.com/uniskela/stack-manager/commit/dabf0c4e60e68534550934d5ecb665afe129ef07))
+* **sync:** preserve durable refresh requests and isolate scheduling failures ([6571fd2](https://github.com/uniskela/stack-manager/commit/6571fd2cd22a34680f13e139da19c62ed6048f03))
+
+
+### Documentation
+
+* add Context7 guidance for AI coding agents ([#39](https://github.com/uniskela/stack-manager/issues/39)) ([a06799f](https://github.com/uniskela/stack-manager/commit/a06799f40a3795f23d0ddc476d99b1d6405bbdc4))
+* **plan:** scope v0.6.0 Git automation and selective deployment ([#58](https://github.com/uniskela/stack-manager/issues/58)) ([5198faf](https://github.com/uniskela/stack-manager/commit/5198faf963a4082cb76a4d6b43b93b98ae93b2aa))
+* separate public, internal and agent documentation ([#42](https://github.com/uniskela/stack-manager/issues/42)) ([83fe850](https://github.com/uniskela/stack-manager/commit/83fe850c381de44b7897067114c1f39a31617148))
+* **sync:** document scheduled repository fetching ([3d84354](https://github.com/uniskela/stack-manager/commit/3d843547acb0f518b5467e26e8b30ba85216911c))
+* **sync:** explain automatic fetch and manual fallback ([35ce560](https://github.com/uniskela/stack-manager/commit/35ce5604579101d8a94da0a10acf890898f05469))
+* **sync:** explain automatic fetch and manual fallback ([609c788](https://github.com/uniskela/stack-manager/commit/609c788599803a9b0dfae324e8d0cf7c4bfa3b90))
+* **sync:** explain automatic fetch and manual fallback ([d6906c2](https://github.com/uniskela/stack-manager/commit/d6906c2d7de886b34761d1c9e373c6c97a2a6f91))
+* **sync:** explain automatic fetch and manual fallback ([5df54be](https://github.com/uniskela/stack-manager/commit/5df54be9ddbe94cfcef8f4c0c0aa9c13b4c6a5c6))
+
 ## [0.5.0](https://github.com/uniskela/stack-manager/compare/v0.4.0...v0.5.0) (2026-10-07)
 
 
