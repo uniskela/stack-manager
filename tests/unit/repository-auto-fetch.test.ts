@@ -60,7 +60,10 @@ describe('isRepositoryAutoFetchDue', () => {
 });
 
 describe('RepositoryAutoFetch', () => {
-  function make(overrides: Partial<GitRepositoryConnection> = {}) {
+  function make(
+    overrides: Partial<GitRepositoryConnection> = {},
+    policy = { workerEnabled: true, autoFetchEnabled: true, autoFetchIntervalMinutes: 15 },
+  ) {
     const listWorkspaces = vi.fn(async () => [{ id: 'w1' } as Workspace]);
     const listRepositories = vi.fn(async () => [repository(overrides)]);
     const enqueue = vi.fn(async () => ({ created: true, job: {} as Job }));
@@ -72,7 +75,7 @@ describe('RepositoryAutoFetch', () => {
       { enqueue },
       { now: () => now },
       { warn, debug },
-      { workerEnabled: true, autoFetchEnabled: true, autoFetchIntervalMinutes: 15 },
+      policy,
     );
     return { scheduler, enqueue, warn, listRepositories, listWorkspaces };
   }
@@ -85,6 +88,19 @@ describe('RepositoryAutoFetch', () => {
       { repositoryId: 'repo-1', requestedBy: null },
       { dedupeKey: 'repository_sync:repo-1' },
     );
+  });
+
+  it.each([
+    ['worker disabled', { workerEnabled: false, autoFetchEnabled: true, autoFetchIntervalMinutes: 15 }],
+    [
+      'server auto-fetch disabled',
+      { workerEnabled: true, autoFetchEnabled: false, autoFetchIntervalMinutes: 15 },
+    ],
+  ])('never scans or enqueues when the %s, even for an overdue repository', async (_label, policy) => {
+    const { scheduler, enqueue, listWorkspaces } = make({ lastFetchedAt: minutesAgo(600) }, policy);
+    expect(await scheduler.runOnce()).toBe(0);
+    expect(listWorkspaces).not.toHaveBeenCalled();
+    expect(enqueue).not.toHaveBeenCalled();
   });
 
   it('skips repositories that are not due', async () => {

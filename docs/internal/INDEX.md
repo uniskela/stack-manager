@@ -56,7 +56,9 @@ are listed in [manifest.json](../manifest.json) (see [docs-sync](../../.github/d
 | [AUTH_AND_CREDENTIALS.md](../public/AUTH_AND_CREDENTIALS.md) | Auth, encryption at rest |
 | [SECURITY.md](../public/SECURITY.md) | Threat model and controls |
 | [UX.md](UX.md) | Desktop / mobile / PWA |
-| [BACKUP_RESTORE.md](../public/BACKUP_RESTORE.md) | Backup and restore |
+| [BACKUP_RESTORE.md](../public/BACKUP_RESTORE.md) | Backup, restore and rollback |
+| [UPGRADING_0_6.md](../public/UPGRADING_0_6.md) | v0.6.0 upgrade notes and operator acceptance checklist |
+| [releases/v0.6.0-readiness.md](releases/v0.6.0-readiness.md) | v0.6.0 release audit: verification matrix, findings, risks, Go/No-Go |
 | [TESTING.md](../public/TESTING.md) | Testing strategy |
 
 ## Architecture decision records

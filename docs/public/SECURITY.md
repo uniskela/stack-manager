@@ -58,7 +58,7 @@ Assume: operator places stack-manager on a trusted homelab network behind auth a
 
 - [x] Encryption key required at boot (PR #2 — process exits on missing/malformed key)
 - [x] Secret redaction tests (PR #2 — logger, audit, job payloads, API responses, data dir scan)
-- [ ] Webhook signature tests
+- [x] Webhook signature tests (v0.6.0 — GitHub/Gitea/Forgejo native HMAC-SHA256, SHA-1 and header substitution rejected)
 - [x] SSRF unit tests (PR #2 — Git remote host policy; deploy webhook URLs in PR #5)
 - [ ] Log viewer XSS tests
 - [x] Dependency vulnerability scanning in CI (PR #2 — `pnpm audit --prod`; Trivy on `pnpm-lock.yaml`)

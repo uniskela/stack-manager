@@ -34,6 +34,7 @@ test('signing secret saves, rotates with confirmation and disables', async ({ pa
   test.skip(configured, 'Existing signing secrets cannot be restored; leave configuration untouched.');
   await page.goto(`/w/${workspaceId}/repositories/${repositoryId}`);
   const region = page.getByRole('region', { name: 'Git webhooks', exact: true });
+  let bodyPassed = false;
   try {
     await region
       .getByLabel('Signing secret', { exact: true })
@@ -89,13 +90,24 @@ test('signing secret saves, rotates with confirmation and disables', async ({ pa
     await region.getByRole('button', { name: 'Disable webhook…' }).click();
     await region.getByRole('button', { name: 'Confirm disable' }).click();
     await expect(region.getByText('Disabled', { exact: true })).toBeVisible();
+    bodyPassed = true;
   } finally {
-    const cleanup = await page.request.delete(
-      `/api/workspaces/${workspaceId}/repositories/${repositoryId}/webhook`,
-      {
-        headers: { origin: new URL(page.url()).origin },
-      },
-    );
-    expect(cleanup.ok()).toBe(true);
+    // Never let cleanup mask the original failure: assert it after a passing body, otherwise report it
+    // alongside the original error (a leftover signing secret makes later runs skip this test).
+    let cleanupProblem: string | null = null;
+    try {
+      const cleanup = await page.request.delete(
+        `/api/workspaces/${workspaceId}/repositories/${repositoryId}/webhook`,
+        { headers: { origin: new URL(page.url()).origin } },
+      );
+      if (!cleanup.ok()) cleanupProblem = `webhook cleanup returned HTTP ${cleanup.status()}`;
+    } catch (error) {
+      cleanupProblem = `webhook cleanup failed: ${error instanceof Error ? error.message : String(error)}`;
+    }
+    if (bodyPassed) expect(cleanupProblem).toBeNull();
+    else if (cleanupProblem) {
+      info.annotations.push({ type: 'cleanup-failed', description: cleanupProblem });
+      console.warn(`${cleanupProblem}; the sample repository may keep a signing secret.`);
+    }
   }
 });

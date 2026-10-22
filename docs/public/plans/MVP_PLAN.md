@@ -1,7 +1,8 @@
 # Phased MVP implementation plan
 
 PR #1 (documentation), PR #2 (application foundation), PR #3 (source workspace) and PR #4 (Git workflow, released as
-v0.5.0) are complete. **PR #5 (deployment routing) is the next active phase.** Subsequent PRs implement the product. Boundaries may shift for strong technical reasons; avoid giant cross-cutting PRs.
+v0.5.0) are complete. **PR #5 (deployment routing) is implemented on `main` for v0.6.0** and is in its release gate
+([#57](https://github.com/uniskela/stack-manager/issues/57)). Subsequent PRs implement the product. Boundaries may shift for strong technical reasons; avoid giant cross-cutting PRs.
 
 ## PR sequence
 
@@ -84,11 +85,12 @@ Shipped across repository PRs #29, #31, #32, #34, #35, #36 and #37. User guide a
 
 **Safe defaults:** automatic Git fetch enabled at 15-minute fallback; auto-deployment off for all stacks until operator opt-in; manual fetch retained; no draft deletion, merge/rebase or force-push. Release version is controlled by Release Please, not this plan. Keep PR #6 environment/secrets and PR #7 read-only runtime observation in their existing later sequence.
 
-## PR #5 (next): deployment routing
+## PR #5: deployment routing (implemented for v0.6.0)
 
-Next active phase. Scope as in the table above: `DeploymentProvider` with Portainer and generic webhooks, a forge
-webhook receiver, relevance rules, selective deploy, idempotency and audit. Do not expand it into Portainer management
-UI.
+Delivered in sub-PRs #59, #62, #64, #65 and #66 (issues #52–#56): `DeploymentProvider` with Portainer and generic
+webhooks, a signed forge webhook receiver, relevance rules, opt-in selective deploy, idempotency and audit. Release
+verification and the operator acceptance checklist are tracked in [#57](https://github.com/uniskela/stack-manager/issues/57)
+and [Upgrading to v0.6.0](../UPGRADING_0_6.md). Do not expand it into Portainer management UI.
 
 ## Dependency graph
 

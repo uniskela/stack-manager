@@ -93,7 +93,8 @@ provenance.
 3. Set the new `STACK_MANAGER_VERSION` in `.env` and run `docker compose up -d`.
 
 Database migrations run automatically on start. Because the version is pinned in `.env`, nothing upgrades until you
-change it.
+change it. Upgrading from v0.5.x? Follow [Upgrading to v0.6.0](UPGRADING_0_6.md), including its acceptance
+checklist before you enable automatic deployment.
 
 ## Building from source
 
