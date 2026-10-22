@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { relativeTo } from '@/shared/source/paths';
 import { getContainer } from '@/server/container';
 import { DeploymentSettings } from '@/ui/deployment-settings';
 import { Section } from '@/ui/primitives/section';
@@ -23,8 +24,10 @@ export default async function DeploymentPage({
           workspaceId={workspaceId}
           stackId={stackId}
           stackName={stack.name}
+          composePath={relativeTo(stack.rootPath, stack.composePath)}
           settings={settings}
           attempts={history.attempts}
+          decisions={history.decisions}
           workerEnabled={config.workerEnabled}
         />
       </Section>

@@ -122,6 +122,8 @@ export function dashboardWork(
 
 /** Successful routine events are excluded by SQL before LIMIT, preserving their failures. */
 export const DASHBOARD_ROUTINE_ACTIONS = [
+  'deployment.routing_evaluated',
+  'deployment.stack_skipped',
   'repository.sync_requested',
   'repository.test',
   'auth.login',

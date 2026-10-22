@@ -433,7 +433,12 @@ describe('verification/configuration races and background Git work', () => {
         overrides: gitServerOverrides(server),
       });
       expect(await h.container.worker.runOnce()).toBe(true);
-      expect(rows('jobs')).toMatchObject([{ type: 'repository_sync', status: 'succeeded' }]);
+      expect(rows('jobs')).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ type: 'repository_sync', status: 'succeeded' }),
+          expect.objectContaining({ type: 'deployment_route', status: 'pending' }),
+        ]),
+      );
       const conn = await h.container.repos.gitRepositories.findById(workspaceId, repositoryId);
       expect(conn!.syncStatus).toBe('ready');
       expect(conn!.headSha).toMatch(/^[a-f0-9]{40}$/);

@@ -44,7 +44,7 @@
     {
       "source": "docs/public/DEPLOYMENT_WEBHOOKS.md",
       "slug": "deployment-webhooks",
-      "title": "Deployment webhooks",
+      "title": "Deployment webhooks and automatic routing",
       "group": "Start here",
       "kind": "doc"
     },

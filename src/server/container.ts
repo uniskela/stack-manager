@@ -4,6 +4,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { AuditService } from '@/server/application/audit-service';
 import { AuthService } from '@/server/application/auth-service';
+import {
+  DeploymentRoutingService,
+  DEPLOYMENT_ROUTE_JOB,
+} from '@/server/application/deployment-routing-service';
 import { DeploymentService, DEPLOYMENT_TRIGGER_JOB } from '@/server/application/deployment-service';
 import { createDeploymentProviders } from '@/server/providers/deployment/registry';
 import { ValidationError } from '@/server/domain/errors';
@@ -51,6 +55,7 @@ export interface Container {
   workspaces: WorkspaceService;
   credentials: CredentialService;
   deployments: DeploymentService;
+  deploymentRouting: DeploymentRoutingService;
   gitProviders: GitProviderRegistry;
   repositories: GitRepositoryService;
   stacks: StackService;
@@ -179,11 +184,17 @@ export function createContainer(config: AppConfig, overrides: ContainerOverrides
     const reader = new GitSourceReader(git);
     const stacks = new StackService(repos.stacks, repositories, reader, audit, clock, newId);
     const source = new SourceService(repositories, reader, repos.drafts, repos.stacks, audit, clock, newId);
-    const gitHistory = new GitHistoryService(
+    const historyReader = new GitHistoryReader(git, config.reposDir);
+    const deploymentRouting = new DeploymentRoutingService(
+      repos,
       repositories,
-      new GitHistoryReader(git, config.reposDir),
-      reader,
+      historyReader,
+      jobs,
+      audit,
+      clock,
+      newId,
     );
+    const gitHistory = new GitHistoryService(repositories, historyReader, reader);
     const gitWorkflow = new GitWorkflowService(
       repositories,
       repos.drafts,
@@ -195,6 +206,7 @@ export function createContainer(config: AppConfig, overrides: ContainerOverrides
 
     const syncLogger = logger.child({ component: 'stacks' });
     const handlers = new Map<string, JobHandler>([
+      [DEPLOYMENT_ROUTE_JOB, (job, ctx) => deploymentRouting.execute(job, ctx)],
       [DEPLOYMENT_TRIGGER_JOB, (job, ctx) => deployments.execute(job, ctx)],
       [
         REPOSITORY_SYNC_JOB,
@@ -203,9 +215,16 @@ export function createContainer(config: AppConfig, overrides: ContainerOverrides
           if (typeof repositoryId !== 'string')
             throw new Error('repository_sync payload missing repositoryId');
           await repositories.sync(repositoryId, ctx.signal);
+          const continuation = (await repos.routing.hasPending(repositoryId))
+            ? jobs.prepare(
+                DEPLOYMENT_ROUTE_JOB,
+                { repositoryId },
+                { dedupeKey: `${DEPLOYMENT_ROUTE_JOB}:${repositoryId}`, followUpIfRunning: true },
+              )
+            : undefined;
           // Keep stacks in step with the repository. A failure here must not fail the fetch itself.
           const conn = await repos.gitRepositories.findByIdUnscoped(repositoryId);
-          if (!conn?.autoAddStacks) return;
+          if (!conn?.autoAddStacks) return continuation;
           try {
             const result = await stacks.addAll(conn.workspaceId, conn.id, null);
             if (result.failed.length > 0)
@@ -219,6 +238,7 @@ export function createContainer(config: AppConfig, overrides: ContainerOverrides
               error: safeErrorMessage(error),
             });
           }
+          return continuation;
         },
       ],
     ]);
@@ -248,6 +268,7 @@ export function createContainer(config: AppConfig, overrides: ContainerOverrides
       workspaces,
       credentials,
       deployments,
+      deploymentRouting,
       gitProviders,
       repositories,
       stacks,

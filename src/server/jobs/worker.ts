@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import os from 'node:os';
-import type { JobRepository } from '@/server/application/ports';
+import type { EnqueueJobInput, JobRepository } from '@/server/application/ports';
 import type { Clock } from '@/server/domain/clock';
 import {
   JOB_HEARTBEAT_INTERVAL_MS,
@@ -21,7 +21,7 @@ export interface JobContext {
   recordAcceptance(): Promise<boolean>;
 }
 
-export type JobHandler = (job: Job, ctx: JobContext) => Promise<void>;
+export type JobHandler = (job: Job, ctx: JobContext) => Promise<void | EnqueueJobInput>;
 
 export interface JobWorkerOptions {
   workerId?: string;
@@ -123,12 +123,14 @@ export class JobWorker {
     heartbeat.unref?.();
 
     try {
-      await handler(job, {
+      const continuation = await handler(job, {
         signal: controller.signal,
         logger: log,
         recordAcceptance: () => this.repo.recordAcceptance(job.id, this.workerId, this.clock.now()),
       });
-      if (!(await this.repo.markSucceeded(job.id, this.workerId, this.clock.now()))) {
+      if (
+        !(await this.repo.markSucceeded(job.id, this.workerId, this.clock.now(), continuation ?? undefined))
+      ) {
         log.warn('job finished after its lease was lost; result not recorded');
       } else {
         log.info('job succeeded');

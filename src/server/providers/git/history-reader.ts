@@ -11,6 +11,8 @@ import {
 
 const OBJECT_ID = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
 const MAX_CHANGED_FILES = 500;
+const MAX_COMPARE_COMMITS = 1000;
+const MAX_COMPARE_PATHS = 10_000;
 const TIMEOUT_MS = 30_000;
 
 /** Native path-filtered history without walking or retaining the entire history in application memory. */
@@ -203,6 +205,46 @@ export class GitHistoryReader implements HistoryReader {
     if (truncated || (stdout.trim() !== '' && !OBJECT_ID.test(stdout.trim())))
       throw new GitOperationError('invalid', 'Invalid reachability output.');
     return stdout === '';
+  }
+
+  async compareCommits(cloneDir: string, beforeSha: string, afterSha: string): Promise<string[]> {
+    assertSha(beforeSha);
+    assertSha(afterSha);
+    const dir = await resolveRepositoryDir(this.reposDir, cloneDir);
+    if (!(await this.isAncestor(dir, beforeSha, afterSha)))
+      throw new GitOperationError(
+        'invalid',
+        'Comparison requires existing commits and fast-forward ancestry.',
+      );
+    const count = await this.git.run(
+      ['rev-list', '--count', `--max-count=${MAX_COMPARE_COMMITS + 1}`, afterSha, '--not', beforeSha, '--'],
+      { cwd: dir, timeoutMs: TIMEOUT_MS, maxOutputBytes: 1024 },
+    );
+    if (count.truncated || !/^\d+\n$/.test(count.stdout) || Number(count.stdout) > MAX_COMPARE_COMMITS)
+      throw new GitOperationError('invalid', 'Invalid or oversized commit range.');
+    const { stdout, truncated } = await this.git.run(
+      ['diff-tree', '--no-commit-id', '--name-only', '-z', '-r', '--no-renames', beforeSha, afterSha, '--'],
+      { cwd: dir, timeoutMs: TIMEOUT_MS, maxOutputBytes: 32 * 1024 * 1024 },
+    );
+    if (truncated || (stdout !== '' && !stdout.endsWith('\0')))
+      throw new GitOperationError('invalid', 'Invalid or oversized comparison paths.');
+    const paths = stdout === '' ? [] : stdout.slice(0, -1).split('\0');
+    if (paths.length > MAX_COMPARE_PATHS)
+      throw new GitOperationError('invalid', 'Too many comparison paths.');
+    for (const file of paths) {
+      try {
+        // GitCli decodes UTF-8; do not route paths that may have been decoded lossily.
+        if (normalizeRepoPath(file) !== file || file.includes('\ufffd'))
+          throw new Error('Invalid or lossy Git path.');
+      } catch {
+        throw new GitOperationError('invalid', 'Invalid comparison path.');
+      }
+    }
+    return [...new Set(paths)].sort((a, b) => {
+      // Git paths use ordinal ordering, independent of the host locale.
+      if (a === b) return 0;
+      return a < b ? -1 : 1;
+    });
   }
 
   async objectSize(cloneDir: string, objectSha: string): Promise<number> {

@@ -35,7 +35,7 @@ Assume: operator places stack-manager on a trusted homelab network behind auth a
 | Cleartext credential transport | HTTPS with certificate validation required for credential-bearing webhooks, forge APIs, runtime APIs, and secret APIs; HTTPS/SSH for Git remotes; reject plaintext before sending secrets |
 | Audit leakage | Redaction policy; URL sanitisation |
 | Forge webhook forgery | HMAC/signature verify; ignore unsigned |
-| Webhook replay | Idempotency keys |
+| Webhook replay | Durable per-repository delivery/body ledger, source-plus-stack routing uniqueness and transactional attempt queueing; ambiguous sends require operator inspection |
 | SSRF via webhook URL config | Validate URL scheme; deny localhost/metadata by default with documented RFC1918 allow option for homelab |
 | Malicious Compose aiming at host | No Docker socket; no exec; deploy happens in external system |
 | Privilege escalation via Portainer token | Document least privilege; app allowlists read-only API calls |
@@ -113,3 +113,36 @@ remain forbidden. This opt-in expands the trust boundary for all configured oper
 Authenticated same-origin manual confirmation queues a durable per-stack attempt. Intent is recorded
 before sending. A timeout or interrupted send is an unknown outcome and is never automatically retried.
 HTTP acceptance does not establish runtime health. See [Deployment webhooks](DEPLOYMENT_WEBHOOKS.md).
+
+## Opt-in automatic deployment routing
+
+Automatic deployment defaults to false. Only enabled per-stack bindings with saved rules, a configured
+signed repository webhook and a ready fetched baseline can opt in. Saving establishes the current
+fetched HEAD and branch, without replaying older history. Manual fetches, polling and in-app pushes
+only refresh Git; they require a corresponding verified forge push to authorize automation.
+
+Native GitHub/Gitea/Forgejo signatures authenticate raw bytes before parsing. The signed target is an
+identifier, not trusted history: local Git commit objects and ancestry must verify it against the fetched
+HEAD and saved baseline. Payload path lists never authorize a deployment. Git argv arrays have no shell,
+with bounded timeout/output, 1,000 commits and 10,000 canonical paths per comparison. Rules support only
+`*`, `?` and whole-segment `**`, at most 32 patterns per list and 256 characters per pattern. Missing,
+rewritten, invalid or oversized history blocks routing; there is no deploy-all fallback.
+
+SQLite records decisions, attempt jobs, per-binding cursors and processed sources atomically, with a
+unique source/stack pair and at most one queued/running attempt per stack. Delivery IDs and accepted
+body fingerprints persist across restarts; a follow-up fetch retains sources arriving during work.
+Binding, deployment credential and signing versions are rechecked before sending. History contains only
+safe identifiers, paths and outcomes, never secret URLs, plaintext/ciphertext credentials, raw bodies or
+internal signing/credential nonces.
+
+A later relevant push during an active attempt persists as blocked for inspection and deliberate manual
+deployment, without automatic replay. An unknown outcome sets a persistent automation hold. Saving or
+rotating settings does not clear it: inspect the receiver, then deliberately confirm a new Deploy now
+request. Known acceptance is never resent automatically; a crash after intent may leave unknown even
+when nothing was sent. Exactly-once external execution is not guaranteed. Disabling/removing a binding
+prevents queued sends when checked but cannot recall an in-flight request.
+
+Before migration `0010_large_salo`, back up SQLite consistently with WAL and retain encryption keys
+separately. Rollback requires the pre-upgrade backup and matching prior application version; a database
+restore neither reverses external requests nor preserves a newer replay ledger. See
+[Deployment webhooks](DEPLOYMENT_WEBHOOKS.md) for activation and recovery instructions.

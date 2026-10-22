@@ -366,7 +366,7 @@ describe('per-stack deployment bindings', () => {
     await h.container.repos.stacks.delete(stackId);
     expect(await h.container.repos.credentials.list(workspaceId)).toEqual([]);
   });
-  it('rejects a missing or incompatible deployment credential and automatic deployment preference', async () => {
+  it('rejects missing or incompatible credentials and automatic deployment without a baseline', async () => {
     await expect(configure({ configuration: undefined, credentialId: 'missing' })).rejects.toThrow(
       'Credential not found',
     );
@@ -383,7 +383,7 @@ describe('per-stack deployment bindings', () => {
     await expect(configure({ configuration: undefined, credentialId: generic.id })).rejects.toThrow(
       'does not match',
     );
-    await expect(configure({ deployOnPush: true })).rejects.toThrow('Invalid deployment settings');
+    await expect(configure({ deployOnPush: true })).rejects.toThrow('Automatic deployment requires');
   });
   it('fences late completion after another worker acquires the expired lease', async () => {
     await configure();

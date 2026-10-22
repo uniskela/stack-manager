@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { evaluateRouting, validateRoutingPolicy, type RoutingPolicy } from '@/shared/deployment-routing';
 import type { Clock } from '@/server/domain/clock';
 import {
   deploymentAttemptView,
@@ -20,7 +21,15 @@ const inputSchema = z
   .object({
     providerType: z.enum(['portainer-webhook', 'generic-webhook']),
     enabled: z.boolean(),
-    deployOnPush: z.literal(false).optional(),
+    deployOnPush: z.boolean().optional(),
+    routingPolicy: z
+      .object({
+        include: z.array(z.string()),
+        exclude: z.array(z.string()),
+        dependencies: z.array(z.string()),
+      })
+      .strict()
+      .optional(),
     expectedRevision: z.string().min(1).nullable(),
     configuration: z.object({ url: z.string(), bearerToken: z.string().optional() }).strict().optional(),
     credentialId: z.string().min(1).optional(),
@@ -58,7 +67,6 @@ export class DeploymentService {
       binding: b
         ? {
             ...b,
-            deployOnPush: false as const,
             hint: '••••',
             lastTestedAt: credential?.lastTestedAt?.toISOString() ?? null,
             lastTestStatus: credential?.lastTestStatus ?? null,
@@ -123,7 +131,7 @@ export class DeploymentService {
     const parsed = inputSchema.safeParse(input);
     if (!parsed.success) throw new ValidationError('Invalid deployment settings.');
     input = parsed.data;
-    await this.stack(workspaceId, stackId);
+    const stack = await this.stack(workspaceId, stackId);
     const existing = await this.repos.deployments.binding(workspaceId, stackId);
     if ((existing?.revision ?? null) !== input.expectedRevision)
       throw new ConflictError('Deployment settings changed. Reload and try again.');
@@ -162,6 +170,37 @@ export class DeploymentService {
         },
         { kind: 'deployment', providerType: input.providerType },
       );
+    let routingPolicy: RoutingPolicy | null = existing?.routingPolicy ?? null;
+    if (input.routingPolicy) {
+      try {
+        routingPolicy = validateRoutingPolicy(input.routingPolicy);
+      } catch (error) {
+        throw new ValidationError(error instanceof Error ? error.message : 'Invalid routing policy.');
+      }
+    }
+    const automatic = input.deployOnPush ?? false;
+    const repository = await this.repos.gitRepositories.findById(workspaceId, stack.repositoryId);
+    if (
+      automatic &&
+      (!input.enabled ||
+        !routingPolicy ||
+        !repository?.webhookCredentialId ||
+        repository.syncStatus !== 'ready' ||
+        !repository.headSha ||
+        !/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/.test(repository.headSha))
+    )
+      throw new ValidationError(
+        'Automatic deployment requires an enabled binding, saved routing rules, configured signed Git webhook and synchronized repository baseline.',
+      );
+    if (automatic && !record)
+      await this.credentials.withPlaintext(
+        workspaceId,
+        credentialId,
+        async (secret) => {
+          await provider.validateDestination(provider.validateConfiguration(JSON.parse(secret)));
+        },
+        { kind: 'deployment', providerType: input.providerType },
+      );
     const now = this.clock.now();
     let managedCredential = existing?.managedCredential ?? false;
     if (record) managedCredential = true;
@@ -174,7 +213,11 @@ export class DeploymentService {
       credentialId,
       managedCredential,
       enabled: input.enabled,
-      deployOnPush: false,
+      deployOnPush: automatic,
+      routingPolicy,
+      routingHeadSha: automatic ? repository!.headSha : null,
+      routingBranch: automatic ? repository!.defaultBranch : null,
+      automationHold: existing?.automationHold ?? false,
       revision: this.newId(),
       lastAttemptAt: existing?.lastAttemptAt ?? null,
       lastAcceptedAt: existing?.lastAcceptedAt ?? null,
@@ -290,7 +333,33 @@ export class DeploymentService {
     await this.recover(stackId);
     return {
       attempts: (await this.repos.deployments.history(workspaceId, stackId)).map(deploymentAttemptView),
+      decisions: (await this.repos.routing.history(workspaceId, stackId)).map((d) => ({
+        ...d,
+        createdAt: d.createdAt.toISOString(),
+        processedAt: d.processedAt.toISOString(),
+      })),
     };
+  }
+  async preview(
+    workspaceId: string,
+    stackId: string,
+    input: { routingPolicy: RoutingPolicy; paths: string[] },
+  ) {
+    const stack = await this.stack(workspaceId, stackId);
+    try {
+      return {
+        decision: evaluateRouting(input.paths, {
+          stackId,
+          rootPath: stack.rootPath,
+          composePath: stack.composePath,
+          policy: validateRoutingPolicy(input.routingPolicy),
+          enabled: true,
+          deployOnPush: true,
+        }),
+      };
+    } catch (error) {
+      throw new ValidationError(error instanceof Error ? error.message : 'Invalid routing preview.');
+    }
   }
   async execute(job: Job, ctx: JobContext) {
     const id = job.payload.attemptId;
@@ -338,7 +407,13 @@ export class DeploymentService {
     try {
       const b = await this.repos.deployments.binding(a.workspaceId, a.stackId);
       const c = b && (await this.repos.credentials.findById(a.workspaceId, b.credentialId));
-      if (!b?.enabled || b.revision !== a.bindingRevision || c?.secretNonce !== a.credentialNonce)
+      if (
+        !b?.enabled ||
+        b.revision !== a.bindingRevision ||
+        c?.secretNonce !== a.credentialNonce ||
+        (a.triggerType === 'automatic' &&
+          (!b.deployOnPush || b.automationHold || !(await this.repos.routing.sourceValid(a.id))))
+      )
         return {
           status: 'rejected',
           httpStatus: null,

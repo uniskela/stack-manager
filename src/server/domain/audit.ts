@@ -1,4 +1,7 @@
 export type AuditAction =
+  | 'deployment.routing_evaluated'
+  | 'deployment.stack_skipped'
+  | 'deployment.automatic_requested'
   | 'deployment.binding_created'
   | 'deployment.binding_updated'
   | 'deployment.destination_validated'
