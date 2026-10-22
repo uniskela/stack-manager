@@ -341,6 +341,10 @@ describe('durable selective deployment worker', () => {
     expect(sql('SELECT * FROM deployment_attempts')).toEqual([]);
     expect(sql("SELECT * FROM jobs WHERE type = 'deployment_trigger'")).toEqual([]);
     expect(sql('SELECT * FROM git_webhook_deliveries WHERE processed_at IS NULL')).toHaveLength(1);
+    expect(sql("SELECT status, attempts FROM jobs WHERE type = 'deployment_route'")).toEqual([
+      { status: 'pending', attempts: 1 },
+    ]);
+    expect(trigger).not.toHaveBeenCalled();
     sql('DROP TRIGGER routing_test_abort');
     h.clock.advance(6000);
     await drain();

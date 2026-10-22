@@ -183,7 +183,7 @@ export class SqliteDeploymentRoutingRepository implements DeploymentRoutingRepos
                   'A deployment is active. This later routing intent is saved; inspect its outcome, then use Deploy now deliberately.';
                 d.attemptId = null;
               } else {
-                // Reuse guarded enqueue per stack; the outer transaction rolls all stacks back on failure.
+                // Enqueue only stages jobs; failure must also roll back this source's decisions and checkpoints.
                 new SqliteDeploymentRepository(tx).enqueueSync(r.attempt, r.job);
               }
             }

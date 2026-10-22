@@ -56,7 +56,7 @@ and published review records were inspected. No competing routing PR was open at
 
 [Kody business validation](https://github.com/uniskela/stack-manager/pull/66#issuecomment-6318713869)
 reports **Compliant**, high confidence, with no missing acceptance criteria. Final independent read-only
-review through `bee03c3` found no critical/important defects. The three subsequent inline Kody findings
+review through `bee03c3` found no critical/important defects. The four subsequent inline Kody findings
 were individually reviewed:
 
 | Finding | Disposition and evidence |
@@ -64,6 +64,15 @@ were individually reviewed:
 | Repository lookup failure aborts remaining sources ([4338608761](https://github.com/uniskela/stack-manager/pull/66#discussion_r4338608761)) | Retained ordered failure propagation. Sources share checkpoints, so skipping a failed source can advance a baseline past it. The existing worker records the redacted error and retries. Added real SQLite/worker regression for two pending sources, unchanged checkpoints, durable retry state, restart and one send per affected stack. |
 | Per-record deployment enqueue ([4338609365](https://github.com/uniskela/stack-manager/pull/66#discussion_r4338609365)) | Hoisted shared repository/signing reads outside the stack loop within the immediate transaction. Retained the existing guarded enqueue for each stack to preserve binding/credential/active-attempt and job constraints. Strengthened SQLite rollback coverage: a later stack insert fails after an earlier enqueue; all decisions, attempts, jobs and checkpoints roll back, then retry requests each stack once. No second batch deployment path introduced. |
 | SQLite smoke handle cleanup ([4338674111](https://github.com/uniskela/stack-manager/pull/66#discussion_r4338674111)) | Fixed failure-path close while preserving the original exception even if cleanup fails. Self-check executes the actual workflow script with success, missing workspace, missing schema, query failure and cleanup failure fixtures; all five pass. |
+
+The follow-up [atomic rollback finding](https://github.com/uniskela/stack-manager/pull/66#discussion_r4344314051)
+is declined: a verified source is one commit unit, not a collection of independent deployment requests.
+`enqueueSync` stages database rows without HTTP; earlier rows are not committed work that can be discarded
+externally. Catching an enqueue exception and marking the source processed would risk losing required work
+or advancing checkpoints without it. Expected per-stack skips/blocks are already persisted independently as
+decisions; unexpected transaction failures intentionally roll back and leave the source pending for job retry.
+The late-enqueue SQLite regression now explicitly asserts a pending retry job and zero provider sends before
+recovery, in addition to unchanged checkpoints, no partial decisions/attempts/jobs, and two sends after retry.
 
 Initial [Sonar analysis](https://sonarcloud.io/dashboard?id=uniskela_stack-manager&pullRequest=66)
 reported 35 findings and zero security hotspots. Each rule group was reviewed:
