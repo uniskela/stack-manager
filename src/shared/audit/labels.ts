@@ -28,6 +28,20 @@ const LABELS: Record<string, string> = {
   'git.push': 'Git commit pushed',
   'git.push_rejected': 'Git push blocked',
   'git.commit_validation_overridden': 'Commit warnings acknowledged',
+  // HTTP acceptance is provider acceptance, never verified container health.
+  'deployment.binding_created': 'Deployment webhook configured',
+  'deployment.binding_updated': 'Deployment webhook updated',
+  'deployment.binding_disabled': 'Deployment webhook disabled',
+  'deployment.binding_removed': 'Deployment webhook removed',
+  'deployment.secret_rotated': 'Deployment webhook secret replaced',
+  'deployment.destination_validated': 'Deployment destination checked (no request sent)',
+  'deployment.requested': 'Manual deployment requested',
+  'deployment.automatic_requested': 'Automatic deployment requested',
+  'deployment.accepted': 'Deployment request accepted by receiver',
+  'deployment.rejected': 'Deployment request rejected',
+  'deployment.unknown': 'Deployment outcome unknown',
+  'deployment.routing_evaluated': 'Git push routing evaluated',
+  'deployment.stack_skipped': 'Stack not deployed for Git push',
 };
 
 export function auditActionLabel(action: string): string {
