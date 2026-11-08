@@ -24,7 +24,7 @@
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test"
   },
   "dependencies": {
-    "@codemirror/autocomplete": "6.20.3",
+    "@codemirror/autocomplete": "6.20.4",
     "@codemirror/commands": "6.11.1",
     "@codemirror/lang-json": "6.0.2",
     "@codemirror/lang-markdown": "6.5.2",
@@ -34,14 +34,14 @@
     "@codemirror/lint": "6.9.7",
     "@codemirror/search": "6.7.2",
     "@codemirror/state": "6.7.6",
-    "@codemirror/view": "6.43.14",
+    "@codemirror/view": "6.43.15",
     "@lezer/highlight": "1.2.5",
     "@node-rs/argon2": "2.2.2",
     "better-sqlite3": "13.0.3",
     "diff": "9.0.0",
     "drizzle-orm": "0.45.4",
-    "lucide-react": "1.57.0",
-    "next": "16.4.1",
+    "lucide-react": "1.69.0",
+    "next": "16.4.5",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "react-markdown": "10.1.0",
@@ -60,12 +60,12 @@
     "@types/react-dom": "19.3.0",
     "drizzle-kit": "0.31.11",
     "eslint": "9.39.5",
-    "eslint-config-next": "16.4.1",
+    "eslint-config-next": "16.4.5",
     "prettier": "3.9.10",
     "tsx": "4.23.15",
     "typescript": "6.0.3",
-    "typescript-eslint": "8.71.2",
-    "vitest": "5.0.5"
+    "typescript-eslint": "8.72.1",
+    "vitest": "5.1.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
