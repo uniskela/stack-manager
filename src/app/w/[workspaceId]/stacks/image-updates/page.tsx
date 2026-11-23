@@ -12,9 +12,9 @@ export const metadata: Metadata = { title: 'Image updates' };
 
 export default async function WorkspaceImageUpdatesPage({
   params,
-}: {
+}: Readonly<{
   params: Promise<{ workspaceId: string }>;
-}) {
+}>) {
   const { workspaceId } = await params;
   const { imageUpdates, stacks, config } = getContainer();
   const [{ connection, refreshing }, allStacks] = await Promise.all([

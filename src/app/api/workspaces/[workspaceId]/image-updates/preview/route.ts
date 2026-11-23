@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { MAX_IMAGE_UPDATE_CANDIDATES } from '@/shared/image-update-planning';
-import { isImageTag } from '@/shared/image-updates';
 import { defineRoute } from '@/server/http/route';
 
 const request = z.strictObject({
@@ -14,7 +13,7 @@ const request = z.strictObject({
           .max(255)
           .regex(/^[A-Za-z0-9_.-]+$/),
         source: z.enum(['manual', 'wud']),
-        targetTag: z.string().refine(isImageTag, 'Enter a valid image tag.'),
+        targetTag: z.string().max(128),
         changelogUrl: z.string().trim().max(2048).optional(),
       }),
     )

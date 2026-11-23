@@ -153,7 +153,7 @@ export function resolvePolicyChangelog(
     try {
       const expanded = template.replace(PLACEHOLDER, (_match, field: string) => {
         const tag = field === 'current' ? input.currentTag : input.targetTag;
-        if (tag === '.' || tag === '..') throw new URIError();
+        if (tag === '.' || tag === '..') throw new URIError('An image tag cannot be a URL dot segment.');
         return encodeURIComponent(tag);
       });
       const url = changelogUrl(expanded);

@@ -5,7 +5,9 @@ import { Section } from '@/ui/primitives/section';
 
 export const metadata: Metadata = { title: 'WUD settings' };
 
-export default async function WudSettingsPage({ params }: { params: Promise<{ workspaceId: string }> }) {
+export default async function WudSettingsPage({
+  params,
+}: Readonly<{ params: Promise<{ workspaceId: string }> }>) {
   const { workspaceId } = await params;
   const { imageUpdates, config } = getContainer();
   const { connection, refreshing } = await imageUpdates.settings(workspaceId);

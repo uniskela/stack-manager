@@ -31,10 +31,11 @@ export interface ImageUpdatePreview {
 }
 
 export interface ImageUpdateStageResult {
+  rejectedPreviews: number;
   files: Array<{
     stackId: string;
     stackName: string;
     path: string;
-    status: 'staged' | 'draft_exists' | 'source_changed' | 'candidate_changed' | 'review_required';
+    status: 'staged' | 'draft_exists' | 'source_changed' | 'candidate_changed' | 'review_required' | 'failed';
   }>;
 }

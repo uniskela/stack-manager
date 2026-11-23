@@ -86,7 +86,10 @@ export function wudBaseUrl(raw: string): string {
   }
   if (url.protocol !== 'https:' || url.username || url.password || /[\x00-\x20\x7f?#]/.test(raw))
     throw new ValidationError(message);
-  return url.href.replace(/\/+$/, '');
+  const href = url.href;
+  let end = href.length;
+  while (href[end - 1] === '/') end -= 1;
+  return href.slice(0, end);
 }
 
 export class WudClient {

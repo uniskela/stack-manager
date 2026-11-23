@@ -9,6 +9,8 @@ interface ComposeImageChange {
   targetTag: string;
 }
 
+class ImageEditError extends Error {}
+
 function isDirectMap(node: unknown): node is YAMLMap {
   return (
     isMap(node) &&
@@ -21,7 +23,7 @@ function isDirectMap(node: unknown): node is YAMLMap {
 }
 
 function imageValueRange(text: string, image: Scalar, before: string): [number, number] {
-  if (!image.range) throw new Error('The image scalar is missing a source range.');
+  if (!image.range) throw new ImageEditError('The image scalar is missing a source range.');
   const [start, end] = image.range;
   switch (image.type) {
     case Scalar.PLAIN:
@@ -39,27 +41,27 @@ function imageValueRange(text: string, image: Scalar, before: string): [number, 
       }
     }
   }
-  throw new Error('The image scalar cannot be edited safely.');
+  throw new ImageEditError('The image scalar cannot be edited safely.');
 }
 
 function planImageEdit(text: string, services: YAMLMap, service: string, targetTag: string) {
   const node = services.get(service, true);
   if (!isDirectMap(node) || node.has('build') || node.has('extends')) {
-    throw new Error('The selected service needs a direct image definition.');
+    throw new ImageEditError('The selected service needs a direct image definition.');
   }
 
   const image = node.get('image', true);
   if (!isScalar(image) || image.anchor || image.tag || typeof image.value !== 'string') {
-    throw new Error('The selected service needs an unanchored literal image.');
+    throw new ImageEditError('The selected service needs an unanchored literal image.');
   }
 
   const before = image.value;
   const ref = imageReference(before);
   if (!ref?.tag || ref.digest) {
-    throw new Error('The selected service needs a valid, unpinned image reference.');
+    throw new ImageEditError('The selected service needs a valid, unpinned image reference.');
   }
   const { tag: currentTag, explicitTag: hasTag } = ref;
-  if (currentTag === targetTag) throw new Error('The target tag matches the current tag.');
+  if (currentTag === targetTag) throw new ImageEditError('The target tag matches the current tag.');
 
   const name = hasTag ? before.slice(0, before.lastIndexOf(':')) : before;
   const after = `${name}:${targetTag}`;
@@ -75,13 +77,13 @@ function planImageEdit(text: string, services: YAMLMap, service: string, targetT
     // An escape in the tag or separator can require replacing the entire quoted value.
     return { change, start, end, replacement: after };
   }
-  throw new Error('The image scalar cannot be edited safely.');
+  throw new ImageEditError('The image scalar cannot be edited safely.');
 }
 
 export function editComposeImages(
   text: string,
   edits: readonly { service: string; targetTag: string }[],
-): { content: string; changes: ComposeImageChange[] } {
+): { content: string; changes: ComposeImageChange[]; failures: { service: string; reason: string }[] } {
   const doc = parseDocument(text, { prettyErrors: false, uniqueKeys: true });
   const root = doc.contents;
   if (doc.errors.length || !isDirectMap(root) || root.has('include')) {
@@ -91,22 +93,35 @@ export function editComposeImages(
   if (!isDirectMap(services)) throw new Error('Image edits require a direct services mapping.');
 
   const seen = new Set<string>();
-  const patches = edits.map(({ service, targetTag }) => {
-    if (seen.has(service)) throw new Error('Select each service only once.');
-    if (!isImageTag(targetTag)) throw new Error('The target tag is invalid.');
+  const failures = new Map<string, string>();
+  for (const { service, targetTag } of edits) {
+    if (seen.has(service)) failures.set(service, 'Select each service only once.');
+    else if (!isImageTag(targetTag)) failures.set(service, 'The target tag is invalid.');
     seen.add(service);
-    return planImageEdit(text, services, service, targetTag);
-  });
+  }
+  const patches: ReturnType<typeof planImageEdit>[] = [];
+  for (const { service, targetTag } of edits) {
+    if (failures.has(service)) continue;
+    try {
+      patches.push(planImageEdit(text, services, service, targetTag));
+    } catch (error) {
+      const reason = error instanceof ImageEditError ? error.message : 'The image cannot be edited safely.';
+      failures.set(service, reason);
+    }
+  }
 
   const changes = patches.map(({ change }) => change);
   let offset = 0;
-  const content = patches
-    .sort((a, b) => a.start - b.start)
-    .map(({ start, end, replacement }) => {
-      const part = text.slice(offset, start) + replacement;
-      offset = end;
-      return part;
-    });
+  const orderedPatches = patches.toSorted((a, b) => a.start - b.start);
+  const content = orderedPatches.map(({ start, end, replacement }) => {
+    const part = text.slice(offset, start) + replacement;
+    offset = end;
+    return part;
+  });
   content.push(text.slice(offset));
-  return { content: content.join(''), changes };
+  return {
+    content: content.join(''),
+    changes,
+    failures: [...failures].map(([service, reason]) => ({ service, reason })),
+  };
 }

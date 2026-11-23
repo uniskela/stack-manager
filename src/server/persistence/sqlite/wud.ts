@@ -57,7 +57,7 @@ export class SqliteWudRepository implements WudRepository {
         .from(wudConnections)
         .where(eq(wudConnections.workspaceId, workspaceId))
         .get();
-      if (!current || current.revision !== expectedRevision) throw changed();
+      if (current?.revision !== expectedRevision) throw changed();
       tx.delete(wudConnections).where(eq(wudConnections.workspaceId, workspaceId)).run();
       tx.delete(providerCredentials).where(eq(providerCredentials.id, current.credentialId)).run();
     });

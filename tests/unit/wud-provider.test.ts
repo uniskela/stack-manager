@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeWudObservations, WudClient } from '@/server/providers/wud/client';
+import { normalizeWudObservations, WudClient, wudBaseUrl } from '@/server/providers/wud/client';
 
 const sample = {
   id: 'fixture-id',
@@ -36,6 +36,11 @@ describe('WUD response handling', () => {
 
   it('rejects a single object in place of a snapshot', () => {
     expect(() => normalizeWudObservations(sample)).toThrow('invalid');
+  });
+
+  it('removes trailing slashes from a WUD URL while preserving its prefix', () => {
+    expect(wudBaseUrl('https://wud.example')).toBe('https://wud.example');
+    expect(wudBaseUrl('https://wud.example/proxy//wud%2F///')).toBe('https://wud.example/proxy//wud%2F');
   });
 
   it('permits a private HTTPS endpoint only under explicit network policy', async () => {

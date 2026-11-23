@@ -12,8 +12,11 @@ const repoName = 'image-updates.git';
 let h: TestHarness | undefined;
 let git: GitServer | undefined;
 afterEach(async () => {
-  await h?.cleanup();
-  await git?.close();
+  const results = await Promise.allSettled([h?.cleanup(), git?.close()]);
+  h = undefined;
+  git = undefined;
+  const failure = results.find((result) => result.status === 'rejected');
+  if (failure) throw failure.reason;
 });
 
 async function arrange(extraFiles: Record<string, string> = {}, overrides: ContainerOverrides = {}) {
@@ -47,6 +50,41 @@ async function arrange(extraFiles: Record<string, string> = {}, overrides: Conta
 }
 
 describe('image update draft staging', () => {
+  it('keeps valid edits and approvals when other entries in the batch cannot be used', async () => {
+    const { workspace, main, second, cookie } = await arrange();
+    const request = { method: 'POST', cookie, params: { workspaceId: workspace.id } };
+    const preview = await call(previewRoute.POST, {
+      ...request,
+      body: {
+        candidates: [
+          { stackId: main.id, service: 'app', source: 'manual', targetTag: '1.28' },
+          { stackId: main.id, service: 'missing', source: 'manual', targetTag: '7 # invalid' },
+          { stackId: second.id, service: 'cache', source: 'manual', targetTag: '7.4' },
+        ],
+      },
+    });
+    expect(preview.status).toBe(200);
+    expect(preview.json.files[0].changes.map((row: { status: string }) => row.status)).toEqual([
+      'review',
+      'blocked',
+    ]);
+
+    const stage = await call(stageRoute.POST, {
+      ...request,
+      body: {
+        files: [
+          { token: preview.json.files[0].token + 'a', acknowledgeReview: true },
+          { token: preview.json.files[1].token, acknowledgeReview: true },
+        ],
+      },
+    });
+    expect(stage.status).toBe(200);
+    expect(stage.json).toMatchObject({
+      rejectedPreviews: 1,
+      files: [{ stackId: second.id, status: 'staged' }],
+    });
+  });
+
   it('holds a file if its stack was deleted just before the draft transaction', async () => {
     const { container, workspace, user, main } = await arrange();
     const { imageUpdateStaging, repos } = container;

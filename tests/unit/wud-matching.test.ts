@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { inspectStackImages, matchImageUpdates, type WudObservation } from '@/shared/image-updates';
+import {
+  canonicalImageRepository,
+  inspectStackImages,
+  matchImageUpdates,
+  type WudObservation,
+} from '@/shared/image-updates';
 
 const now = new Date('2026-11-23T07:15:00Z');
 const binding = { watcher: 'local', project: 'wiki' };
@@ -18,6 +23,24 @@ const observation: WudObservation = {
 };
 
 describe('WUD image update matching', () => {
+  it('accepts OCI path separators within and between components', () => {
+    const path = 'team.one/team_two/app__image---build';
+    expect(canonicalImageRepository('Registry.Example:12345', path)).toBe(`registry.example:12345/${path}`);
+    expect(canonicalImageRepository('hub.docker.com', 'nginx')).toBe('index.docker.io/library/nginx');
+    expect(canonicalImageRepository('hub.docker.com', path)).toBe(`index.docker.io/${path}`);
+    const maxLengthPath = 'a'.repeat(255);
+    expect(canonicalImageRepository('docker.io', maxLengthPath)).toBe(
+      `index.docker.io/library/${maxLengthPath}`,
+    );
+  });
+
+  it.each(['', '/nginx', 'team//nginx', 'team/', 'team/Nginx', 'app___image', 'app.-image', 'a'.repeat(256)])(
+    'rejects an invalid OCI path %j',
+    (path) => {
+      expect(canonicalImageRepository('docker.io', path)).toBeNull();
+    },
+  );
+
   it('matches a canonical Docker Hub image on the bound watcher, project and service', () => {
     const result = matchImageUpdates(
       [service],

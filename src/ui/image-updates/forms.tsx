@@ -41,10 +41,10 @@ function useImageUpdateAction() {
 export function WudConnectionForm({
   workspaceId,
   connection,
-}: {
+}: Readonly<{
   workspaceId: string;
   connection: Connection | null;
-}) {
+}>) {
   const endpoint = `/api/workspaces/${workspaceId}/image-updates`;
   const [url, setUrl] = useState(connection?.baseUrl ?? '');
   const [token, setToken] = useState('');
@@ -106,7 +106,11 @@ export function WudConnectionForm({
           />
         ) : null}
       </div>
-      {saved ? <p role="status">WUD connection saved.</p> : null}
+      {saved ? (
+        <p>
+          <output>WUD connection saved.</output>
+        </p>
+      ) : null}
       <FormError message={error} />
     </form>
   );
@@ -117,12 +121,12 @@ export function WudRefresh({
   connection,
   refreshing,
   workerEnabled,
-}: {
+}: Readonly<{
   workspaceId: string;
   connection: Connection;
   refreshing: boolean;
   workerEnabled: boolean;
-}) {
+}>) {
   const router = useRouter();
   const { busy, error, run } = useImageUpdateAction();
 
@@ -143,9 +147,9 @@ export function WudRefresh({
         >
           {refreshing ? 'Refreshing WUD…' : 'Refresh from WUD'}
         </Button>
-        <span className="muted" role="status">
+        <output className="muted">
           Last read <LocalTime iso={connection.lastSuccessAt} />
-        </span>
+        </output>
       </div>
       {!workerEnabled ? <p className="muted">Refresh requires the background worker.</p> : null}
       {connection.lastError ? (
@@ -164,11 +168,11 @@ export function WudBindingForm({
   workspaceId,
   stackId,
   binding,
-}: {
+}: Readonly<{
   workspaceId: string;
   stackId: string;
   binding: WudBinding | null;
-}) {
+}>) {
   const [watcher, setWatcher] = useState(binding?.watcher ?? '');
   const [project, setProject] = useState(binding?.project ?? '');
   const [message, setMessage] = useState<string | null>(null);
@@ -223,7 +227,11 @@ export function WudBindingForm({
           </Button>
         ) : null}
       </div>
-      {message ? <p role="status">{message}</p> : null}
+      {message ? (
+        <p>
+          <output>{message}</output>
+        </p>
+      ) : null}
       <FormError message={error} />
     </form>
   );

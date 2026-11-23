@@ -9,11 +9,17 @@ import { Section, SectionTitle } from '@/ui/primitives/section';
 
 export const metadata: Metadata = { title: 'Stack image updates' };
 
+const emptySourceMessages = {
+  ready: 'No services defined in the primary Compose file.',
+  invalid: 'Fix the committed Compose YAML to list service images.',
+  unavailable: 'The primary Compose file is unavailable at the fetched commit.',
+};
+
 export default async function StackImageUpdatesPage({
   params,
-}: {
+}: Readonly<{
   params: Promise<{ workspaceId: string; stackId: string }>;
-}) {
+}>) {
   const { workspaceId, stackId } = await params;
   const { imageUpdates } = getContainer();
   const view = await imageUpdates.stack(workspaceId, stackId);
@@ -30,13 +36,7 @@ export default async function StackImageUpdatesPage({
       {images.length > 0 ? (
         <ImageUpdateTable labelledBy="stack-images" images={images} />
       ) : (
-        <p className="muted">
-          {sourceStatus === 'ready'
-            ? 'No services defined in the primary Compose file.'
-            : sourceStatus === 'invalid'
-              ? 'Fix the committed Compose YAML to list service images.'
-              : 'The primary Compose file is unavailable at the fetched commit.'}
-        </p>
+        <p className="muted">{emptySourceMessages[sourceStatus]}</p>
       )}
       {images.length > 0 ? (
         <Section id="plan-image-updates" title="Plan image updates">

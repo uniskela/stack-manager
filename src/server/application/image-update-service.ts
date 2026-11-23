@@ -31,6 +31,14 @@ const connectionView = (connection: WudConnection) => ({
 const bindingView = (binding: WudBinding | null) =>
   binding && { watcher: binding.watcher, project: binding.project };
 
+interface StackInventory {
+  stackId: string;
+  stackName: string;
+  binding: WudBinding | null;
+  sourceStatus: 'ready' | 'unavailable' | 'invalid';
+  images: StackImageUpdate[];
+}
+
 export class ImageUpdateService {
   #timer: ReturnType<typeof setInterval> | null = null;
   #scan: Promise<void> | null = null;
@@ -119,7 +127,7 @@ export class ImageUpdateService {
     if (typeof workspaceId !== 'string' || typeof revision !== 'string')
       throw new Error('Invalid WUD refresh job');
     const connection = await this.repo.connection(workspaceId);
-    if (!connection || connection.revision !== revision) return;
+    if (connection?.revision !== revision) return;
     const attemptedAt = this.clock.now();
     let observations;
     try {
@@ -195,20 +203,33 @@ export class ImageUpdateService {
     ]);
     const byStackId = new Map(bindings.map((binding) => [binding.stackId, binding]));
     const bound = stacks.filter((stack) => byStackId.has(stack.id));
-    const inventory = [];
-    for (let i = 0; i < bound.length; i += 8) {
-      inventory.push(
-        ...(await Promise.all(
-          bound.slice(i, i + 8).map((stack) => this.#inventory(stack, byStackId.get(stack.id)!, connection)),
-        )),
-      );
-    }
+    const inventory: StackInventory[] = [];
+    let next = 0;
+    const readNext = async (): Promise<void> => {
+      const index = next++;
+      const stack = bound[index];
+      if (!stack) return;
+      const binding = byStackId.get(stack.id) ?? null;
+      inventory[index] = await this.#inventory(stack, binding, connection).catch(() => ({
+        stackId: stack.id,
+        stackName: stack.name,
+        binding: bindingView(binding),
+        sourceStatus: 'unavailable',
+        images: [],
+      }));
+      return readNext();
+    };
+    await Promise.all(Array.from({ length: Math.min(bound.length, 8) }, readNext));
     return { inventory, unboundCount: stacks.length - bound.length };
   }
 
-  async #inventory(stack: Stack, binding: WudBinding | null, connection: WudConnection | null) {
+  async #inventory(
+    stack: Stack,
+    binding: WudBinding | null,
+    connection: WudConnection | null,
+  ): Promise<StackInventory> {
     let images: StackImageUpdate[] = [];
-    let sourceStatus: 'ready' | 'unavailable' | 'invalid' = 'unavailable';
+    let sourceStatus: StackInventory['sourceStatus'] = 'unavailable';
     try {
       const file = await this.source.readFile(
         stack.workspaceId,
@@ -226,8 +247,7 @@ export class ImageUpdateService {
             connection ? binding : null,
             connection?.observations ?? [],
             now,
-            connection === null ||
-              connection.lastError !== null ||
+            connection?.lastError !== null ||
               now.getTime() - connection.lastSuccessAt.getTime() >= 2 * REFRESH_INTERVAL_MS,
           );
         }
@@ -250,7 +270,10 @@ export class ImageUpdateService {
 
   async #scheduleDue(): Promise<void> {
     const cutoff = new Date(this.clock.now().getTime() - REFRESH_INTERVAL_MS);
-    for (const connection of await this.repo.dueConnections(cutoff)) await this.#enqueue(connection);
+    const due = await this.repo.dueConnections(cutoff);
+    const results = await Promise.allSettled(due.map((connection) => this.#enqueue(connection)));
+    const failed = results.find((result) => result.status === 'rejected');
+    if (failed) throw failed.reason;
   }
 
   #enqueue(connection: Pick<WudConnection, 'workspaceId' | 'revision'>) {

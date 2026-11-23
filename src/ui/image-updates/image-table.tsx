@@ -15,7 +15,10 @@ const labels: Record<ImageUpdateStatus, string> = {
   ambiguous: 'WUD replicas disagree',
 };
 
-export function ImageUpdateTable({ labelledBy, images }: { labelledBy: string; images: StackImageUpdate[] }) {
+export function ImageUpdateTable({
+  labelledBy,
+  images,
+}: Readonly<{ labelledBy: string; images: readonly StackImageUpdate[] }>) {
   return (
     <TableWrap labelledBy={labelledBy}>
       <table className="simple">

@@ -78,9 +78,11 @@ async function openChangesWithDraft(page: Page, marker: string) {
 }
 
 test('plans and stages a manual image update without WUD', async ({ page }) => {
+  // The desktop run stages a draft on the shared stack. Running on mobile would mutate it twice.
+  // The scenario selects the proxy service from the nginx-golang fixture.
   test.skip(
     isMobile(page) || SAMPLE_ROOT !== 'nginx-golang',
-    'Uses the public nginx-golang fixture on desktop.',
+    'Stages once on desktop using the nginx-golang fixture’s proxy service.',
   );
   const { workspaceId, stackId } = sample();
   const path = 'nginx-golang/compose.yaml';

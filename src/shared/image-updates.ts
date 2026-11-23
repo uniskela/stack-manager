@@ -45,17 +45,22 @@ export interface StackImageUpdate {
 }
 
 const WATCH_LABELS = ['wud.watch', 'getwud.app/watch', 'wud/watch', 'wud.getwud.io/watch'];
-const DOCKER_HUB_HOSTS = ['docker.io', 'index.docker.io', 'registry-1.docker.io', 'hub.docker.com'];
-const TAG = /^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}$/;
+const DOCKER_HUB_HOSTS = new Set(['docker.io', 'index.docker.io', 'registry-1.docker.io', 'hub.docker.com']);
+const TAG = /^\w[\w.-]{0,127}$/;
 const DIGEST = /^sha256:[a-f0-9]{64}$/;
-const IMAGE_PATH = /^[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*(?:\/[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*)*$/;
-const REGISTRY = /^[a-z0-9]+(?:[.-][a-z0-9]+)*(?::[0-9]{1,5})?$/;
+const IMAGE_PATH_COMPONENT = /^[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*$/;
+const REGISTRY = /^[a-z0-9]+(?:[.-][a-z0-9]+)*(?::\d{1,5})?$/;
 export const WUD_OBSERVATION_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 export function canonicalImageRepository(registry: string, path: string): string | null {
   const host = registry.toLowerCase();
-  if (!REGISTRY.test(host) || path.length > 255 || !IMAGE_PATH.test(path)) return null;
-  if (DOCKER_HUB_HOSTS.includes(host)) {
+  if (
+    !REGISTRY.test(host) ||
+    path.length > 255 ||
+    !path.split('/').every((part) => IMAGE_PATH_COMPONENT.test(part))
+  )
+    return null;
+  if (DOCKER_HUB_HOSTS.has(host)) {
     return 'index.docker.io/' + (path.includes('/') ? path : 'library/' + path);
   }
   return host + '/' + path;
@@ -75,7 +80,8 @@ export function imageReference(value: string) {
   const separator = raw.lastIndexOf(':');
   const hasTag = separator > raw.lastIndexOf('/');
   const name = hasTag ? raw.slice(0, separator) : raw;
-  const tag = hasTag ? raw.slice(separator + 1) : digest ? null : 'latest';
+  const implicitTag = digest ? null : 'latest';
+  const tag = hasTag ? raw.slice(separator + 1) : implicitTag;
   if (tag !== null && !isImageTag(tag)) return null;
   const slash = name.indexOf('/');
   const first = slash < 0 ? '' : name.slice(0, slash);
@@ -138,22 +144,35 @@ export function inspectStackImages(text: string): StackImage[] | null {
   });
 }
 
+type ImageUpdateResult = Pick<
+  StackImageUpdate,
+  'status' | 'candidateTag' | 'changelogUrl' | 'scanTimeUnavailable'
+>;
+
+function result(status: ImageUpdateStatus, candidateTag: string | null = null) {
+  return { status, candidateTag };
+}
+
 function statusFor(
   image: StackImage,
   bound: boolean,
   matches: WudObservation[],
   now: Date,
   staleSnapshot: boolean,
-): Pick<StackImageUpdate, 'status' | 'candidateTag' | 'changelogUrl' | 'scanTimeUnavailable'> {
-  const result = (status: ImageUpdateStatus, candidateTag: string | null = null) => ({
-    status,
-    candidateTag,
-  });
+): ImageUpdateResult {
   if (image.excluded) return result('excluded');
   const ref = image.editable && image.image ? imageReference(image.image) : null;
   if (!ref) return result('unsupported');
   if (!bound) return result('unbound');
   if (staleSnapshot) return result('stale');
+  return statusForMatches(ref, matches, now);
+}
+
+function statusForMatches(
+  ref: NonNullable<ReturnType<typeof imageReference>>,
+  matches: WudObservation[],
+  now: Date,
+): ImageUpdateResult {
   if (!matches.length) return result('unmatched');
   if (matches.some((row) => row.failed)) return result('error');
   if (

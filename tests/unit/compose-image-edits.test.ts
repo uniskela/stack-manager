@@ -23,6 +23,7 @@ describe('editComposeImages', () => {
         { service: 'web', targetTag: '2.0' },
       ]),
     ).toEqual({
+      failures: [],
       content: compose
         .replace('"registry.example:5000/apps/web:1.2"', '"registry.example:5000/apps/web:2.0"')
         .replace("'worker:1.0'", "'worker:v2026.11-cpu'"),
@@ -48,6 +49,7 @@ describe('editComposeImages', () => {
   it('appends an explicit tag to an implicit latest image in a flow mapping', () => {
     const compose = 'services: {app: {image: localhost:5000/demo}, other: {image: demo}}';
     expect(editComposeImages(compose, [{ service: 'app', targetTag: '3' }])).toEqual({
+      failures: [],
       content: 'services: {app: {image: localhost:5000/demo:3}, other: {image: demo}}',
       changes: [
         {
@@ -87,6 +89,13 @@ describe('editComposeImages', () => {
     ['duplicate services', 'services:\n  app: {image: demo:1}\n  app: {image: demo:2}\n'],
     ['duplicate image keys', 'services:\n  app:\n    image: demo:1\n    image: demo:2\n'],
     ['multiple YAML documents', 'services: {app: {image: demo:1}}\n---\n{}\n'],
+    ['anchored services mapping', 'services: &services {app: {image: demo:1}}\n'],
+    ['included Compose files', 'include: [other.yml]\nservices: {app: {image: demo:1}}\n'],
+  ])('rejects %s', (_case, compose) => {
+    expect(() => editComposeImages(compose, [{ service: 'app', targetTag: '2' }])).toThrow();
+  });
+
+  it.each([
     ['missing service', 'services: {other: {image: demo:1}}\n'],
     ['missing image', 'services: {app: {command: demo:1}}\n'],
     ['non-string image', 'services: {app: {image: 123}}\n'],
@@ -98,10 +107,8 @@ describe('editComposeImages', () => {
     ['aliased image', 'x-image: &img demo:1\nservices: {app: {image: *img}}\n'],
     ['anchored service', 'services: {app: &app {image: demo:1}}\n'],
     ['aliased service', 'x-app: &app {image: demo:1}\nservices: {app: *app}\n'],
-    ['anchored services mapping', 'services: &services {app: {image: demo:1}}\n'],
     ['built service', 'services: {app: {image: demo:1, build: .}}\n'],
     ['extended service', 'services: {app: {image: demo:1, extends: other}}\n'],
-    ['included Compose files', 'include: [other.yml]\nservices: {app: {image: demo:1}}\n'],
     ['merged service', 'services: {app: {image: demo:1, <<: {command: demo}}}\n'],
     [
       'merged YAML 1.1 service',
@@ -109,7 +116,11 @@ describe('editComposeImages', () => {
     ],
     ['tagged image', 'services: {app: {image: !reset demo:1}}\n'],
   ])('rejects %s', (_case, compose) => {
-    expect(() => editComposeImages(compose, [{ service: 'app', targetTag: '2' }])).toThrow();
+    expect(editComposeImages(compose, [{ service: 'app', targetTag: '2' }])).toEqual({
+      content: compose,
+      changes: [],
+      failures: [{ service: 'app', reason: expect.any(String) }],
+    });
   });
 
   it.each([
@@ -117,17 +128,25 @@ describe('editComposeImages', () => {
     ['unchanged implicit tag', 'demo', 'latest'],
     ['invalid target tag', 'demo:1', '2 # comment'],
   ])('rejects an %s', (_case, image, targetTag) => {
-    expect(() =>
-      editComposeImages(`services: {app: {image: ${image}}}`, [{ service: 'app', targetTag }]),
-    ).toThrow();
+    const content = `services: {app: {image: ${image}}}`;
+    expect(editComposeImages(content, [{ service: 'app', targetTag }])).toEqual({
+      content,
+      changes: [],
+      failures: [{ service: 'app', reason: expect.any(String) }],
+    });
   });
 
-  it('rejects multiple edits for a single service', () => {
-    expect(() =>
-      editComposeImages('services: {app: {image: demo:1}}', [
+  it('rejects multiple edits for a single service while keeping independent edits', () => {
+    expect(
+      editComposeImages('services: {app: {image: demo:1}, worker: {image: worker:1}}', [
         { service: 'app', targetTag: '2' },
         { service: 'app', targetTag: '3' },
+        { service: 'worker', targetTag: '4' },
       ]),
-    ).toThrow();
+    ).toMatchObject({
+      content: 'services: {app: {image: demo:1}, worker: {image: worker:4}}',
+      changes: [{ service: 'worker' }],
+      failures: [{ service: 'app', reason: expect.any(String) }],
+    });
   });
 });

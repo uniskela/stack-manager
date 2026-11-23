@@ -733,7 +733,7 @@ class SqliteSourceDraftRepository implements SourceDraftRepository {
           ),
         )
         .get();
-      if (!repo || repo.headSha !== draft.baseCommitSha) return 'source_changed';
+      if (repo?.headSha !== draft.baseCommitSha) return 'source_changed';
       const stack = tx
         .select({ id: stacks.id })
         .from(stacks)

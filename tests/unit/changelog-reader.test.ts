@@ -131,6 +131,46 @@ describe('ChangelogReader', () => {
     });
   });
 
+  it('keeps visible text from nested Markdown formatting and links', async () => {
+    const { reader } = fixture(`# Changelog
+## *[2.0.0][release]*
+- **Upgrade** using [the (new) guide](https://example.com/docs_(new)) &copy; Example.
+## 1.0.0
+- Initial release.
+
+[release]: https://example.com/releases/2.0.0
+`);
+    await expect(reader.check(source, '1.0.0', '2.0.0')).resolves.toMatchObject({
+      status: 'checked',
+      signals: ['Upgrade using the (new) guide © Example.'],
+    });
+  });
+
+  it('extracts HTML text across inline elements and block boundaries', async () => {
+    const { reader } = fixture(`<!doctype html><html><head><title>Release notes</title></head><body><main>
+<h2 data-label="Release > details"><em>2.0.0</em></h2>
+<p>Upgrade <strong>the database</strong>.<br>Manual intervention may be needed.</p>
+<pre>Breaking change in an example.</pre>
+<h2>1.0.0</h2><p>Initial release.</p>
+</main></body></html>`);
+    await expect(reader.check(source, '1.0.0', '2.0.0')).resolves.toMatchObject({
+      status: 'checked',
+      signals: ['Upgrade the database.', 'Manual intervention may be needed.'],
+    });
+  });
+
+  it('keeps prerelease and build identifiers distinct in version boundaries', async () => {
+    const { reader } = fixture(`## Release v2.0.0-rc.1+build.3: 2026-11-23
+- Upgrade the database.
+## [1.0.0-rc.2+build.5]
+- Initial release.
+`);
+    await expect(reader.check(source, '1.0.0-rc.2+build.5', '2.0.0-rc.1+build.3')).resolves.toMatchObject({
+      status: 'checked',
+      signals: ['Upgrade the database.'],
+    });
+  });
+
   it('does not form a release range across separate version lists', async () => {
     const { reader } = fixture(`# Application releases
 ## 2.0.0
@@ -138,6 +178,19 @@ describe('ChangelogReader', () => {
 # Example dependency releases
 ## 1.0.0
 - Initial release of the dependency.
+`);
+    await expect(reader.check(source, '1.0.0', '2.0.0')).resolves.toMatchObject({
+      status: 'incomplete',
+      signals: ['Upgrade the application.'],
+    });
+  });
+
+  it('does not use a quoted version heading as a release boundary', async () => {
+    const { reader } = fixture(`## 2.0.0
+- Upgrade the application.
+
+> ## 1.0.0
+> Example release.
 `);
     await expect(reader.check(source, '1.0.0', '2.0.0')).resolves.toMatchObject({
       status: 'incomplete',

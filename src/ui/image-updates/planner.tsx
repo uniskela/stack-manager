@@ -32,6 +32,7 @@ const stageLabels: Record<ImageUpdateStageResult['files'][number]['status'], str
   source_changed: 'The Compose source changed. Preview again.',
   candidate_changed: 'The WUD candidate changed. Preview again.',
   review_required: 'Acknowledge the review to stage this file',
+  failed: 'Could not stage this file. Check Changes before retrying.',
 };
 
 function candidateKey({ stackId, service }: Pick<ImageUpdateIntent, 'stackId' | 'service'>) {
@@ -51,17 +52,26 @@ function errorMessage(error: unknown) {
   return error instanceof ApiError ? error.message : 'Could not reach Stack Manager.';
 }
 
+function mergeInventories(loaded: Record<string, StackInventory | string>, known: readonly StackInventory[]) {
+  const inventories = new Map<string, StackInventory>();
+  for (const stack of Object.values(loaded)) {
+    if (typeof stack === 'object') inventories.set(stack.stackId, stack);
+  }
+  for (const stack of known) inventories.set(stack.stackId, stack);
+  return [...inventories.values()];
+}
+
 export function ImageUpdatePlanner({
   workspaceId,
   stacks,
   known,
   initialStackId,
-}: {
+}: Readonly<{
   workspaceId: string;
-  stacks: { id: string; name: string }[];
-  known: StackInventory[];
+  stacks: readonly { id: string; name: string }[];
+  known: readonly StackInventory[];
   initialStackId?: string;
-}) {
+}>) {
   const id = useId();
   const router = useRouter();
   const endpoint = `/api/workspaces/${workspaceId}/image-updates`;
@@ -103,12 +113,8 @@ export function ImageUpdatePlanner({
           (image) => image.image && !candidateKeys.has(candidateKey({ stackId, service: image.name })),
         )
       : [];
-  const inventories = new Map<string, StackInventory>();
-  for (const stack of Object.values(loaded)) {
-    if (typeof stack === 'object') inventories.set(stack.stackId, stack);
-  }
-  for (const stack of known) inventories.set(stack.stackId, stack);
-  const suggestions = [...inventories.values()].flatMap(({ stackId, images }) =>
+  const inventories = mergeInventories(loaded, known);
+  const suggestions = inventories.flatMap(({ stackId, images }) =>
     images.flatMap((image): ImageUpdateIntent[] => {
       if (image.status !== 'available' || !image.candidateTag) return [];
       const candidate = {
@@ -228,7 +234,12 @@ export function ImageUpdatePlanner({
           next[token] = { selected: false, acknowledgeReview };
         return next;
       });
-      setAnnouncement('Staging finished. Check the result for each file below.');
+      const rejected = data.rejectedPreviews;
+      setAnnouncement(
+        rejected
+          ? `Staging finished. Preview again for ${rejected} rejected approvals.`
+          : 'Staging finished. Check the result for each file below.',
+      );
       if (data.files.some((file) => file.status === 'staged')) router.refresh();
     } catch (error) {
       setError(errorMessage(error));
@@ -297,7 +308,8 @@ export function ImageUpdatePlanner({
                 Retry loading services
               </Button>
             </div>
-          ) : inventory && !services.length ? (
+          ) : null}
+          {typeof inventory === 'object' && !services.length ? (
             <p className="muted">No more service images to add from this stack.</p>
           ) : null}
           <Field
@@ -314,9 +326,7 @@ export function ImageUpdatePlanner({
             <Button type="submit" disabled={!services.length || remaining < 1}>
               Add manual update
             </Button>
-            {[...inventories.values()].some((stack) =>
-              stack.images.some((image) => image.status === 'available'),
-            ) ? (
+            {inventories.some((stack) => stack.images.some((image) => image.status === 'available')) ? (
               <Button disabled={!suggestions.length || remaining < 1} onClick={addSuggestions}>
                 Add WUD suggestions
               </Button>
@@ -506,8 +516,8 @@ export function ImageUpdatePlanner({
           ))}
         </ul>
       ) : null}
-      <p role="status" className="muted">
-        {announcement}
+      <p className="muted">
+        <output>{announcement}</output>
       </p>
       <FormError message={error} />
     </div>
