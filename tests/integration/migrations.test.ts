@@ -41,6 +41,8 @@ describe('migrations', () => {
       'stacks',
       'users',
       'workspaces',
+      'wud_connections',
+      'wud_stack_bindings',
     ]);
     const jobCols = client
       .prepare('PRAGMA table_info(jobs)')

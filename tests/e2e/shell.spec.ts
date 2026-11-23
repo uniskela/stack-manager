@@ -71,6 +71,21 @@ test.describe('signed in', () => {
     await expectAccessible(page);
   });
 
+  test('opens image updates and finds the WUD connection setup', async ({ page }) => {
+    await page.goto('/');
+    const home = new URL(page.url()).pathname;
+    await page.goto(`${home}/stacks/image-updates`);
+    await expect(page.getByRole('heading', { level: 1, name: 'Image updates' })).toBeVisible();
+    await expectAccessible(page);
+
+    await page.getByRole('link', { name: 'Connect WUD' }).click();
+    await expect(page.getByRole('heading', { name: 'WUD connection' })).toBeVisible();
+    await expect(page.getByLabel('WUD URL')).toBeVisible();
+    await expect(page.getByLabel('WUD read token')).toHaveAttribute('type', 'password');
+    await expect(page.getByRole('button', { name: 'Test and save' })).toBeVisible();
+    await expectAccessible(page);
+  });
+
   test('unknown pages stay inside the workspace shell', async ({ page }) => {
     await page.goto('/');
     const home = new URL(page.url()).pathname;

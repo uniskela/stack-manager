@@ -34,10 +34,12 @@ import {
   stacks,
   users,
   workspaces,
+  wudConnections,
 } from '../schema';
 import { ConflictError, AuthenticationError } from '@/server/domain/errors';
 import type { SqliteDb } from './database';
 import { SqliteDeploymentRoutingRepository, automaticSourceValid } from './routing';
+import { SqliteWudRepository } from './wud';
 
 type UserRow = typeof users.$inferSelect;
 type JobRow = typeof jobs.$inferSelect;
@@ -244,6 +246,8 @@ class SqliteCredentialRepository implements CredentialRepository {
         .get()?.n ?? 0;
     return (
       deploymentCount +
+      (this.db.select({ n: count() }).from(wudConnections).where(eq(wudConnections.credentialId, id)).get()
+        ?.n ?? 0) +
       (this.db
         .select({ n: count() })
         .from(gitRepositoryConnections)
@@ -717,6 +721,41 @@ class SqliteSourceDraftRepository implements SourceDraftRepository {
     });
   }
 
+  async insertAtHead(draft: SourceDraft, stackId: string) {
+    return this.db.transaction((tx) => {
+      const repo = tx
+        .select({ headSha: gitRepositoryConnections.headSha })
+        .from(gitRepositoryConnections)
+        .where(
+          and(
+            eq(gitRepositoryConnections.id, draft.repositoryId),
+            eq(gitRepositoryConnections.workspaceId, draft.workspaceId),
+          ),
+        )
+        .get();
+      if (repo?.headSha !== draft.baseCommitSha) return 'source_changed';
+      const stack = tx
+        .select({ id: stacks.id })
+        .from(stacks)
+        .where(
+          and(
+            eq(stacks.id, stackId),
+            eq(stacks.workspaceId, draft.workspaceId),
+            eq(stacks.repositoryId, draft.repositoryId),
+            eq(stacks.composePath, draft.path),
+          ),
+        )
+        .get();
+      if (!stack) return 'source_changed';
+      const result = tx
+        .insert(sourceDrafts)
+        .values(draft)
+        .onConflictDoNothing({ target: [sourceDrafts.repositoryId, sourceDrafts.path] })
+        .run();
+      return result.changes ? 'staged' : 'draft_exists';
+    });
+  }
+
   async delete(repositoryId: string, path: string) {
     const result = this.db
       .delete(sourceDrafts)
@@ -728,6 +767,7 @@ class SqliteSourceDraftRepository implements SourceDraftRepository {
 
 export function createSqliteRepositories(db: SqliteDb): Repositories {
   return {
+    wud: new SqliteWudRepository(db),
     deployments: new SqliteDeploymentRepository(db),
     routing: new SqliteDeploymentRoutingRepository(db),
     users: new SqliteUserRepository(db),

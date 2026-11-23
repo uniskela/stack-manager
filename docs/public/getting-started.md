@@ -20,7 +20,7 @@ failed repository fetches; ordinary drafts appear separately under **Work in pro
 to five meaningful events with a link to the full audit log in **Settings → Activity**. Successful routine
 routing evaluations and skips are hidden from this feed; failures remain visible. A single-repository
 workspace can request **Fetch now** from its dashboard without triggering deployments. These statuses describe
-Git source state, **not** container health. **Settings** has **General**, **Credentials**, **Activity** and
+Git source state, **not** container health. **Settings** has **General**, **Credentials**, **WUD**, **Activity** and
 **Account** tabs for workspace options,
 saved tokens, the audit log, your Git author identity, password and sessions.
 
@@ -90,6 +90,7 @@ Each stack has these tabs:
 | **Editor** | Browse files in the explorer, open them in tabs and edit with syntax highlighting. Compose files are validated as you type and issues appear in the problems panel. **Save draft** (Ctrl+S / ⌘S) keeps your edit on the server. |
 | **Docs** | Read the stack's Markdown files rendered (README first), follow links between them and edit them as drafts. |
 | **Environment** | Variables the Compose file references, whether `.env.example` documents them, env files it expects, and values that look like hard-coded secrets. Values are never shown. |
+| **Image updates** | List images in the fetched Compose file and see available updates reported by WUD. |
 | **Changes** | Every draft as a line-by-line diff against the fetched commit. Select files, commit with your Account Git identity, and push when ready. Discard drafts you don't want. |
 | **History** | Commits that touched this stack, as of the last fetch. Open a commit to see what changed in this stack's files. |
 | **Deployment** | Configure the deployment webhook, preview and opt into routing rules, deploy manually and inspect attempts or routing decisions. |
@@ -97,6 +98,40 @@ Each stack has these tabs:
 
 Files that look like secrets (`.env`, private keys, certificates, anything in a `secrets/` folder) are listed but
 can't be opened or edited.
+
+### Plan image updates
+
+1. Open a stack's **Image updates** tab or go to **Stacks → Image updates** for a batch across stacks.
+2. Pick a service and enter a target tag, or choose **Add WUD suggestions** when automatic suggestions are available. You can use both in one batch.
+3. Optionally enter a public HTTPS changelog URL for each image. For versioned release notes, choose a page that includes both the installed and target tags. Stack Manager shows relevant excerpts and flags incomplete evidence for review.
+4. Choose **Preview updates**, select the files you want, then choose **Stage selected files**. Acknowledge any warnings for the files you include. A policy exclusion skips its candidate. An existing draft holds that file while other files can still be staged.
+5. Open **Changes** to inspect or discard the drafts and follow your repository's Git workflow. Staging creates drafts only.
+
+For automatic suggestions, create an API token with the `read` scope in WUD 9.9. Enter the HTTPS base URL and token under **Settings → WUD** and choose **Test and save**. Map each stack to its WUD watcher and deployed Compose project. Stack Manager reads WUD's stored results every 15 minutes with the worker enabled. **Refresh from WUD** reads those results on demand, and WUD checks registries on its own schedule.
+
+When WUD reports an update without its last registry scan time, the planner asks you to acknowledge that the scan time is unavailable before staging. Results from an old or failed Stack Manager refresh need a new read from WUD.
+
+#### Repository image update policy
+
+Commit `.stack-manager/image-updates.json` at the root of a repository to configure the planning workflow. The app uses the policy from the same fetched commit as the Compose file.
+
+```json
+{
+  "version": 1,
+  "sources": { "manual": true, "wud": false },
+  "missingEvidence": "review",
+  "riskSignals": "review",
+  "exclude": [{ "path": "apps/wiki/compose.yaml", "service": "database" }],
+  "changelogs": { "nginx": "https://nginx.org/en/CHANGES" },
+  "serviceChangelogs": [
+    { "path": "apps/wiki/compose.yaml", "service": "web", "url": "https://example.org/releases/{{target}}" }
+  ]
+}
+```
+
+Both sources are enabled by default. Set `missingEvidence` or `riskSignals` to `block` to exclude those updates from staging. An exclusion without `service` covers the entire Compose file. Manual updates respect `wud.watch=false` by default. A repository can set `respectWudOptOut` to `false` for manual updates, while WUD suggestions always respect the label.
+
+An entered link takes precedence over the service or image link in Git, followed by a WUD-provided link when available. Link paths can contain `{{current}}` and `{{target}}`. Repositories with an external WUD group policy can preview candidates and see links from their existing changelog catalog. Their external workflow remains responsible for staging linked files and documentation.
 
 ### Drafts
 

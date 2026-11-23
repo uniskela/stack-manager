@@ -63,11 +63,17 @@ export default async function SettingsCredentialsPage({
                     </div>
                   ) : null}
                 </div>
-                <CredentialActions
-                  workspaceId={workspaceId}
-                  credentialId={c.id}
-                  allowDelete={!inUse.has(c.id)}
-                />
+                {c.kind === 'image_update' ? (
+                  <ButtonLink size="sm" href={`/w/${workspaceId}/settings/wud`}>
+                    Manage WUD token
+                  </ButtonLink>
+                ) : (
+                  <CredentialActions
+                    workspaceId={workspaceId}
+                    credentialId={c.id}
+                    allowDelete={!inUse.has(c.id)}
+                  />
+                )}
               </li>
             );
           })}

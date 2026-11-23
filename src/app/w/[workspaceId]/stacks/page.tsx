@@ -62,12 +62,15 @@ export default async function StacksPage({ params }: { params: Promise<{ workspa
         title="Stacks"
         description="Compose stacks across your repositories. Open one to edit its source."
         actions={
-          <ButtonLink
-            href={`/w/${workspaceId}/repositories`}
-            icon={<Plus className="icon" aria-hidden="true" />}
-          >
-            Add stacks
-          </ButtonLink>
+          <>
+            <ButtonLink href={`/w/${workspaceId}/stacks/image-updates`}>Image updates</ButtonLink>
+            <ButtonLink
+              href={`/w/${workspaceId}/repositories`}
+              icon={<Plus className="icon" aria-hidden="true" />}
+            >
+              Add stacks
+            </ButtonLink>
+          </>
         }
       />
       <OrganisedStacks workspaceId={workspaceId} stacks={items} />

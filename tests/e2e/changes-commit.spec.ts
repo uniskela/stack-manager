@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
-import { AUTH_STATE, expectAccessible, SAMPLE_REMOTE, SAMPLE_STATE } from './support';
+import { AUTH_STATE, expectAccessible, SAMPLE_REMOTE, SAMPLE_ROOT, SAMPLE_STATE } from './support';
 
 test.use({ storageState: AUTH_STATE });
 test.skip(!SAMPLE_REMOTE, 'Set E2E_GIT_REMOTE to run the Changes commit tests.');
@@ -76,6 +76,41 @@ async function openChangesWithDraft(page: Page, marker: string) {
   }
   await expect(page.locator('.diff').first()).toBeVisible();
 }
+
+test('plans and stages a manual image update without WUD', async ({ page }) => {
+  // The desktop run stages a draft on the shared stack. Running on mobile would mutate it twice.
+  // The scenario selects the proxy service from the nginx-golang fixture.
+  test.skip(
+    isMobile(page) || SAMPLE_ROOT !== 'nginx-golang',
+    'Stages once on desktop using the nginx-golang fixture’s proxy service.',
+  );
+  const { workspaceId, stackId } = sample();
+  const path = 'nginx-golang/compose.yaml';
+  await page.goto(`${stackUrl()}/image-updates`);
+  const add = page.getByRole('form', { name: 'Add a manual image update' });
+  await add.getByLabel('Service').selectOption('proxy');
+  await add.getByLabel('Target tag').fill('1.29.2');
+  await add.getByRole('button', { name: 'Add manual update' }).click();
+  await page.getByRole('button', { name: 'Preview updates' }).click();
+  const review = page.getByRole('form', { name: 'Stage image updates' });
+  await expect(review.getByText('No changelog link was supplied.')).toBeVisible();
+  await expect(review.getByRole('button', { name: 'Stage selected files' })).toBeDisabled();
+  await expectAccessible(page);
+  await review.getByRole('checkbox', { name: `Acknowledge and stage ${path}` }).check();
+  await review.getByRole('button', { name: 'Stage selected files' }).click();
+  try {
+    await page.getByRole('link', { name: 'Open Changes for Sample' }).click();
+    await expect(page.locator('.diff').first()).toContainText('nginx:1.29.2');
+  } finally {
+    const cleanup = await page.request.delete(
+      `/api/workspaces/${workspaceId}/stacks/${stackId}/drafts?path=${encodeURIComponent(path)}`,
+      {
+        headers: { Origin: new URL(page.url()).origin },
+      },
+    );
+    expect(cleanup.ok()).toBe(true);
+  }
+});
 
 test('changes shows diffs, commit form, missing identity and is accessible', async ({ page }) => {
   test.skip(isMobile(page), 'Desktop covers the full commit form; mobile has a dedicated layout test.');

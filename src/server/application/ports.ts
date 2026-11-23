@@ -186,10 +186,13 @@ export interface SourceDraftRepository {
   list(repositoryId: string, rootPath?: string): Promise<SourceDraft[]>;
   /** Inserts or replaces the draft for (repositoryId, path). Keeps the original id/createdAt/base commit. */
   upsert(draft: SourceDraft): Promise<SourceDraft>;
+  /** Check the fetched head and stack's Compose path while inserting a new draft. */
+  insertAtHead(draft: SourceDraft, stackId: string): Promise<'staged' | 'draft_exists' | 'source_changed'>;
   delete(repositoryId: string, path: string): Promise<boolean>;
 }
 
 export interface Repositories {
+  wud: import('./wud-ports').WudRepository;
   routing: import('./deployment-routing-ports').DeploymentRoutingRepository;
   deployments: DeploymentRepository;
   users: UserRepository;

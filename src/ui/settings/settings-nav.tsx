@@ -12,6 +12,7 @@ export function SettingsNav({ base }: { base: string }) {
       label: 'Credentials',
       match: (p: string) => p.startsWith(`${base}/credentials`),
     },
+    { href: `${base}/wud`, label: 'WUD', match: (p: string) => p === `${base}/wud` },
     {
       href: `${base}/activity`,
       label: 'Activity',

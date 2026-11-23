@@ -168,6 +168,54 @@ export class SourceService {
     return (await this.#fileView(snap, path, draft))!;
   }
 
+  /** Stage an already-reviewed change against the exact fetched file, preserving existing drafts. */
+  async createDraftAtHead(
+    workspaceId: string,
+    repositoryId: string,
+    root: string,
+    input: { stackId: string; path: string; commitSha: string; blobSha: string; content: string },
+    actorUserId: string,
+  ) {
+    const file = await this.readFile(workspaceId, repositoryId, root, input.path);
+    if (
+      file.locked ||
+      file.commitSha !== input.commitSha ||
+      file.blobSha !== input.blobSha ||
+      file.content === null ||
+      file.content === input.content
+    )
+      return 'source_changed';
+    if (file.draft) return 'draft_exists';
+    const bytes = utf8Bytes(input.content);
+    if (bytes > MAX_EDITABLE_BYTES || input.content.includes('\u0000')) {
+      throw new ValidationError('Drafts must be text files of at most 1 MiB.');
+    }
+    const now = this.clock.now();
+    const status = await this.drafts.insertAtHead(
+      {
+        id: this.newId(),
+        workspaceId,
+        repositoryId,
+        path: file.path,
+        content: input.content,
+        baseBlobSha: input.blobSha,
+        baseCommitSha: input.commitSha,
+        createdByUserId: actorUserId,
+        updatedByUserId: actorUserId,
+        createdAt: now,
+        updatedAt: now,
+      },
+      input.stackId,
+    );
+    if (status === 'staged') {
+      await this.#auditDraft('draft.save', workspaceId, repositoryId, file.path, actorUserId, {
+        bytes,
+        source: 'image_updates',
+      });
+    }
+    return status;
+  }
+
   /** Removes a draft. Returns the committed file, or null when the draft was a new file. */
   async discardDraft(
     workspaceId: string,
