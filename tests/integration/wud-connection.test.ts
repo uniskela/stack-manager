@@ -7,12 +7,50 @@ import * as stackUpdates from '@/app/api/workspaces/[workspaceId]/stacks/[stackI
 import { sessionCookieName } from '@/server/http/cookies';
 import { gitServerOverrides, startGitServer } from '../support/git-server';
 import { call } from '../support/http';
+import { WUD_REFRESH_JOB } from '@/server/application/image-update-service';
 
 const token = 'fixture-read-only-token';
 let h: TestHarness | undefined;
 afterEach(async () => h?.cleanup());
 
 describe('WUD connections', () => {
+  it('queues independent due connections and reports each enqueue failure', async () => {
+    h = await createHarness({ overrides: { wudClient: { read: vi.fn().mockResolvedValue([]) } } });
+    const { workspaces, auth, imageUpdates, jobs } = h.container;
+    const { user } = await auth.setupAdmin(
+      { username: 'admin', password: 'a random test password' },
+      { ip: null, userAgent: null },
+    );
+    const [first, second, third] = await Promise.all(
+      ['First', 'Second', 'Third'].map(async (name) => {
+        const { id } = await workspaces.create({ name }, user.id);
+        const connection = await imageUpdates.configure(
+          id,
+          { baseUrl: 'https://wud.example', token, expectedRevision: null },
+          user.id,
+        );
+        return { id, revision: connection.revision };
+      }),
+    );
+    const enqueue = jobs.enqueue.bind(jobs);
+    vi.spyOn(jobs, 'enqueue').mockImplementation(async (type, payload, options) => {
+      if (payload.workspaceId !== second!.id) throw new Error('Failed to enqueue fixture refresh');
+      return enqueue(type, payload, options);
+    });
+    h.clock.advance(15 * 60_000);
+    const warn = vi.fn();
+    imageUpdates.start({ warn });
+    await imageUpdates.stop();
+
+    expect(warn).toHaveBeenCalledTimes(2);
+    for (const workspace of [first!, third!]) {
+      expect(warn).toHaveBeenCalledWith('Could not schedule WUD refresh.', { workspaceId: workspace.id });
+    }
+    expect(await jobs.latestFor(`${WUD_REFRESH_JOB}:${second!.id}:${second!.revision}`)).toMatchObject({
+      status: 'pending',
+    });
+  });
+
   it('tests a connection, keeps its token server-side and refreshes through a deduplicated job', async () => {
     const read = vi.fn().mockResolvedValue([]);
     h = await createHarness({ overrides: { wudClient: { read } } });

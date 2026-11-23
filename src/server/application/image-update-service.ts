@@ -153,6 +153,11 @@ export class ImageUpdateService {
     const scan = () => {
       if (this.#scan) return;
       this.#scan = this.#scheduleDue()
+        .then((results) => {
+          for (const { workspaceId, status } of results) {
+            if (status === 'failed') logger.warn('Could not schedule WUD refresh.', { workspaceId });
+          }
+        })
         .catch(() => logger.warn('Could not schedule WUD refreshes.'))
         .finally(() => {
           this.#scan = null;
@@ -268,12 +273,20 @@ export class ImageUpdateService {
     return stack;
   }
 
-  async #scheduleDue(): Promise<void> {
+  async #scheduleDue() {
     const cutoff = new Date(this.clock.now().getTime() - REFRESH_INTERVAL_MS);
     const due = await this.repo.dueConnections(cutoff);
-    const results = await Promise.allSettled(due.map((connection) => this.#enqueue(connection)));
-    const failed = results.find((result) => result.status === 'rejected');
-    if (failed) throw failed.reason;
+    return Promise.all(
+      due.map(async (connection) => {
+        const { workspaceId } = connection;
+        try {
+          const { created } = await this.#enqueue(connection);
+          return { workspaceId, status: created ? 'scheduled' : 'already_scheduled' };
+        } catch {
+          return { workspaceId, status: 'failed' };
+        }
+      }),
+    );
   }
 
   #enqueue(connection: Pick<WudConnection, 'workspaceId' | 'revision'>) {
