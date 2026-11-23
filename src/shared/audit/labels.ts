@@ -30,6 +30,9 @@ const LABELS: Record<string, string> = {
   'git.commit_validation_overridden': 'Commit warnings acknowledged',
   // HTTP acceptance is provider acceptance, never verified container health.
   'deployment.binding_created': 'Deployment webhook configured',
+  'wud.connection_saved': 'WUD connection saved',
+  'wud.connection_removed': 'WUD connection removed',
+  'wud.stack_binding_updated': 'Stack WUD mapping updated',
   'deployment.binding_updated': 'Deployment webhook updated',
   'deployment.binding_disabled': 'Deployment webhook disabled',
   'deployment.binding_removed': 'Deployment webhook removed',

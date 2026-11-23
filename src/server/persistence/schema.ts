@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import type { WudObservation } from '@/shared/image-updates';
 
 /**
  * Physical schema for the PR #2 foundation entities and the PR #3 source workspace (docs/internal/domain/DATA_MODEL.md).
@@ -67,7 +68,9 @@ export const providerCredentials = sqliteTable(
     workspaceId: text('workspace_id')
       .notNull()
       .references(() => workspaces.id, { onDelete: 'cascade' }),
-    kind: text('kind', { enum: ['git', 'git_webhook', 'deployment', 'runtime', 'secret'] }).notNull(),
+    kind: text('kind', {
+      enum: ['git', 'git_webhook', 'deployment', 'runtime', 'secret', 'image_update'],
+    }).notNull(),
     providerType: text('provider_type').notNull(),
     label: text('label').notNull(),
     /** AES-256-GCM ciphertext||tag, base64. Never returned by any API. */
@@ -226,6 +229,36 @@ export const sourceDrafts = sqliteTable(
     updatedAt: ts('updated_at').notNull(),
   },
   (t) => [uniqueIndex('source_drafts_repo_path_uq').on(t.repositoryId, t.path)],
+);
+
+export const wudConnections = sqliteTable('wud_connections', {
+  workspaceId: text('workspace_id')
+    .primaryKey()
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
+  baseUrl: text('base_url').notNull(),
+  credentialId: text('credential_id')
+    .notNull()
+    .references(() => providerCredentials.id, { onDelete: 'restrict' }),
+  revision: text('revision').notNull(),
+  observations: text('observations', { mode: 'json' }).$type<WudObservation[]>().notNull(),
+  lastSuccessAt: ts('last_success_at').notNull(),
+  lastAttemptAt: ts('last_attempt_at').notNull(),
+  lastError: text('last_error', { enum: ['auth', 'unavailable'] }),
+});
+
+export const wudStackBindings = sqliteTable(
+  'wud_stack_bindings',
+  {
+    stackId: text('stack_id')
+      .primaryKey()
+      .references(() => stacks.id, { onDelete: 'cascade' }),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    watcher: text('watcher').notNull(),
+    project: text('project').notNull(),
+  },
+  (t) => [uniqueIndex('wud_stack_binding_workspace_target_uq').on(t.workspaceId, t.watcher, t.project)],
 );
 
 /** No payloads or signing material. Delivery IDs survive restarts for replay protection. */

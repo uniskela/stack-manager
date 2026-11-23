@@ -1,4 +1,7 @@
 export type AuditAction =
+  | 'wud.connection_saved'
+  | 'wud.connection_removed'
+  | 'wud.stack_binding_updated'
   | 'deployment.routing_evaluated'
   | 'deployment.stack_skipped'
   | 'deployment.automatic_requested'

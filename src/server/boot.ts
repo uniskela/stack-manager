@@ -21,7 +21,7 @@ export async function boot(): Promise<void> {
     );
     process.exit(1);
   }
-  const { logger, config, auth, worker, autoFetch } = container;
+  const { logger, config, auth, worker, autoFetch, imageUpdates } = container;
   logger.info('stack-manager ready', {
     dataDir: config.dataDir,
     keyVersion: config.encryption.keyVersion,
@@ -35,6 +35,7 @@ export async function boot(): Promise<void> {
   }
   if (config.workerEnabled) {
     worker.start();
+    imageUpdates.start(logger);
     if (config.autoFetchEnabled) autoFetch.start();
   }
 

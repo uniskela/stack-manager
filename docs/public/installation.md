@@ -41,7 +41,7 @@ Optional settings you are likely to want:
 - `STACK_MANAGER_PUBLIC_URL`: the address you open in the browser behind a reverse proxy, e.g.
   `https://stacks.example.com`
 - `STACK_MANAGER_SETUP_TOKEN`: required during first-run setup, so nobody else can claim a fresh instance
-- `STACK_MANAGER_ALLOW_PRIVATE_NETWORKS=true`: needed when your Gitea or Forgejo runs on your LAN (e.g. `192.168.x.x`)
+- `STACK_MANAGER_ALLOW_PRIVATE_NETWORKS=true`: needed when a connected service such as Gitea, Forgejo or WUD runs on your LAN (e.g. `192.168.x.x`)
 - `STACK_MANAGER_COOKIE_SECURE=false`: only for testing over plain HTTP on localhost
 - `STACK_MANAGER_AUTO_FETCH_ENABLED=true` and `STACK_MANAGER_AUTO_FETCH_INTERVAL_MINUTES=15`: automatically
   refresh connected Git repositories every 15 minutes by default while the worker is enabled; no deployment is triggered
@@ -72,6 +72,8 @@ docker compose ps   # wait for "healthy"
 
 The container listens on `127.0.0.1:3000` by default. Point your reverse proxy at it, or change `STACK_MANAGER_BIND`
 if the proxy runs on another host. Then open the app and continue with [Getting started](getting-started.md).
+
+If you use WUD, give Stack Manager access to its HTTPS API and a read-scoped token. Configure it in [Settings → WUD](getting-started.md#plan-image-updates). Stack Manager continues to run with its Git connection alone.
 
 ## Image tags
 

@@ -32,6 +32,12 @@ export type ProviderTypeCheck = (kind: CredentialKind, providerType: string) => 
 export const credentialAad = (workspaceId: string, credentialId: string) =>
   `stack-manager:credential:v1:${workspaceId}:${credentialId}`;
 
+function requireUserManagedCredential(kind: CredentialKind): void {
+  if (kind === 'image_update') {
+    throw new ConflictError('Manage the WUD token in Settings → WUD.', 'credential_managed_by_integration');
+  }
+}
+
 /**
  * Encrypted provider credentials (docs/public/AUTH_AND_CREDENTIALS.md).
  *
@@ -81,7 +87,9 @@ export class CredentialService {
       secretCiphertext: encrypted.ciphertext,
       secretNonce: encrypted.nonce,
       secretKeyVersion: encrypted.keyVersion,
-      secretHint: ['git_webhook', 'deployment'].includes(input.kind) ? '••••' : maskSecret(secret),
+      secretHint: ['git_webhook', 'deployment', 'image_update'].includes(input.kind)
+        ? '••••'
+        : maskSecret(secret),
       secretMeta: meta,
       lastTestedAt: null,
       lastTestStatus: null,
@@ -94,6 +102,7 @@ export class CredentialService {
   }
 
   async create(input: CreateCredentialInput, actorUserId: string): Promise<CredentialView> {
+    requireUserManagedCredential(input.kind);
     const record = await this.prepare(input, actorUserId);
     await this.repo.insert(record);
     await this.audit.record({
@@ -122,6 +131,7 @@ export class CredentialService {
     actorUserId: string,
   ): Promise<CredentialView> {
     const existing = await this.#find(workspaceId, id);
+    requireUserManagedCredential(existing.kind);
     if (existing.kind === 'deployment' && input.meta !== undefined)
       throw new ValidationError('Deployment credentials do not support metadata.');
     const label = input.label === undefined ? undefined : validateLabel(input.label);
@@ -147,6 +157,7 @@ export class CredentialService {
     actorUserId: string,
   ): Promise<CredentialView> {
     const existing = await this.#find(workspaceId, id);
+    requireUserManagedCredential(existing.kind);
     let secret =
       existing.kind === 'git_webhook' ? validateWebhookSecret(secretInput) : validateSecretValue(secretInput);
     if (existing.kind === 'deployment') {
@@ -174,7 +185,8 @@ export class CredentialService {
   }
 
   async delete(workspaceId: string, id: string, actorUserId: string): Promise<void> {
-    await this.#find(workspaceId, id);
+    const existing = await this.#find(workspaceId, id);
+    requireUserManagedCredential(existing.kind);
     if ((await this.repo.countReferences(id)) > 0) {
       throw new ConflictError(
         'Credential is in use by a repository connection or deployment binding.',

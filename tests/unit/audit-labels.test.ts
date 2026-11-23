@@ -5,6 +5,9 @@ import type { AuditAction } from '@/server/domain/audit';
 
 // Typed as a complete record so adding an AuditAction without updating this list fails typecheck.
 const ALL_ACTIONS: Record<AuditAction, true> = {
+  'wud.connection_saved': true,
+  'wud.connection_removed': true,
+  'wud.stack_binding_updated': true,
   'deployment.routing_evaluated': true,
   'deployment.stack_skipped': true,
   'deployment.automatic_requested': true,

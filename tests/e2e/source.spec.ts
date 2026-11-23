@@ -24,7 +24,7 @@ test('stack pages render and are accessible', async ({ page }) => {
   await expect(page.getByRole('navigation', { name: 'Stack' })).toBeVisible();
   await expectAccessible(page);
 
-  for (const tab of ['Docs', 'Environment', 'Changes', 'History', 'Settings']) {
+  for (const tab of ['Docs', 'Environment', 'Image updates', 'Changes', 'History', 'Settings']) {
     await page
       .getByRole('navigation', { name: 'Stack' })
       .getByRole('link', { name: new RegExp(tab) })

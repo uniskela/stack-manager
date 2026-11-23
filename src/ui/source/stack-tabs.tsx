@@ -1,6 +1,15 @@
 'use client';
 
-import { BookOpen, Code2, GitCompareArrows, History, Rocket, Settings2, Variable } from 'lucide-react';
+import {
+  ArrowUpCircle,
+  BookOpen,
+  Code2,
+  GitCompareArrows,
+  History,
+  Rocket,
+  Settings2,
+  Variable,
+} from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
@@ -13,6 +22,7 @@ export function StackTabs({ base, drafts }: { base: string; drafts: number }) {
     { href: base, label: 'Editor', Icon: Code2, exact: true },
     { href: `${base}/docs`, label: 'Docs', Icon: BookOpen },
     { href: `${base}/environment`, label: 'Environment', Icon: Variable },
+    { href: `${base}/image-updates`, label: 'Image updates', Icon: ArrowUpCircle },
     { href: `${base}/changes`, label: 'Changes', Icon: GitCompareArrows, count: drafts },
     { href: `${base}/history`, label: 'History', Icon: History },
     { href: `${base}/deployment`, label: 'Deployment', Icon: Rocket },

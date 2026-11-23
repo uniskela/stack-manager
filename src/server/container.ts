@@ -17,6 +17,8 @@ import { GitWorkflowService } from '@/server/application/git-workflow-service';
 import { GitHistoryService } from '@/server/application/git-history-service';
 import { GitWebhookService } from '@/server/application/git-webhook-service';
 import { JobQueue } from '@/server/application/job-queue';
+import { ImageUpdateService, WUD_REFRESH_JOB } from '@/server/application/image-update-service';
+import { ImageUpdateStagingService } from '@/server/application/image-update-staging-service';
 import { RepositoryAutoFetch } from '@/server/application/repository-auto-fetch';
 import type { Repositories } from '@/server/application/ports';
 import { SourceService } from '@/server/application/source-service';
@@ -37,6 +39,8 @@ import { GitCli } from '@/server/providers/git/git-cli';
 import { createDefaultGitProviderRegistry, type GitProviderRegistry } from '@/server/providers/git/registry';
 import { GitSourceReader } from '@/server/providers/git/source-reader';
 import { GitHistoryReader } from '@/server/providers/git/history-reader';
+import { WudClient } from '@/server/providers/wud/client';
+import { ChangelogReader } from '@/server/providers/changelog/reader';
 import type { Resolver } from '@/server/security/network-policy';
 import { SecretBox } from '@/server/security/secret-box';
 import { safeErrorMessage } from '@/server/security/redact';
@@ -66,6 +70,8 @@ export interface Container {
   jobs: JobQueue;
   worker: JobWorker;
   autoFetch: RepositoryAutoFetch;
+  imageUpdates: ImageUpdateService;
+  imageUpdateStaging: ImageUpdateStagingService;
   ping(): boolean;
   close(): Promise<void>;
 }
@@ -78,6 +84,8 @@ export interface ContainerOverrides {
   resolver?: Resolver;
   workerOptions?: JobWorkerOptions;
   migrationsFolder?: string;
+  wudClient?: Pick<WudClient, 'read'>;
+  changelog?: Pick<ChangelogReader, 'check'>;
 }
 
 /** Ensures the data directory layout exists with owner-only permissions. */
@@ -128,7 +136,9 @@ export function createContainer(config: AppConfig, overrides: ContainerOverrides
       (kind, type) =>
         kind === 'git' || kind === 'git_webhook'
           ? gitProviders.has(type)
-          : kind === 'deployment' && deploymentProviders.has(type as 'portainer-webhook' | 'generic-webhook'),
+          : (kind === 'deployment' &&
+              deploymentProviders.has(type as 'portainer-webhook' | 'generic-webhook')) ||
+            (kind === 'image_update' && type === 'wud'),
       async (type, secret) => {
         const provider = deploymentProviders.get(type as 'portainer-webhook' | 'generic-webhook');
         if (!provider) throw new ValidationError('Unsupported deployment provider.');
@@ -184,6 +194,28 @@ export function createContainer(config: AppConfig, overrides: ContainerOverrides
     const reader = new GitSourceReader(git);
     const stacks = new StackService(repos.stacks, repositories, reader, audit, clock, newId);
     const source = new SourceService(repositories, reader, repos.drafts, repos.stacks, audit, clock, newId);
+    const imageUpdates = new ImageUpdateService(
+      repos.wud,
+      repos.workspaces,
+      repos.stacks,
+      source,
+      credentials,
+      overrides.wudClient ??
+        new WudClient({ allowPrivateNetworks: config.allowPrivateNetworks, resolver: overrides.resolver }),
+      jobs,
+      audit,
+      clock,
+      newId,
+      config.workerEnabled,
+    );
+    const imageUpdateStaging = new ImageUpdateStagingService(
+      repos.stacks,
+      source,
+      imageUpdates,
+      overrides.changelog ?? new ChangelogReader(),
+      clock,
+      config.sessionSecret,
+    );
     const historyReader = new GitHistoryReader(git, config.reposDir);
     const deploymentRouting = new DeploymentRoutingService(
       repos,
@@ -206,6 +238,7 @@ export function createContainer(config: AppConfig, overrides: ContainerOverrides
 
     const syncLogger = logger.child({ component: 'stacks' });
     const handlers = new Map<string, JobHandler>([
+      [WUD_REFRESH_JOB, (job, ctx) => imageUpdates.refresh(job, ctx.signal)],
       [DEPLOYMENT_ROUTE_JOB, (job, ctx) => deploymentRouting.execute(job, ctx)],
       [DEPLOYMENT_TRIGGER_JOB, (job, ctx) => deployments.execute(job, ctx)],
       [
@@ -279,9 +312,12 @@ export function createContainer(config: AppConfig, overrides: ContainerOverrides
       gitWebhooks,
       worker,
       autoFetch,
+      imageUpdates,
+      imageUpdateStaging,
       ping: () => pingSqlite(handle.db),
       close: async () => {
         await autoFetch.stop();
+        await imageUpdates.stop();
         await worker.stop();
         handle.close();
       },

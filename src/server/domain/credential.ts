@@ -1,6 +1,13 @@
 import { ValidationError } from './errors';
 
-export const CREDENTIAL_KINDS = ['git', 'git_webhook', 'deployment', 'runtime', 'secret'] as const;
+export const CREDENTIAL_KINDS = [
+  'git',
+  'git_webhook',
+  'deployment',
+  'runtime',
+  'secret',
+  'image_update',
+] as const;
 export type CredentialKind = (typeof CREDENTIAL_KINDS)[number];
 
 export type CredentialTestStatus = 'ok' | 'failed';
