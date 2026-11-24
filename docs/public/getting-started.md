@@ -102,12 +102,14 @@ can't be opened or edited.
 ### Plan image updates
 
 1. Open a stack's **Image updates** tab or go to **Stacks → Image updates** for a batch across stacks.
-2. Pick a service and enter a target tag, or choose **Add WUD suggestions** when automatic suggestions are available. You can use both in one batch.
-3. Optionally enter a public HTTPS changelog URL for each image. For versioned release notes, choose a page that includes both the installed and target tags. Stack Manager shows relevant excerpts and flags incomplete evidence for review.
-4. Choose **Preview updates**, select the files you want, then choose **Stage selected files**. Acknowledge any warnings for the files you include. A policy exclusion skips its candidate. An existing draft holds that file while other files can still be staged.
-5. Open **Changes** to inspect or discard the drafts and follow your repository's Git workflow. Staging creates drafts only.
+2. Pick a **Compose service to update** and enter a **New image tag**, such as `1.5.5`. **Add tags suggested by WUD** adds the tags WUD found. You can use both in one batch.
+3. Optionally enter a public HTTPS **Release notes link** for each image. Choose a page that covers the tag saved in Git and the suggested or entered tag. Stack Manager shows relevant excerpts and flags incomplete evidence for review.
+4. Choose **Review proposed updates**, then select the files you want and choose **Save selected drafts**. Acknowledge any warnings for the files you include. A policy exclusion skips its update. If a file already has a draft, you can still save other files.
+5. Open **Changes** to inspect or discard the drafts and follow your repository’s Git workflow.
 
-For automatic suggestions, create an API token with the `read` scope in WUD 9.9. Enter the HTTPS base URL and token under **Settings → WUD** and choose **Test and save**. Map each stack to its WUD watcher and deployed Compose project. Stack Manager reads WUD's stored results every 15 minutes with the worker enabled. **Refresh from WUD** reads those results on demand, and WUD checks registries on its own schedule.
+For automatic suggestions, create an API token with the `read` scope in WUD 9.9. Enter the HTTPS base URL and token under **Settings → WUD** and choose **Test and save**. Stack Manager reads WUD's stored results every 15 minutes with the worker enabled. **Refresh from WUD** reads those results on demand, and WUD checks registries on its own schedule.
+
+From **Stacks → Image updates**, choose **Find WUD matches**. Stack Manager compares service names and image references in the fetched Compose files with what WUD sees running. Review and save the suggested matches together. **Docker host in WUD** is WUD’s watcher name. **Deployed Compose project** is the project name WUD sees on that host. If a stack has multiple possible matches or no matching WUD data, open its **Image updates** tab and choose **Enter WUD details manually**. Discovery preserves saved matches.
 
 When WUD reports an update without its last registry scan time, the planner asks you to acknowledge that the scan time is unavailable before staging. Results from an old or failed Stack Manager refresh need a new read from WUD.
 

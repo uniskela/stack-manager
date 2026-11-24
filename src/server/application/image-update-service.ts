@@ -1,8 +1,11 @@
 import {
+  discoverWudMappings,
   inspectStackImages,
   matchImageUpdates,
   type StackImageUpdate,
   type WudBinding,
+  type WudMappingSelection,
+  type WudMappingSaveResult,
 } from '@/shared/image-updates';
 import type { Clock } from '@/server/domain/clock';
 import { ConflictError, isAppError, NotFoundError, ValidationError } from '@/server/domain/errors';
@@ -189,14 +192,89 @@ export class ImageUpdateService {
     if (binding && (!WUD_IDENTIFIER.test(binding.watcher) || !WUD_IDENTIFIER.test(binding.project)))
       throw new ValidationError('Enter a WUD watcher and Docker Compose project name.');
     await this.repo.setBinding(workspaceId, stackId, binding);
+    await this.#auditBinding(workspaceId, stackId, actorUserId, binding !== null);
+  }
+
+  async #auditBinding(workspaceId: string, stackId: string, actorUserId: string, configured: boolean) {
     await this.audit.record({
       action: 'wud.stack_binding_updated',
       actorUserId,
       workspaceId,
       entityType: 'stack',
       entityId: stackId,
-      meta: { configured: binding !== null },
+      meta: { configured },
     });
+  }
+
+  async discoverMappings(workspaceId: string) {
+    return (await this.#discoverMappings(workspaceId)).discovery;
+  }
+
+  async saveDiscoveredMappings(
+    workspaceId: string,
+    selected: readonly WudMappingSelection[],
+    actorUserId: string,
+  ): Promise<WudMappingSaveResult> {
+    const { discovery, sources, connection } = await this.#discoverMappings(workspaceId);
+    const suggested = new Map(discovery.suggestions.map((match) => [match.stackId, match]));
+    const byStack = new Map(sources.map(({ stack, file }) => [stack.id, { stack, file }]));
+    const results = await Promise.all(
+      selected.map(async (selection): Promise<WudMappingSaveResult['results'][number]> => {
+        const { stackId, watcher, project } = selection;
+        const match = suggested.get(stackId);
+        const source = byStack.get(stackId);
+        if (match?.watcher !== watcher || match.project !== project || !source?.file)
+          return { stackId, status: 'changed' };
+        try {
+          const saved = await this.repo.saveDiscoveredBinding(
+            workspaceId,
+            connection,
+            { ...source.stack, commitSha: source.file.commitSha },
+            { watcher, project },
+          );
+          return { stackId, status: saved ? 'saved' : 'changed' };
+        } catch {
+          return { stackId, status: 'failed' };
+        }
+      }),
+    );
+    // Audit write failures are logged by AuditService. An audit rejection cannot undo a saved mapping.
+    await Promise.allSettled(
+      results
+        .filter(({ status }) => status === 'saved')
+        .map(({ stackId }) => this.#auditBinding(workspaceId, stackId, actorUserId, true)),
+    );
+    return { results };
+  }
+
+  async #discoverMappings(workspaceId: string) {
+    await this.#requireWorkspace(workspaceId);
+    const [connection, bindings, stacks] = await Promise.all([
+      this.repo.connection(workspaceId),
+      this.repo.bindings(workspaceId),
+      this.stacks.list(workspaceId),
+    ]);
+    if (!connection) throw new ConflictError('Connect WUD in Settings to find stack matches.');
+    const now = this.clock.now();
+    if (isStaleSnapshot(connection, now))
+      throw new ConflictError('Refresh from WUD before finding stack matches.');
+    const linked = new Set(bindings.map(({ stackId }) => stackId));
+    const unbound = stacks.filter(({ id }) => !linked.has(id));
+    const sources = await readStacks(unbound, async (stack) => ({
+      stack,
+      file: await this.#readImages(stack).catch(() => null),
+    }));
+    const discovery = discoverWudMappings(
+      sources.map(({ stack, file }) => ({
+        stackId: stack.id,
+        stackName: stack.name,
+        images: file?.images ?? [],
+      })),
+      bindings,
+      connection.observations,
+      now,
+    );
+    return { discovery, sources, connection };
   }
 
   async queue(workspaceId: string) {
@@ -208,23 +286,16 @@ export class ImageUpdateService {
     ]);
     const byStackId = new Map(bindings.map((binding) => [binding.stackId, binding]));
     const bound = stacks.filter((stack) => byStackId.has(stack.id));
-    const inventory: StackInventory[] = [];
-    let next = 0;
-    const readNext = async (): Promise<void> => {
-      const index = next++;
-      const stack = bound[index];
-      if (!stack) return;
+    const inventory = await readStacks(bound, (stack) => {
       const binding = byStackId.get(stack.id) ?? null;
-      inventory[index] = await this.#inventory(stack, binding, connection).catch(() => ({
+      return this.#inventory(stack, binding, connection).catch(() => ({
         stackId: stack.id,
         stackName: stack.name,
         binding: bindingView(binding),
         sourceStatus: 'unavailable',
         images: [],
       }));
-      return readNext();
-    };
-    await Promise.all(Array.from({ length: Math.min(bound.length, 8) }, readNext));
+    });
     return { inventory, unboundCount: stacks.length - bound.length };
   }
 
@@ -233,8 +304,24 @@ export class ImageUpdateService {
     binding: WudBinding | null,
     connection: WudConnection | null,
   ): Promise<StackInventory> {
-    let images: StackImageUpdate[] = [];
-    let sourceStatus: StackInventory['sourceStatus'] = 'unavailable';
+    const file = await this.#readImages(stack);
+    const parsedStatus = file?.images ? 'ready' : 'invalid';
+    const sourceStatus = file ? parsedStatus : 'unavailable';
+    const now = this.clock.now();
+    const activeBinding = connection ? binding : null;
+    const images = file?.images
+      ? matchImageUpdates(
+          file.images,
+          activeBinding,
+          connection?.observations ?? [],
+          now,
+          isStaleSnapshot(connection, now),
+        )
+      : [];
+    return { stackId: stack.id, stackName: stack.name, binding: bindingView(binding), sourceStatus, images };
+  }
+
+  async #readImages(stack: Stack) {
     try {
       const file = await this.source.readFile(
         stack.workspaceId,
@@ -242,25 +329,12 @@ export class ImageUpdateService {
         stack.rootPath,
         stack.composePath,
       );
-      if (!file.locked && file.content !== null) {
-        const source = inspectStackImages(file.content);
-        sourceStatus = source ? 'ready' : 'invalid';
-        if (source) {
-          const now = this.clock.now();
-          images = matchImageUpdates(
-            source,
-            connection ? binding : null,
-            connection?.observations ?? [],
-            now,
-            connection?.lastError !== null ||
-              now.getTime() - connection.lastSuccessAt.getTime() >= 2 * REFRESH_INTERVAL_MS,
-          );
-        }
-      }
+      if (file.locked || file.content === null) return null;
+      return { images: inspectStackImages(file.content), commitSha: file.commitSha };
     } catch (error) {
       if (!isAppError(error) || (error.status !== 404 && error.status !== 409)) throw error;
+      return null;
     }
-    return { stackId: stack.id, stackName: stack.name, binding: bindingView(binding), sourceStatus, images };
   }
 
   async #requireWorkspace(workspaceId: string): Promise<void> {
@@ -304,4 +378,25 @@ export class ImageUpdateService {
   #dedupeKey({ workspaceId, revision }: Pick<WudConnection, 'workspaceId' | 'revision'>): string {
     return `${WUD_REFRESH_JOB}:${workspaceId}:${revision}`;
   }
+}
+
+function isStaleSnapshot(connection: WudConnection | null, now: Date) {
+  return (
+    connection?.lastError !== null ||
+    now.getTime() - connection.lastSuccessAt.getTime() >= 2 * REFRESH_INTERVAL_MS
+  );
+}
+
+async function readStacks<T>(stacks: readonly Stack[], read: (stack: Stack) => Promise<T>): Promise<T[]> {
+  const results: T[] = [];
+  let next = 0;
+  async function readNext(): Promise<void> {
+    const index = next++;
+    const stack = stacks[index];
+    if (!stack) return;
+    results[index] = await read(stack);
+    return readNext();
+  }
+  await Promise.all(Array.from({ length: Math.min(stacks.length, 8) }, readNext));
+  return results;
 }

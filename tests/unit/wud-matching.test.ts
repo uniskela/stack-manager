@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   canonicalImageRepository,
+  discoverWudMappings,
   inspectStackImages,
   matchImageUpdates,
   type WudObservation,
@@ -21,6 +22,59 @@ const observation: WudObservation = {
   candidateTag: '1.27',
   digestOnly: false,
 };
+
+describe('WUD mapping discovery', () => {
+  const stack = { stackId: 'source-stack', stackName: 'Documentation', images: [service] };
+
+  it('suggests a unique watcher and project based on committed service and image identity', () => {
+    const matches = discoverWudMappings(
+      [stack],
+      [],
+      [observation, { ...observation, watcher: 'other', installedTag: '1.25' }],
+      now,
+    );
+    expect(matches).toEqual({
+      suggestions: [
+        {
+          stackId: 'source-stack',
+          stackName: 'Documentation',
+          watcher: 'local',
+          project: 'wiki',
+          matchedServices: ['web'],
+        },
+      ],
+      ambiguousCount: 0,
+      unmatchedCount: 0,
+    });
+  });
+
+  it('withholds a project that matches multiple stacks and a stack that matches multiple projects', () => {
+    expect(discoverWudMappings([stack, { ...stack, stackId: 'copy' }], [], [observation], now)).toMatchObject(
+      { suggestions: [], ambiguousCount: 2 },
+    );
+    expect(
+      discoverWudMappings([stack], [], [observation, { ...observation, watcher: 'other' }], now),
+    ).toMatchObject({ suggestions: [], ambiguousCount: 1 });
+  });
+
+  it.each([
+    ['an already linked project', [binding], [observation], service],
+    ['an opted-out service', [], [observation], { ...service, excluded: true }],
+    ['a stale observation', [], [{ ...observation, checkedAt: '2026-11-21T07:00:00Z' }], service],
+    [
+      'replicas with different installed images',
+      [],
+      [observation, { ...observation, installedTag: '2' }],
+      service,
+    ],
+  ] as const)('withholds %s', (_description, claimed, observations, image) => {
+    expect(discoverWudMappings([{ ...stack, images: [image] }], claimed, observations, now)).toEqual({
+      suggestions: [],
+      ambiguousCount: 0,
+      unmatchedCount: 1,
+    });
+  });
+});
 
 describe('WUD image update matching', () => {
   it('accepts OCI path separators within and between components', () => {

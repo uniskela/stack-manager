@@ -27,12 +27,12 @@ interface FileSelection {
 
 const previewLabels = { ready: 'Ready', review: 'Review required', blocked: 'Blocked' };
 const stageLabels: Record<ImageUpdateStageResult['files'][number]['status'], string> = {
-  staged: 'Draft staged',
+  staged: 'Draft saved',
   draft_exists: 'A draft already exists for this file',
   source_changed: 'The Compose source changed. Preview again.',
   candidate_changed: 'The WUD candidate changed. Preview again.',
-  review_required: 'Acknowledge the review to stage this file',
-  failed: 'Could not stage this file. Check Changes before retrying.',
+  review_required: 'Acknowledge the review to save this draft',
+  failed: 'Could not save this draft. Check Changes before retrying.',
 };
 
 function candidateKey({ stackId, service }: Pick<ImageUpdateIntent, 'stackId' | 'service'>) {
@@ -113,6 +113,8 @@ export function ImageUpdatePlanner({
           (image) => image.image && !candidateKeys.has(candidateKey({ stackId, service: image.name })),
         )
       : [];
+  const onlyService = services.length === 1 ? services[0]!.name : '';
+  const selectedService = services.some((image) => image.name === service) ? service : onlyService;
   const inventories = mergeInventories(loaded, known);
   const suggestions = inventories.flatMap(({ stackId, images }) =>
     images.flatMap((image): ImageUpdateIntent[] => {
@@ -148,12 +150,15 @@ export function ImageUpdatePlanner({
   function addManual(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const targetTag = manualTag.trim();
-    if (!remaining || !services.some((image) => image.name === service)) return;
+    if (!remaining || !selectedService) return;
     if (!isImageTag(targetTag)) {
       setError('Enter a valid image tag.');
       return;
     }
-    changeCandidates([...candidates, { stackId, service, targetTag, source: 'manual' }], `Added ${service}.`);
+    changeCandidates(
+      [...candidates, { stackId, service: selectedService, targetTag, source: 'manual' }],
+      `Added ${selectedService}.`,
+    );
     setService('');
     setManualTag('');
   }
@@ -237,8 +242,8 @@ export function ImageUpdatePlanner({
       const rejected = data.rejectedPreviews;
       setAnnouncement(
         rejected
-          ? `Staging finished. Preview again for ${rejected} rejected approvals.`
-          : 'Staging finished. Check the result for each file below.',
+          ? `Review the proposed updates again for ${rejected} expired or changed selections.`
+          : 'Check the draft result for each file below.',
       );
       if (data.files.some((file) => file.status === 'staged')) router.refresh();
     } catch (error) {
@@ -252,36 +257,46 @@ export function ImageUpdatePlanner({
 
   return (
     <div className="stack">
+      <p className="muted">Choose a new tag, review release notes, then save a draft for Git.</p>
+      {suggestions.length > 0 ? (
+        <div className="actions">
+          <Button disabled={!remaining || busy !== null} onClick={addSuggestions}>
+            Add tags suggested by WUD ({suggestions.length})
+          </Button>
+        </div>
+      ) : null}
       <form className="form" aria-label="Add a manual image update" method="post" onSubmit={addManual}>
         <fieldset className="form" disabled={busy !== null}>
           <legend className="visually-hidden">Manual image update</legend>
+          {stacks.length > 1 ? (
+            <div className="field">
+              <label htmlFor={`${id}-stack`}>Stack to edit</label>
+              <select
+                id={`${id}-stack`}
+                name="stack"
+                value={stackId}
+                onChange={(event) => {
+                  setStackId(event.target.value);
+                  setService('');
+                  setManualTag('');
+                  setError(null);
+                }}
+              >
+                {stacks.map((stack) => (
+                  <option key={stack.id} value={stack.id}>
+                    {stack.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
           <div className="field">
-            <label htmlFor={`${id}-stack`}>Stack</label>
-            <select
-              id={`${id}-stack`}
-              name="stack"
-              value={stackId}
-              onChange={(event) => {
-                setStackId(event.target.value);
-                setService('');
-                setManualTag('');
-                setError(null);
-              }}
-            >
-              {stacks.map((stack) => (
-                <option key={stack.id} value={stack.id}>
-                  {stack.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label htmlFor={`${id}-service`}>Service</label>
+            <label htmlFor={`${id}-service`}>Compose service to update</label>
             <select
               id={`${id}-service`}
               name="service"
               required
-              value={service}
+              value={selectedService}
               disabled={!services.length}
               onChange={(event) => setService(event.target.value)}
             >
@@ -313,9 +328,10 @@ export function ImageUpdatePlanner({
             <p className="muted">No more service images to add from this stack.</p>
           ) : null}
           <Field
-            label="Target tag"
+            label="New image tag"
             name="manualTargetTag"
             required
+            hint="Enter just the tag, for example 1.5.5."
             value={manualTag}
             onChange={(value) => {
               setManualTag(value);
@@ -323,14 +339,9 @@ export function ImageUpdatePlanner({
             }}
           />
           <div className="actions">
-            <Button type="submit" disabled={!services.length || remaining < 1}>
-              Add manual update
+            <Button type="submit" disabled={!selectedService || remaining < 1}>
+              Add tag to review
             </Button>
-            {inventories.some((stack) => stack.images.some((image) => image.status === 'available')) ? (
-              <Button disabled={!suggestions.length || remaining < 1} onClick={addSuggestions}>
-                Add WUD suggestions
-              </Button>
-            ) : null}
           </div>
           {remaining < 1 ? (
             <p className="muted">This batch has reached the {MAX_IMAGE_UPDATE_CANDIDATES}-image limit.</p>
@@ -364,7 +375,7 @@ export function ImageUpdatePlanner({
                   <span className="muted">{item.source === 'wud' ? 'WUD suggestion' : 'Manual update'}</span>
                 </legend>
                 <Field
-                  label="Target tag"
+                  label="New image tag"
                   name={`tag-${key}`}
                   required
                   value={item.targetTag}
@@ -373,7 +384,7 @@ export function ImageUpdatePlanner({
                   }}
                 />
                 <Field
-                  label="Changelog URL (optional)"
+                  label="Release notes link (optional)"
                   name={`changelog-${key}`}
                   type="url"
                   inputMode="url"
@@ -399,7 +410,7 @@ export function ImageUpdatePlanner({
           })}
           <div className="actions">
             <Button variant="primary" type="submit" loading={busy === 'preview'} disabled={busy === 'stage'}>
-              Preview updates
+              Review proposed updates
             </Button>
           </div>
         </form>
@@ -408,12 +419,12 @@ export function ImageUpdatePlanner({
       {preview ? (
         <form
           className="form"
-          aria-label="Stage image updates"
+          aria-label="Save image update drafts"
           method="post"
           action={`${endpoint}/stage`}
           onSubmit={(event) => void stageUpdates(event)}
         >
-          <h3>Preview</h3>
+          <h3>Review Compose changes</h3>
           {preview.files.map((file) => {
             const { token } = file;
             const selection = token ? selected[token] : undefined;
@@ -475,8 +486,8 @@ export function ImageUpdatePlanner({
                         })
                       }
                     />{' '}
-                    {file.status === 'review' ? 'Acknowledge and stage ' : 'Stage '}
-                    {file.path}
+                    Include {file.path}
+                    {file.status === 'review' ? ' and acknowledge review' : ''}
                   </label>
                 ) : null}
               </fieldset>
@@ -489,14 +500,14 @@ export function ImageUpdatePlanner({
               loading={busy === 'stage'}
               disabled={!stageFiles.length || busy === 'preview'}
             >
-              Stage selected files
+              Save selected drafts
             </Button>
           </div>
         </form>
       ) : null}
 
       {results.length ? (
-        <ul className="stack" aria-label="Staging results">
+        <ul className="stack" aria-label="Draft results">
           {results.map((file) => (
             <li key={`${file.stackId}:${file.path}`}>
               <strong>
