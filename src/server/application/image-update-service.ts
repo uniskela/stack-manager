@@ -232,13 +232,17 @@ export class ImageUpdateService {
             { ...source.stack, commitSha: source.file.commitSha },
             { watcher, project },
           );
-          if (!saved) return { stackId, status: 'changed' };
-          await this.#auditBinding(workspaceId, stackId, actorUserId, true);
-          return { stackId, status: 'saved' };
+          return { stackId, status: saved ? 'saved' : 'changed' };
         } catch {
           return { stackId, status: 'failed' };
         }
       }),
+    );
+    // Audit write failures are logged by AuditService. An audit rejection cannot undo a saved mapping.
+    await Promise.allSettled(
+      results
+        .filter(({ status }) => status === 'saved')
+        .map(({ stackId }) => this.#auditBinding(workspaceId, stackId, actorUserId, true)),
     );
     return { results };
   }
@@ -304,10 +308,11 @@ export class ImageUpdateService {
     const parsedStatus = file?.images ? 'ready' : 'invalid';
     const sourceStatus = file ? parsedStatus : 'unavailable';
     const now = this.clock.now();
+    const activeBinding = connection ? binding : null;
     const images = file?.images
       ? matchImageUpdates(
           file.images,
-          connection ? binding : null,
+          activeBinding,
           connection?.observations ?? [],
           now,
           isStaleSnapshot(connection, now),

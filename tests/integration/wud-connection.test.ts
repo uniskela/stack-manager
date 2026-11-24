@@ -205,6 +205,7 @@ describe('WUD image updates over authenticated routes', () => {
       expect((await call(stackUpdates.GET, base)).json.binding).toEqual(manual);
 
       expect((await call(stackUpdates.DELETE, { ...base, method: 'DELETE' })).status).toBe(200);
+      vi.spyOn(h.container.audit, 'record').mockRejectedValueOnce(new Error('Fixture audit failure'));
       expect((await save([mapping])).json.results).toEqual([{ stackId, status: 'saved' }]);
       const file = await source.readFile(workspaceId, stack!.repository.id, '', 'compose.yaml');
       await source.saveDraft(
