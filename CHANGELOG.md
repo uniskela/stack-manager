@@ -10,6 +10,13 @@ check for null before processing HTTP codes and distinguish local rejection from
 Accepted results retain numeric HTTP statuses. No released deployment provider is affected because
 #54 is the first implementation; this note documents compatibility for integrations based on the plan.
 
+## [0.7.0](https://github.com/uniskela/stack-manager/compare/v0.6.0...v0.7.0) (2026-11-23)
+
+
+### Features
+
+* add configurable Compose image update planning ([#77](https://github.com/uniskela/stack-manager/issues/77)) ([6b4b524](https://github.com/uniskela/stack-manager/commit/6b4b5245abfaf7a177ed880ca8773f876a36e352))
+
 ## [0.6.0](https://github.com/uniskela/stack-manager/compare/v0.5.0...v0.6.0) (2026-10-22)
 
 
