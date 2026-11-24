@@ -1,5 +1,6 @@
 import type { WudBinding, WudObservation } from '@/shared/image-updates';
 import type { CredentialRecord } from '@/server/domain/credential';
+import type { Stack } from '@/server/domain/stack';
 
 export interface WudConnection {
   workspaceId: string;
@@ -13,6 +14,10 @@ export interface WudConnection {
 }
 
 export type WudStackBinding = WudBinding & { stackId: string; workspaceId: string };
+
+export type WudMappingSource = Pick<Stack, 'id' | 'repositoryId' | 'composePath' | 'rootPath'> & {
+  commitSha: string;
+};
 
 export interface WudRepository {
   connection(workspaceId: string): Promise<WudConnection | null>;
@@ -31,4 +36,10 @@ export interface WudRepository {
   ): Promise<void>;
   bindings(workspaceId: string): Promise<WudStackBinding[]>;
   setBinding(workspaceId: string, stackId: string, binding: WudBinding | null): Promise<void>;
+  saveDiscoveredBinding(
+    workspaceId: string,
+    snapshot: Pick<WudConnection, 'revision' | 'lastSuccessAt'>,
+    source: WudMappingSource,
+    binding: WudBinding,
+  ): Promise<boolean>;
 }

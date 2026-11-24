@@ -2,32 +2,33 @@ import type { ImageUpdateStatus, StackImageUpdate } from '@/shared/image-updates
 import { TableWrap } from '@/ui/primitives/table-wrap';
 
 const labels: Record<ImageUpdateStatus, string> = {
-  available: 'Update available',
-  current: 'No update reported',
-  digest: 'Same-tag rebuild',
-  excluded: 'WUD opt-out in Compose',
-  unsupported: 'Requires manual inspection',
-  unbound: 'No active WUD mapping',
-  unmatched: 'Not reported by WUD',
+  available: 'WUD found a newer tag',
+  current: 'WUD found no newer tag',
+  digest: 'Image rebuilt under the same tag',
+  excluded: 'Ignored by this service’s WUD label',
+  unsupported: 'Image reference needs manual review',
+  unbound: 'Link this stack to WUD to check for updates',
+  unmatched: 'WUD did not report this service',
   drift: 'Deployed image differs from Git',
-  stale: 'WUD observation is old or unavailable',
-  error: 'WUD check failed or returned an invalid candidate',
-  ambiguous: 'WUD replicas disagree',
+  stale: 'WUD data is out of date',
+  error: 'WUD could not check this image',
+  ambiguous: 'Running copies report different updates',
 };
 
 export function ImageUpdateTable({
   labelledBy,
   images,
-}: Readonly<{ labelledBy: string; images: readonly StackImageUpdate[] }>) {
+  connected = true,
+}: Readonly<{ labelledBy: string; images: readonly StackImageUpdate[]; connected?: boolean }>) {
   return (
     <TableWrap labelledBy={labelledBy}>
       <table className="simple">
         <thead>
           <tr>
-            <th scope="col">Service</th>
-            <th scope="col">Image in Git</th>
-            <th scope="col">Candidate tag</th>
-            <th scope="col">Status</th>
+            <th scope="col">Compose service</th>
+            <th scope="col">Image saved in Git</th>
+            {connected ? <th scope="col">Suggested tag from WUD</th> : null}
+            {connected ? <th scope="col">Update status</th> : null}
           </tr>
         </thead>
         <tbody>
@@ -35,15 +36,17 @@ export function ImageUpdateTable({
             <tr key={image.name}>
               <th scope="row">{image.name}</th>
               <td>{image.image ? <code>{image.image}</code> : '—'}</td>
-              <td>{image.candidateTag ? <code>{image.candidateTag}</code> : '—'}</td>
-              <td>
-                <span className={image.status === 'available' ? 'pill ok' : undefined}>
-                  {labels[image.status]}
-                </span>
-                {image.scanTimeUnavailable ? (
-                  <div className="fine-print">WUD scan time unavailable</div>
-                ) : null}
-              </td>
+              {connected ? <td>{image.candidateTag ? <code>{image.candidateTag}</code> : '—'}</td> : null}
+              {connected ? (
+                <td>
+                  <span className={image.status === 'available' ? 'pill ok' : undefined}>
+                    {labels[image.status]}
+                  </span>
+                  {image.scanTimeUnavailable ? (
+                    <div className="fine-print">WUD scan time unavailable</div>
+                  ) : null}
+                </td>
+              ) : null}
             </tr>
           ))}
         </tbody>

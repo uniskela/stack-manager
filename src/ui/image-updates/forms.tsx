@@ -148,7 +148,7 @@ export function WudRefresh({
           {refreshing ? 'Refreshing WUD…' : 'Refresh from WUD'}
         </Button>
         <output className="muted">
-          Last read <LocalTime iso={connection.lastSuccessAt} />
+          Last read from WUD <LocalTime iso={connection.lastSuccessAt} />
         </output>
       </div>
       {!workerEnabled ? <p className="muted">Refresh requires the background worker.</p> : null}
@@ -191,24 +191,24 @@ export function WudBindingForm({
   return (
     <form className="form" method="post" action={endpoint} onSubmit={submit} aria-labelledby="wud-mapping">
       <Field
-        label="WUD watcher"
+        label="Docker host in WUD"
         name="watcher"
         value={watcher}
         onChange={setWatcher}
         required
-        hint="Use the watcher name shown in WUD."
+        hint="Enter the watcher name WUD uses for this Docker host."
       />
       <Field
-        label="Compose project"
+        label="Deployed Compose project"
         name="project"
         value={project}
         onChange={setProject}
         required
-        hint="Use the deployed project name, which may differ from this stack’s name."
+        hint="Enter the Compose project name WUD shows for the running services."
       />
       <div className="actions">
         <Button type="submit" variant="primary" loading={busy}>
-          Save mapping
+          Save WUD match
         </Button>
         {binding ? (
           <Button
@@ -223,7 +223,7 @@ export function WudBindingForm({
               });
             }}
           >
-            Clear mapping
+            Unlink from WUD
           </Button>
         ) : null}
       </div>

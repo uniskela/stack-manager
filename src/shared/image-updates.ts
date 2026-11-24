@@ -2,6 +2,20 @@ import { isAlias, isMap, isScalar, isSeq, parseDocument } from 'yaml';
 
 export type WudBinding = { watcher: string; project: string };
 
+export const MAX_WUD_MAPPINGS_PER_SAVE = 150;
+
+export type WudMappingSelection = WudBinding & { stackId: string };
+
+export interface WudMappingDiscovery {
+  suggestions: Array<WudMappingSelection & { stackName: string; matchedServices: string[] }>;
+  ambiguousCount: number;
+  unmatchedCount: number;
+}
+
+export interface WudMappingSaveResult {
+  results: { stackId: string; status: 'saved' | 'changed' | 'failed' }[];
+}
+
 export interface WudObservation extends WudBinding {
   service: string;
   repository: string;
@@ -21,6 +35,8 @@ interface StackImage {
   excluded: boolean;
   editable: boolean;
 }
+
+type ImageReference = NonNullable<ReturnType<typeof imageReference>>;
 
 export type ImageUpdateStatus =
   | 'available'
@@ -168,31 +184,11 @@ function statusFor(
   return statusForMatches(ref, matches, now);
 }
 
-function statusForMatches(
-  ref: NonNullable<ReturnType<typeof imageReference>>,
-  matches: WudObservation[],
-  now: Date,
-): ImageUpdateResult {
+function statusForMatches(ref: ImageReference, matches: WudObservation[], now: Date): ImageUpdateResult {
   if (!matches.length) return result('unmatched');
   if (matches.some((row) => row.failed)) return result('error');
-  if (
-    matches.some((row) => {
-      if (row.checkedAt === null) return false;
-      const checkedAt = Date.parse(row.checkedAt);
-      const age = now.getTime() - checkedAt;
-      return !Number.isFinite(age) || age < -60_000 || age > WUD_OBSERVATION_MAX_AGE_MS;
-    })
-  )
-    return result('stale');
-  if (
-    matches.some(
-      (row) =>
-        row.repository !== ref.repository ||
-        (ref.tag !== null && row.installedTag !== ref.tag) ||
-        (ref.digest !== undefined && row.installedDigest !== ref.digest),
-    )
-  )
-    return result('drift');
+  if (matches.some((row) => isStale(row, now))) return result('stale');
+  if (matches.some((row) => !matchesInstalled(row, ref))) return result('drift');
   const first = matches[0]!;
   if (
     matches.some(
@@ -216,6 +212,87 @@ function statusForMatches(
     ...scanTime,
     ...(changelogUrl && matches.every((row) => row.changelogUrl === changelogUrl) ? { changelogUrl } : {}),
   };
+}
+
+function isStale(row: WudObservation, now: Date): boolean {
+  if (row.checkedAt === null) return false;
+  const age = now.getTime() - Date.parse(row.checkedAt);
+  return !Number.isFinite(age) || age < -60_000 || age > WUD_OBSERVATION_MAX_AGE_MS;
+}
+
+function matchesInstalled(row: WudObservation, ref: ImageReference): boolean {
+  return (
+    row.repository === ref.repository &&
+    (ref.tag === null || row.installedTag === ref.tag) &&
+    (ref.digest === undefined || row.installedDigest === ref.digest)
+  );
+}
+
+const bindingKey = ({ watcher, project }: WudBinding) => watcher + ':' + project;
+
+export function discoverWudMappings(
+  stacks: ReadonlyArray<{ stackId: string; stackName: string; images: readonly StackImage[] }>,
+  claimed: readonly WudBinding[],
+  observations: readonly WudObservation[],
+  now: Date,
+): WudMappingDiscovery {
+  const reserved = new Set(claimed.map(bindingKey));
+  const projects = new Map<string, { binding: WudBinding; services: Map<string, WudObservation[]> }>();
+  for (const row of observations) {
+    const key = bindingKey(row);
+    if (reserved.has(key)) continue;
+    const project = projects.get(key) ?? {
+      binding: { watcher: row.watcher, project: row.project },
+      services: new Map<string, WudObservation[]>(),
+    };
+    const replicas = project.services.get(row.service) ?? [];
+    replicas.push(row);
+    project.services.set(row.service, replicas);
+    projects.set(key, project);
+  }
+
+  const matchesByProject = new Map<string, number>();
+  const matchesByStack = stacks.map(({ stackId, stackName, images }) => {
+    const services = images.flatMap((image) => {
+      const ref = image.editable && !image.excluded && image.image ? imageReference(image.image) : null;
+      return ref ? [{ name: image.name, ref }] : [];
+    });
+    let match: WudMappingDiscovery['suggestions'][number] | undefined;
+    let count = 0;
+    for (const [key, { binding, services: deployed }] of projects) {
+      const matchedServices = matchingServices(services, deployed, now);
+      if (!matchedServices.length) continue;
+      count++;
+      matchesByProject.set(key, (matchesByProject.get(key) ?? 0) + 1);
+      match ??= { stackId, stackName, ...binding, matchedServices };
+    }
+    return { match, count };
+  });
+
+  const suggestions: WudMappingDiscovery['suggestions'] = [];
+  let ambiguousCount = 0;
+  let unmatchedCount = 0;
+  for (const { match, count } of matchesByStack) {
+    if (!match) unmatchedCount++;
+    else if (count === 1 && matchesByProject.get(bindingKey(match)) === 1) suggestions.push(match);
+    else ambiguousCount++;
+  }
+  return { suggestions, ambiguousCount, unmatchedCount };
+}
+
+function matchingServices(
+  services: readonly { name: string; ref: ImageReference }[],
+  deployed: Map<string, WudObservation[]>,
+  now: Date,
+): string[] {
+  const matches: string[] = [];
+  for (const { name, ref } of services) {
+    const replicas = deployed.get(name);
+    if (!replicas) continue;
+    if (replicas.some((row) => row.failed || isStale(row, now) || !matchesInstalled(row, ref))) return [];
+    matches.push(name);
+  }
+  return matches;
 }
 
 export function matchImageUpdates(

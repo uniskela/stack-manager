@@ -1,9 +1,15 @@
-import { and, eq, lte, ne } from 'drizzle-orm';
+import { and, eq, isNull, lte, ne } from 'drizzle-orm';
 import type { WudBinding } from '@/shared/image-updates';
-import type { WudConnection, WudRepository } from '@/server/application/wud-ports';
+import type { WudConnection, WudMappingSource, WudRepository } from '@/server/application/wud-ports';
 import type { CredentialRecord } from '@/server/domain/credential';
 import { ConflictError } from '@/server/domain/errors';
-import { providerCredentials, wudConnections, wudStackBindings } from '../schema';
+import {
+  gitRepositoryConnections,
+  providerCredentials,
+  stacks,
+  wudConnections,
+  wudStackBindings,
+} from '../schema';
 import type { SqliteDb } from './database';
 
 const changed = () => new ConflictError('The WUD connection changed. Reload and try again.');
@@ -88,6 +94,52 @@ export class SqliteWudRepository implements WudRepository {
 
   async bindings(workspaceId: string) {
     return this.db.select().from(wudStackBindings).where(eq(wudStackBindings.workspaceId, workspaceId)).all();
+  }
+
+  async saveDiscoveredBinding(
+    workspaceId: string,
+    snapshot: Pick<WudConnection, 'revision' | 'lastSuccessAt'>,
+    source: WudMappingSource,
+    binding: WudBinding,
+  ): Promise<boolean> {
+    return this.db.transaction((tx) => {
+      const connection = tx
+        .select({ id: wudConnections.workspaceId })
+        .from(wudConnections)
+        .where(
+          and(
+            eq(wudConnections.workspaceId, workspaceId),
+            eq(wudConnections.revision, snapshot.revision),
+            eq(wudConnections.lastSuccessAt, snapshot.lastSuccessAt),
+            isNull(wudConnections.lastError),
+          ),
+        )
+        .get();
+      if (!connection) return false;
+      const stack = tx
+        .select({ id: stacks.id })
+        .from(stacks)
+        .innerJoin(gitRepositoryConnections, eq(gitRepositoryConnections.id, stacks.repositoryId))
+        .where(
+          and(
+            eq(stacks.id, source.id),
+            eq(stacks.workspaceId, workspaceId),
+            eq(stacks.repositoryId, source.repositoryId),
+            eq(stacks.rootPath, source.rootPath),
+            eq(stacks.composePath, source.composePath),
+            eq(gitRepositoryConnections.workspaceId, workspaceId),
+            eq(gitRepositoryConnections.headSha, source.commitSha),
+          ),
+        )
+        .get();
+      if (!stack) return false;
+      const inserted = tx
+        .insert(wudStackBindings)
+        .values({ workspaceId, stackId: stack.id, watcher: binding.watcher, project: binding.project })
+        .onConflictDoNothing()
+        .run();
+      return inserted.changes > 0;
+    });
   }
 
   async setBinding(workspaceId: string, stackId: string, binding: WudBinding | null) {

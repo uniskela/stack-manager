@@ -3,6 +3,7 @@ import { createHarness, type TestHarness } from '../support/container';
 import * as reposRoute from '@/app/api/workspaces/[workspaceId]/repositories/route';
 import * as credentialSecretRoute from '@/app/api/workspaces/[workspaceId]/credentials/[credentialId]/secret/route';
 import * as wudConnection from '@/app/api/workspaces/[workspaceId]/image-updates/route';
+import * as wudMappings from '@/app/api/workspaces/[workspaceId]/image-updates/mappings/route';
 import * as stackUpdates from '@/app/api/workspaces/[workspaceId]/stacks/[stackId]/image-updates/route';
 import { sessionCookieName } from '@/server/http/cookies';
 import { gitServerOverrides, startGitServer } from '../support/git-server';
@@ -103,6 +104,9 @@ describe('WUD image updates over authenticated routes', () => {
     const git = await startGitServer();
     try {
       git.createRepo('updates.git', ['main']);
+      git.commitFiles('updates.git', 'main', {
+        'cache/compose.yaml': 'services:\n  cache:\n    image: redis:7.2\n',
+      });
       const time = new Date().toISOString();
       const read = vi.fn().mockResolvedValue([
         {
@@ -116,6 +120,19 @@ describe('WUD image updates over authenticated routes', () => {
           available: true,
           failed: false,
           candidateTag: '1.28',
+          digestOnly: false,
+        },
+        {
+          watcher: 'local',
+          project: 'cache-prod',
+          service: 'cache',
+          repository: 'index.docker.io/library/redis',
+          installedTag: '7.2',
+          installedDigest: null,
+          checkedAt: time,
+          available: false,
+          failed: false,
+          candidateTag: null,
           digestOnly: false,
         },
       ]);
@@ -140,7 +157,9 @@ describe('WUD image updates over authenticated routes', () => {
       });
       expect(repo.status).toBe(201);
       await worker.runOnce();
-      const [stack] = await stacks.list(workspaceId);
+      const allStacks = await stacks.list(workspaceId);
+      const stack = allStacks.find((item) => item.composePath === 'compose.yaml');
+      const cache = allStacks.find((item) => item.composePath === 'cache/compose.yaml')!;
       expect(stack?.composePath).toBe('compose.yaml');
       const stackId = stack!.id;
       const base = { cookie, params: { workspaceId, stackId } };
@@ -156,12 +175,37 @@ describe('WUD image updates over authenticated routes', () => {
       });
       expect(connection.status).toBe(200);
       expect(connection.text).not.toContain(token);
-      const bind = await call(stackUpdates.PUT, {
-        ...base,
-        method: 'PUT',
-        body: { watcher: 'local', project: 'wiki' },
-      });
-      expect(bind.status).toBe(200);
+      expect((await call(wudMappings.GET, { params: request.params })).status).toBe(401);
+      const suggestions = await call(wudMappings.GET, request);
+      expect(suggestions.status).toBe(200);
+      expect(suggestions.json.suggestions).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ stackId, watcher: 'local', project: 'wiki', matchedServices: ['app'] }),
+          expect.objectContaining({
+            stackId: cache.id,
+            watcher: 'local',
+            project: 'cache-prod',
+            matchedServices: ['cache'],
+          }),
+        ]),
+      );
+      expect((await call(stackUpdates.GET, base)).json.binding).toBeNull();
+
+      const mapping = { stackId, watcher: 'local', project: 'wiki' };
+      const save = (mappings: (typeof mapping)[]) =>
+        call(wudMappings.POST, { ...request, method: 'POST', body: { mappings } });
+      const manual = { watcher: 'another-host', project: 'wiki' };
+      expect((await call(stackUpdates.PUT, { ...base, method: 'PUT', body: manual })).status).toBe(200);
+      expect(
+        (await save([mapping, { stackId: cache.id, watcher: 'local', project: 'cache-prod' }])).json.results,
+      ).toEqual([
+        { stackId, status: 'changed' },
+        { stackId: cache.id, status: 'saved' },
+      ]);
+      expect((await call(stackUpdates.GET, base)).json.binding).toEqual(manual);
+
+      expect((await call(stackUpdates.DELETE, { ...base, method: 'DELETE' })).status).toBe(200);
+      expect((await save([mapping])).json.results).toEqual([{ stackId, status: 'saved' }]);
       const file = await source.readFile(workspaceId, stack!.repository.id, '', 'compose.yaml');
       await source.saveDraft(
         workspaceId,
@@ -177,8 +221,12 @@ describe('WUD image updates over authenticated routes', () => {
 
       const expected = [{ name: 'app', image: 'nginx:1.27', status: 'available', candidateTag: '1.28' }];
       expect((await call(stackUpdates.GET, base)).json.images).toEqual(expected);
-      expect((await imageUpdates.queue(workspaceId)).inventory[0]?.images).toEqual(expected);
+      expect(
+        (await imageUpdates.queue(workspaceId)).inventory.find((item) => item.stackId === stackId)?.images,
+      ).toEqual(expected);
       expect((await imageUpdates.queue(otherId)).inventory).toEqual([]);
+      h.clock.advance(30 * 60_000);
+      expect((await call(wudMappings.GET, request)).status).toBe(409);
     } finally {
       await git.close();
     }

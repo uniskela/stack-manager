@@ -88,16 +88,18 @@ test('plans and stages a manual image update without WUD', async ({ page }) => {
   const path = 'nginx-golang/compose.yaml';
   await page.goto(`${stackUrl()}/image-updates`);
   const add = page.getByRole('form', { name: 'Add a manual image update' });
-  await add.getByLabel('Service').selectOption('proxy');
-  await add.getByLabel('Target tag').fill('1.29.2');
-  await add.getByRole('button', { name: 'Add manual update' }).click();
-  await page.getByRole('button', { name: 'Preview updates' }).click();
-  const review = page.getByRole('form', { name: 'Stage image updates' });
+  await expect(page.getByRole('columnheader', { name: 'Image saved in Git' })).toBeVisible();
+  await expect(add.getByLabel('Stack to edit')).toHaveCount(0);
+  await add.getByLabel('Compose service to update').selectOption('proxy');
+  await add.getByLabel('New image tag').fill('1.29.2');
+  await add.getByRole('button', { name: 'Add tag to review' }).click();
+  await page.getByRole('button', { name: 'Review proposed updates' }).click();
+  const review = page.getByRole('form', { name: 'Save image update drafts' });
   await expect(review.getByText('No changelog link was supplied.')).toBeVisible();
-  await expect(review.getByRole('button', { name: 'Stage selected files' })).toBeDisabled();
+  await expect(review.getByRole('button', { name: 'Save selected drafts' })).toBeDisabled();
   await expectAccessible(page);
-  await review.getByRole('checkbox', { name: `Acknowledge and stage ${path}` }).check();
-  await review.getByRole('button', { name: 'Stage selected files' }).click();
+  await review.getByRole('checkbox', { name: `Include ${path} and acknowledge review` }).check();
+  await review.getByRole('button', { name: 'Save selected drafts' }).click();
   try {
     await page.getByRole('link', { name: 'Open Changes for Sample' }).click();
     await expect(page.locator('.diff').first()).toContainText('nginx:1.29.2');

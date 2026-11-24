@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { getContainer } from '@/server/container';
 import { WudRefresh } from '@/ui/image-updates/forms';
 import { ImageUpdateTable } from '@/ui/image-updates/image-table';
+import { WudMappingDiscovery } from '@/ui/image-updates/mapping-discovery';
 import { ImageUpdatePlanner } from '@/ui/image-updates/planner';
 import { ButtonLink } from '@/ui/primitives/button';
 import { PageHeader } from '@/ui/primitives/page-header';
@@ -33,6 +34,25 @@ export default async function WorkspaceImageUpdatesPage({
           <ButtonLink href={`${base}/settings/wud`}>{connection ? 'WUD settings' : 'Connect WUD'}</ButtonLink>
         }
       />
+      {connection ? (
+        <>
+          <WudRefresh
+            workspaceId={workspaceId}
+            connection={connection}
+            refreshing={refreshing}
+            workerEnabled={config.workerEnabled}
+          />
+          {unboundCount > 0 ? (
+            <Section id="wud-matches" title="Match stacks to WUD">
+              <p className="muted">
+                {unboundCount} {unboundCount === 1 ? 'stack is' : 'stacks are'} not yet linked. Stack Manager
+                compares the services and images in Git with the projects WUD sees running.
+              </p>
+              <WudMappingDiscovery workspaceId={workspaceId} labelledBy="wud-matches" />
+            </Section>
+          ) : null}
+        </>
+      ) : null}
       {allStacks.length > 0 ? (
         <Section id="plan-image-updates" title="Plan image updates">
           <ImageUpdatePlanner
@@ -46,35 +66,19 @@ export default async function WorkspaceImageUpdatesPage({
           <Link href={`${base}/stacks`}>Add a stack</Link> to plan image updates.
         </p>
       )}
-      {connection ? (
-        <>
-          <WudRefresh
-            workspaceId={workspaceId}
-            connection={connection}
-            refreshing={refreshing}
-            workerEnabled={config.workerEnabled}
+      {inventory.map((stack) => (
+        <section key={stack.stackId} className="stack" aria-labelledby={`images-${stack.stackId}`}>
+          <SectionTitle
+            id={`images-${stack.stackId}`}
+            title={<Link href={`${base}/stacks/${stack.stackId}/image-updates`}>{stack.stackName}</Link>}
           />
-          {unboundCount > 0 ? (
-            <p className="muted">
-              {unboundCount} {unboundCount === 1 ? 'stack needs' : 'stacks need'} a WUD mapping.{' '}
-              <Link href={`${base}/stacks`}>View stacks</Link>
-            </p>
-          ) : null}
-          {inventory.map((stack) => (
-            <section key={stack.stackId} className="stack" aria-labelledby={`images-${stack.stackId}`}>
-              <SectionTitle
-                id={`images-${stack.stackId}`}
-                title={<Link href={`${base}/stacks/${stack.stackId}/image-updates`}>{stack.stackName}</Link>}
-              />
-              {stack.images.length ? (
-                <ImageUpdateTable labelledBy={`images-${stack.stackId}`} images={stack.images} />
-              ) : (
-                <p className="muted">Open the stack to check its Compose source and mapping.</p>
-              )}
-            </section>
-          ))}
-        </>
-      ) : null}
+          {stack.images.length ? (
+            <ImageUpdateTable labelledBy={`images-${stack.stackId}`} images={stack.images} />
+          ) : (
+            <p className="muted">Open the stack to check its Compose source and mapping.</p>
+          )}
+        </section>
+      ))}
     </div>
   );
 }
