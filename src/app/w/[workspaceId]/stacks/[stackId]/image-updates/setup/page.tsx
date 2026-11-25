@@ -65,7 +65,8 @@ export default async function ImageUpdateSetupPage({
       <Section id="update-destination" title="3. Where to review the update">
         {workflow === undefined ? (
           <p>Could not check this repository’s update workflow. Reload the guide to try again.</p>
-        ) : workflow ? (
+        ) : null}
+        {workflow ? (
           <div className="stack">
             <p>
               <strong>{stack.repository.name} uses its own WUD update workflow.</strong> It prepares Compose,
@@ -101,7 +102,8 @@ export default async function ImageUpdateSetupPage({
               <ButtonLink href={`${stackPage}/image-updates`}>Return to image preview</ButtonLink>
             </div>
           </div>
-        ) : (
+        ) : null}
+        {workflow === null ? (
           <div className="stack">
             <p>
               Open Image updates to review a tag and save it as a Compose draft. Open Changes to inspect the
@@ -111,7 +113,7 @@ export default async function ImageUpdateSetupPage({
               <ButtonLink href={`${stackPage}/image-updates`}>Open image updates</ButtonLink>
             </div>
           </div>
-        )}
+        ) : null}
       </Section>
     </div>
   );
