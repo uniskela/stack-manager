@@ -115,6 +115,7 @@ test('plans and stages a manual image update without WUD', async ({ page }) => {
 });
 
 test('shows the repository workflow instead of draft controls for preview-only updates', async ({ page }) => {
+  // The nginx-golang fixture supplies the proxy image needed to add a tag to the review.
   test.skip(SAMPLE_ROOT !== 'nginx-golang', 'Uses the proxy image in the nginx-golang fixture.');
   const { workspaceId, stackId } = sample();
   await page.route(`**/api/workspaces/${workspaceId}/image-updates/preview`, (route) =>
@@ -149,10 +150,11 @@ test('shows the repository workflow instead of draft controls for preview-only u
   await page.goto(`${stackUrl()}/image-updates`);
   const add = page.getByRole('form', { name: 'Add a manual image update' });
   await add.getByLabel('Compose service to update').selectOption('proxy');
-  await add.getByLabel('New image tag').fill('1.29.2');
-  await add.getByRole('button', { name: 'Add tag to review' }).click();
+  const tag = add.getByLabel('New image tag');
+  await tag.fill('1.29.2');
+  await tag.press('Enter');
   await expect(add).toHaveCount(0);
-  await page.getByRole('button', { name: 'Review proposed updates' }).click();
+  await page.getByRole('button', { name: 'Review proposed updates' }).press('Enter');
   const preview = page.getByRole('form', { name: 'Image update preview' });
   await expect(preview.getByText('Preview only', { exact: true })).toBeVisible();
   await expect(preview.getByText(/Use your repository’s WUD update workflow/)).toBeVisible();

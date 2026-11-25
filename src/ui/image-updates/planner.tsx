@@ -285,7 +285,7 @@ export function ImageUpdatePlanner({
           </Button>
         </div>
       ) : null}
-      {showManualForm ? (
+      <div hidden={!showManualForm}>
         <form className="form" aria-label="Add a manual image update" method="post" onSubmit={addManual}>
           <fieldset className="form" disabled={busy !== null}>
             <legend className="visually-hidden">Manual image update</legend>
@@ -369,7 +369,7 @@ export function ImageUpdatePlanner({
             ) : null}
           </fieldset>
         </form>
-      ) : null}
+      </div>
 
       {candidates.length ? (
         <form
@@ -459,67 +459,14 @@ export function ImageUpdatePlanner({
               if (token) setSelected((current) => ({ ...current, [token]: next }));
             };
             return (
-              <fieldset className="form" key={`${file.stackId}:${file.path}`} disabled={busy !== null}>
-                <legend>
-                  <strong>
-                    {file.stackName} / <code>{file.path}</code>
-                  </strong>{' '}
-                  <span className="pill">
-                    {file.repositoryWorkflow ? 'Preview only' : previewLabels[file.status]}
-                  </span>
-                </legend>
-                {file.reason ? <p>{file.reason}</p> : null}
-                {file.changes.length ? (
-                  <ul className="stack">
-                    {file.changes.map((change) => (
-                      <li key={change.service}>
-                        <strong>{change.service}</strong>{' '}
-                        <span className="muted">
-                          {file.repositoryWorkflow && change.status === 'review'
-                            ? 'Check before updating'
-                            : previewLabels[change.status]}
-                        </span>
-                        {change.before ? (
-                          <p>
-                            <code>{change.before}</code>
-                            {change.after ? (
-                              <>
-                                {' '}
-                                → <code>{change.after}</code>
-                              </>
-                            ) : null}
-                          </p>
-                        ) : null}
-                        {change.notes.map((note, index) => (
-                          <p key={`${index}-${note}`}>{note}</p>
-                        ))}
-                        {change.changelogUrl && isHttpsUrl(change.changelogUrl) ? (
-                          <a href={change.changelogUrl} target="_blank" rel="noreferrer">
-                            Release notes for {change.service}
-                          </a>
-                        ) : null}
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-                {selection && !staged ? (
-                  <label className="check-row">
-                    <input
-                      type="checkbox"
-                      name="selectFile"
-                      checked={selection.selected}
-                      onChange={(event) =>
-                        updateSelection({
-                          selected: event.target.checked,
-                          acknowledgeReview: file.status === 'review' && event.target.checked,
-                        })
-                      }
-                    />{' '}
-                    Include {file.path}
-                    {file.status === 'review' ? ' and acknowledge review' : ''}
-                  </label>
-                ) : null}
-              </fieldset>
+              <PreviewFileReview
+                key={`${file.stackId}:${file.path}`}
+                file={file}
+                selection={selection}
+                staged={staged}
+                disabled={busy !== null}
+                updateSelection={updateSelection}
+              />
             );
           })}
           {hasDraftableFiles ? (
@@ -563,5 +510,81 @@ export function ImageUpdatePlanner({
       </p>
       <FormError message={error} />
     </div>
+  );
+}
+
+function PreviewFileReview({
+  file,
+  selection,
+  staged,
+  disabled,
+  updateSelection,
+}: Readonly<{
+  file: ImageUpdatePreview['files'][number];
+  selection: FileSelection | undefined;
+  staged: boolean;
+  disabled: boolean;
+  updateSelection: (selection: FileSelection) => void;
+}>) {
+  return (
+    <fieldset className="form" disabled={disabled}>
+      <legend>
+        <strong>
+          {file.stackName} / <code>{file.path}</code>
+        </strong>{' '}
+        <span className="pill">{file.repositoryWorkflow ? 'Preview only' : previewLabels[file.status]}</span>
+      </legend>
+      {file.reason ? <p>{file.reason}</p> : null}
+      {file.changes.length ? (
+        <ul className="stack">
+          {file.changes.map((change) => (
+            <li key={change.service}>
+              <strong>{change.service}</strong>{' '}
+              <span className="muted">
+                {file.repositoryWorkflow && change.status === 'review'
+                  ? 'Check before updating'
+                  : previewLabels[change.status]}
+              </span>
+              {change.before ? (
+                <p>
+                  <code>{change.before}</code>
+                  {change.after ? (
+                    <>
+                      {' '}
+                      → <code>{change.after}</code>
+                    </>
+                  ) : null}
+                </p>
+              ) : null}
+              {change.notes.map((note, index) => (
+                <p key={`${index}-${note}`}>{note}</p>
+              ))}
+              {change.changelogUrl && isHttpsUrl(change.changelogUrl) ? (
+                <a href={change.changelogUrl} target="_blank" rel="noreferrer">
+                  Release notes for {change.service}
+                </a>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {selection && !staged ? (
+        <label className="check-row">
+          <input
+            type="checkbox"
+            name="selectFile"
+            checked={selection.selected}
+            onChange={(event) =>
+              updateSelection({
+                selected: event.target.checked,
+                acknowledgeReview: file.status === 'review' && event.target.checked,
+              })
+            }
+          />{' '}
+          Include {file.path}
+          {file.status === 'review' ? ' and acknowledge review' : ''}
+        </label>
+      ) : null}
+    </fieldset>
   );
 }
