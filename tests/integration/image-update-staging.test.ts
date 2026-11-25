@@ -180,6 +180,7 @@ describe('image update draft staging', () => {
     const { container, workspace, user, main } = await arrange(
       {
         'docs/wud-update-groups.json': JSON.stringify({ groups: [] }),
+        '.opencode/skills/portainer-wud-updates/SKILL.md': '# Repository WUD guide\n',
         'docs/container-changelogs.json': JSON.stringify({
           sources: { nginx: { displayUrl: 'https://releases.example.org/nginx/{target_tag}' } },
         }),
@@ -189,6 +190,12 @@ describe('image update draft staging', () => {
     await expect(container.imageUpdateStaging.usesRepositoryWorkflow(workspace.id, main.id)).resolves.toBe(
       true,
     );
+    await expect(
+      container.imageUpdateStaging.repositoryWorkflowGuide(workspace.id, main.id),
+    ).resolves.toEqual({
+      policyPath: 'docs/wud-update-groups.json',
+      skillPath: '.opencode/skills/portainer-wud-updates/SKILL.md',
+    });
     const { files } = await container.imageUpdateStaging.preview(workspace.id, user.id, [
       { stackId: main.id, service: 'app', source: 'manual', targetTag: '1.28' },
     ]);

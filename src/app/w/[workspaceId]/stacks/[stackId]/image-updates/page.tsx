@@ -1,10 +1,9 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { getContainer } from '@/server/container';
-import { WudBindingForm } from '@/ui/image-updates/forms';
 import { ImageUpdateTable } from '@/ui/image-updates/image-table';
-import { WudMappingDiscovery } from '@/ui/image-updates/mapping-discovery';
 import { ImageUpdatePlanner } from '@/ui/image-updates/planner';
+import { StackWudMatch } from '@/ui/image-updates/stack-match';
 import { Alert } from '@/ui/primitives/alert';
 import { Section, SectionTitle } from '@/ui/primitives/section';
 
@@ -28,15 +27,24 @@ export default async function StackImageUpdatesPage({
     imageUpdateStaging.usesRepositoryWorkflow(workspaceId, stackId).catch(() => false),
   ]);
   const { connected, binding, images, sourceStatus, stackName } = view;
+  const setup = `/w/${workspaceId}/stacks/${stackId}/image-updates/setup`;
   return (
     <div className="stack">
       {!connected ? (
         <Alert tone="info">
-          <Link href={`/w/${workspaceId}/settings/wud`}>Connect WUD in Settings</Link> for automatic update
-          suggestions from What’s Up Docker. You can also enter a tag yourself below.
+          <Link href={setup}>Connect WUD</Link> for automatic update suggestions from What’s Up Docker. You
+          can also enter a tag yourself below.
         </Alert>
       ) : null}
-      <SectionTitle id="stack-images" title="Images in Compose" aside="From the latest Git fetch" />
+      <SectionTitle
+        id="stack-images"
+        title="Images in Compose"
+        aside={
+          <>
+            From the latest Git fetch · <Link href={setup}>Image update setup guide</Link>
+          </>
+        }
+      />
       {images.length > 0 ? (
         <ImageUpdateTable labelledBy="stack-images" images={images} connected={connected} />
       ) : (
@@ -44,28 +52,7 @@ export default async function StackImageUpdatesPage({
       )}
       {connected || binding ? (
         <Section id="wud-mapping" title="Match this stack to WUD">
-          {binding ? (
-            <p>
-              Using WUD project <code>{binding.project}</code> on Docker host <code>{binding.watcher}</code>.
-            </p>
-          ) : (
-            <>
-              <p className="muted">Find the deployed project WUD should use to check this stack’s images.</p>
-              <WudMappingDiscovery workspaceId={workspaceId} stackId={stackId} labelledBy="wud-mapping" />
-              <p>
-                <Link href={`/w/${workspaceId}/stacks/image-updates#wud-matches`}>Match all stacks</Link>
-              </p>
-            </>
-          )}
-          <details className="narrow">
-            <summary>{binding ? 'Edit WUD match' : 'Enter WUD details manually'}</summary>
-            <WudBindingForm
-              key={binding ? binding.watcher + ':' + binding.project : 'unbound'}
-              workspaceId={workspaceId}
-              stackId={stackId}
-              binding={binding}
-            />
-          </details>
+          <StackWudMatch workspaceId={workspaceId} stackId={stackId} binding={binding} />
         </Section>
       ) : null}
       {images.length > 0 ? (

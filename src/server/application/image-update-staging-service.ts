@@ -37,6 +37,7 @@ type ChangelogCatalog = ReturnType<typeof readWudChangelogCatalog>;
 type StageRequest = { token: string; acknowledgeReview: boolean };
 type ProposedEdit = { after: string } | { reason: string };
 const LEGACY_GROUPS_PATH = 'docs/wud-update-groups.json';
+const PORTAINER_WUD_SKILL_PATH = '.opencode/skills/portainer-wud-updates/SKILL.md';
 const PREVIEW_TTL_MS = 20 * 60_000;
 const hash = (text: string) => createHash('sha256').update(text).digest('hex');
 
@@ -68,6 +69,19 @@ export class ImageUpdateStagingService {
     if (!stack) return false;
     const policy = await this.#read(stack, '', LEGACY_GROUPS_PATH);
     return Boolean(policy?.blobSha);
+  }
+
+  async repositoryWorkflowGuide(workspaceId: string, stackId: string) {
+    const stack = await this.stacks.findById(workspaceId, stackId);
+    if (!stack) return null;
+    const policy = await this.#read(stack, '', LEGACY_GROUPS_PATH);
+    if (!policy?.blobSha) return null;
+    const skill = await this.#read(stack, '', PORTAINER_WUD_SKILL_PATH);
+    const skillPath =
+      skill?.commitSha === policy.commitSha && !skill.locked && skill.content
+        ? PORTAINER_WUD_SKILL_PATH
+        : null;
+    return { policyPath: LEGACY_GROUPS_PATH, skillPath };
   }
 
   async preview(

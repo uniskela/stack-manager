@@ -466,6 +466,7 @@ export function ImageUpdatePlanner({
                 staged={staged}
                 disabled={busy !== null}
                 updateSelection={updateSelection}
+                setupHref={`/w/${workspaceId}/stacks/${file.stackId}/image-updates/setup`}
               />
             );
           })}
@@ -519,12 +520,14 @@ function PreviewFileReview({
   staged,
   disabled,
   updateSelection,
+  setupHref,
 }: Readonly<{
   file: ImageUpdatePreview['files'][number];
   selection: FileSelection | undefined;
   staged: boolean;
   disabled: boolean;
   updateSelection: (selection: FileSelection) => void;
+  setupHref: string;
 }>) {
   return (
     <fieldset className="form" disabled={disabled}>
@@ -535,6 +538,11 @@ function PreviewFileReview({
         <span className="pill">{file.repositoryWorkflow ? 'Preview only' : previewLabels[file.status]}</span>
       </legend>
       {file.reason ? <p>{file.reason}</p> : null}
+      {file.repositoryWorkflow ? (
+        <p>
+          <Link href={setupHref}>Open setup guide</Link>
+        </p>
+      ) : null}
       {file.changes.length ? (
         <ul className="stack">
           {file.changes.map((change) => (

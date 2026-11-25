@@ -101,6 +101,8 @@ can't be opened or edited.
 
 ### Plan image updates
 
+On a stack’s **Image updates** tab, open **Image update setup guide** to connect WUD, match the running Compose project, and see where to review the update. You can use manual tags without connecting WUD.
+
 1. Open a stack's **Image updates** tab or go to **Stacks → Image updates** for a batch across stacks.
 2. Pick a **Compose service to update** and enter a **New image tag**, such as `1.5.5`. **Add tags suggested by WUD** adds the tags WUD found. You can use both in one batch.
 3. Optionally enter a public HTTPS **Release notes link** for each image. Choose a page that covers the tag saved in Git and the suggested or entered tag. Stack Manager shows relevant excerpts and flags incomplete evidence for review.
@@ -135,7 +137,7 @@ Both sources are enabled by default. Set `missingEvidence` or `riskSignals` to `
 
 An entered link takes precedence over the service or image link in Git, followed by a WUD-provided link when available. Link paths can contain `{{current}}` and `{{target}}`.
 
-**Preview only** means the repository has a WUD update policy at `docs/wud-update-groups.json`. Use the repository’s WUD workflow to prepare the update with its associated files and documentation. Stack Manager can show the proposed image tag and release notes for these repositories.
+**Preview only** means the repository has a WUD update policy at `docs/wud-update-groups.json`. Use the repository’s WUD workflow to prepare the update with its associated files and documentation. **Open setup guide** takes you to the repository’s workflow instructions and pull requests. If the fetched commit contains the Portainer WUD Updates skill, the guide links to that skill and explains how to use the existing Orca job.
 
 ### Drafts
 

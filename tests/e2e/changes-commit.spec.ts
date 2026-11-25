@@ -87,6 +87,10 @@ test('plans and stages a manual image update without WUD', async ({ page }) => {
   const { workspaceId, stackId } = sample();
   const path = 'nginx-golang/compose.yaml';
   await page.goto(`${stackUrl()}/image-updates`);
+  await page.getByRole('link', { name: 'Image update setup guide' }).click();
+  await expect(page.getByRole('heading', { name: 'Set up image updates' })).toBeVisible();
+  await expect(page.getByLabel('WUD URL')).toBeVisible();
+  await page.getByRole('link', { name: 'Open image updates', exact: true }).click();
   const add = page.getByRole('form', { name: 'Add a manual image update' });
   await expect(page.getByRole('columnheader', { name: 'Image saved in Git' })).toBeVisible();
   await expect(add.getByLabel('Stack to edit')).toHaveCount(0);
@@ -159,6 +163,10 @@ test('shows the repository workflow instead of draft controls for preview-only u
   await expect(preview.getByText('Preview only', { exact: true })).toBeVisible();
   await expect(preview.getByText(/Use your repository’s WUD update workflow/)).toBeVisible();
   await expect(preview.getByText('Check before updating')).toBeVisible();
+  await expect(preview.getByRole('link', { name: 'Open setup guide' })).toHaveAttribute(
+    'href',
+    `${stackUrl()}/image-updates/setup`,
+  );
   await expect(page.getByRole('button', { name: 'Save selected drafts' })).toHaveCount(0);
 });
 
