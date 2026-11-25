@@ -179,12 +179,16 @@ export class ImageUpdateService {
 
   async stack(workspaceId: string, stackId: string) {
     const stack = await this.#requireStack(workspaceId, stackId);
-    const [connection, bindings] = await Promise.all([
+    const [connection, binding] = await Promise.all([
       this.repo.connection(workspaceId),
-      this.repo.bindings(workspaceId),
+      this.stackBinding(workspaceId, stackId),
     ]);
-    const binding = bindings.find((row) => row.stackId === stackId) ?? null;
     return { connected: connection !== null, ...(await this.#inventory(stack, binding, connection)) };
+  }
+
+  async stackBinding(workspaceId: string, stackId: string): Promise<WudBinding | null> {
+    const bindings = await this.repo.bindings(workspaceId);
+    return bindingView(bindings.find((row) => row.stackId === stackId) ?? null);
   }
 
   async setBinding(workspaceId: string, stackId: string, binding: WudBinding | null, actorUserId: string) {

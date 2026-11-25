@@ -87,6 +87,10 @@ test('plans and stages a manual image update without WUD', async ({ page }) => {
   const { workspaceId, stackId } = sample();
   const path = 'nginx-golang/compose.yaml';
   await page.goto(`${stackUrl()}/image-updates`);
+  await page.getByRole('link', { name: 'Image update setup guide' }).click();
+  await expect(page.getByRole('heading', { name: 'Set up image updates' })).toBeVisible();
+  await expect(page.getByLabel('WUD URL')).toBeVisible();
+  await page.getByRole('link', { name: 'Open image updates', exact: true }).click();
   const add = page.getByRole('form', { name: 'Add a manual image update' });
   await expect(page.getByRole('columnheader', { name: 'Image saved in Git' })).toBeVisible();
   await expect(add.getByLabel('Stack to edit')).toHaveCount(0);
@@ -112,6 +116,58 @@ test('plans and stages a manual image update without WUD', async ({ page }) => {
     );
     expect(cleanup.ok()).toBe(true);
   }
+});
+
+test('shows the repository workflow instead of draft controls for preview-only updates', async ({ page }) => {
+  // The nginx-golang fixture supplies the proxy image needed to add a tag to the review.
+  test.skip(SAMPLE_ROOT !== 'nginx-golang', 'Uses the proxy image in the nginx-golang fixture.');
+  const { workspaceId, stackId } = sample();
+  await page.route(`**/api/workspaces/${workspaceId}/image-updates/preview`, (route) =>
+    route.fulfill({
+      json: {
+        files: [
+          {
+            stackId,
+            stackName: 'Sample',
+            path: 'nginx-golang/compose.yaml',
+            repositoryWorkflow: true,
+            status: 'blocked',
+            reason: 'Use your repository’s WUD update workflow to make this change.',
+            token: null,
+            changes: [
+              {
+                service: 'proxy',
+                source: 'manual',
+                status: 'review',
+                before: 'nginx',
+                after: 'nginx:1.29.2',
+                notes: ['Missing release range.'],
+                changelogUrl: null,
+              },
+            ],
+          },
+        ],
+      },
+    }),
+  );
+
+  await page.goto(`${stackUrl()}/image-updates`);
+  const add = page.getByRole('form', { name: 'Add a manual image update' });
+  await add.getByLabel('Compose service to update').selectOption('proxy');
+  const tag = add.getByLabel('New image tag');
+  await tag.fill('1.29.2');
+  await tag.press('Enter');
+  await expect(add).toHaveCount(0);
+  await page.getByRole('button', { name: 'Review proposed updates' }).press('Enter');
+  const preview = page.getByRole('form', { name: 'Image update preview' });
+  await expect(preview.getByText('Preview only', { exact: true })).toBeVisible();
+  await expect(preview.getByText(/Use your repository’s WUD update workflow/)).toBeVisible();
+  await expect(preview.getByText('Check before updating')).toBeVisible();
+  await expect(preview.getByRole('link', { name: 'Open setup guide' })).toHaveAttribute(
+    'href',
+    `${stackUrl()}/image-updates/setup`,
+  );
+  await expect(page.getByRole('button', { name: 'Save selected drafts' })).toHaveCount(0);
 });
 
 test('changes shows diffs, commit form, missing identity and is accessible', async ({ page }) => {

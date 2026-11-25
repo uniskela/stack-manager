@@ -12,6 +12,7 @@ import {
 import { isImageTag, type StackImageUpdate } from '@/shared/image-updates';
 import { api, ApiError } from '@/ui/api';
 import { Field, FormError } from '@/ui/form';
+import { Alert } from '@/ui/primitives/alert';
 import { Button } from '@/ui/primitives/button';
 
 interface StackInventory {
@@ -66,11 +67,13 @@ export function ImageUpdatePlanner({
   stacks,
   known,
   initialStackId,
+  repositoryWorkflow = false,
 }: Readonly<{
   workspaceId: string;
   stacks: readonly { id: string; name: string }[];
   known: readonly StackInventory[];
   initialStackId?: string;
+  repositoryWorkflow?: boolean;
 }>) {
   const id = useId();
   const router = useRouter();
@@ -132,6 +135,7 @@ export function ImageUpdatePlanner({
     }),
   );
   const remaining = MAX_IMAGE_UPDATE_CANDIDATES - candidates.length;
+  const showManualForm = stacks.length > 1 || candidates.length === 0 || services.length > 0;
   const stageFiles = (preview?.files ?? []).flatMap(({ token, status }) => {
     if (!token || status === 'blocked') return [];
     const selection = selected[token];
@@ -169,7 +173,10 @@ export function ImageUpdatePlanner({
       [...candidates, ...additions],
       `Added ${additions.length} WUD ${additions.length === 1 ? 'suggestion' : 'suggestions'}.`,
     );
-    if (additions.some((item) => item.stackId === stackId && item.service === service)) setService('');
+    if (additions.some((item) => item.stackId === stackId && item.service === selectedService)) {
+      setService('');
+      setManualTag('');
+    }
   }
 
   async function previewUpdates(event: FormEvent<HTMLFormElement>) {
@@ -207,7 +214,12 @@ export function ImageUpdatePlanner({
           ),
         ),
       );
-      setAnnouncement('Preview ready. Review the proposed changes below.');
+      const canSave = data.files.some(({ token }) => token !== null);
+      setAnnouncement(
+        canSave
+          ? 'Review the proposed changes below.'
+          : 'Preview finished. See the next step for each file below.',
+      );
     } catch (error) {
       setError(errorMessage(error));
     } finally {
@@ -257,7 +269,14 @@ export function ImageUpdatePlanner({
 
   return (
     <div className="stack">
-      <p className="muted">Choose a new tag, review release notes, then save a draft for Git.</p>
+      {repositoryWorkflow ? (
+        <Alert tone="info">
+          <strong>Preview only for this repository.</strong> You can see the proposed tag and release notes
+          here. Use your repository’s WUD update workflow to apply changes to Compose and its related files.
+        </Alert>
+      ) : (
+        <p className="muted">Choose a new tag, review release notes, then save a draft in Changes.</p>
+      )}
       {suggestions.length > 0 ? (
         <div className="actions">
           <Button disabled={!remaining || busy !== null} onClick={addSuggestions}>
@@ -265,89 +284,91 @@ export function ImageUpdatePlanner({
           </Button>
         </div>
       ) : null}
-      <form className="form" aria-label="Add a manual image update" method="post" onSubmit={addManual}>
-        <fieldset className="form" disabled={busy !== null}>
-          <legend className="visually-hidden">Manual image update</legend>
-          {stacks.length > 1 ? (
+      <div hidden={!showManualForm}>
+        <form className="form" aria-label="Add a manual image update" method="post" onSubmit={addManual}>
+          <fieldset className="form" disabled={busy !== null}>
+            <legend className="visually-hidden">Manual image update</legend>
+            {stacks.length > 1 ? (
+              <div className="field">
+                <label htmlFor={`${id}-stack`}>Stack to edit</label>
+                <select
+                  id={`${id}-stack`}
+                  name="stack"
+                  value={stackId}
+                  onChange={(event) => {
+                    setStackId(event.target.value);
+                    setService('');
+                    setManualTag('');
+                    setError(null);
+                  }}
+                >
+                  {stacks.map((stack) => (
+                    <option key={stack.id} value={stack.id}>
+                      {stack.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
             <div className="field">
-              <label htmlFor={`${id}-stack`}>Stack to edit</label>
+              <label htmlFor={`${id}-service`}>Compose service to update</label>
               <select
-                id={`${id}-stack`}
-                name="stack"
-                value={stackId}
-                onChange={(event) => {
-                  setStackId(event.target.value);
-                  setService('');
-                  setManualTag('');
-                  setError(null);
-                }}
+                id={`${id}-service`}
+                name="service"
+                required
+                value={selectedService}
+                disabled={!services.length}
+                onChange={(event) => setService(event.target.value)}
               >
-                {stacks.map((stack) => (
-                  <option key={stack.id} value={stack.id}>
-                    {stack.name}
+                <option value="">{loadingStack ? 'Loading services…' : 'Choose a service'}</option>
+                {services.map((image) => (
+                  <option key={image.name} value={image.name}>
+                    {image.name} ({image.image})
                   </option>
                 ))}
               </select>
             </div>
-          ) : null}
-          <div className="field">
-            <label htmlFor={`${id}-service`}>Compose service to update</label>
-            <select
-              id={`${id}-service`}
-              name="service"
+            {typeof inventory === 'string' ? (
+              <div className="actions">
+                <FormError message={inventory} />
+                <Button
+                  onClick={() =>
+                    setLoaded((current) => {
+                      const next = { ...current };
+                      delete next[stackId];
+                      return next;
+                    })
+                  }
+                >
+                  Retry loading services
+                </Button>
+              </div>
+            ) : null}
+            {typeof inventory === 'object' && !services.length ? (
+              <p className="muted">No more service images to add from this stack.</p>
+            ) : null}
+            <Field
+              label="New image tag"
+              name="manualTargetTag"
               required
-              value={selectedService}
-              disabled={!services.length}
-              onChange={(event) => setService(event.target.value)}
-            >
-              <option value="">{loadingStack ? 'Loading services…' : 'Choose a service'}</option>
-              {services.map((image) => (
-                <option key={image.name} value={image.name}>
-                  {image.name} ({image.image})
-                </option>
-              ))}
-            </select>
-          </div>
-          {typeof inventory === 'string' ? (
+              hint="Enter just the tag, for example 1.5.5."
+              value={manualTag}
+              onChange={(value) => {
+                setManualTag(value);
+                setError(null);
+              }}
+            />
             <div className="actions">
-              <FormError message={inventory} />
-              <Button
-                onClick={() =>
-                  setLoaded((current) => {
-                    const next = { ...current };
-                    delete next[stackId];
-                    return next;
-                  })
-                }
-              >
-                Retry loading services
+              <Button type="submit" disabled={!selectedService || remaining < 1}>
+                Add tag to review
               </Button>
             </div>
-          ) : null}
-          {typeof inventory === 'object' && !services.length ? (
-            <p className="muted">No more service images to add from this stack.</p>
-          ) : null}
-          <Field
-            label="New image tag"
-            name="manualTargetTag"
-            required
-            hint="Enter just the tag, for example 1.5.5."
-            value={manualTag}
-            onChange={(value) => {
-              setManualTag(value);
-              setError(null);
-            }}
-          />
-          <div className="actions">
-            <Button type="submit" disabled={!selectedService || remaining < 1}>
-              Add tag to review
-            </Button>
-          </div>
-          {remaining < 1 ? (
-            <p className="muted">This batch has reached the {MAX_IMAGE_UPDATE_CANDIDATES}-image limit.</p>
-          ) : null}
-        </fieldset>
-      </form>
+            {remaining < 1 ? (
+              <p className="muted">This batch has reached the {MAX_IMAGE_UPDATE_CANDIDATES}-image limit.</p>
+            ) : null}
+          </fieldset>
+        </form>
+      </div>
 
       {candidates.length ? (
         <form
@@ -388,6 +409,7 @@ export function ImageUpdatePlanner({
                   name={`changelog-${key}`}
                   type="url"
                   inputMode="url"
+                  hint="Use a page that lists both the tag saved in Git and the new tag. On GitHub, try the Releases list."
                   value={item.changelogUrl ?? ''}
                   onChange={(changelogUrl) => update({ changelogUrl })}
                 />
@@ -416,13 +438,56 @@ export function ImageUpdatePlanner({
         </form>
       ) : null}
 
+      <ImageUpdateReview
+        endpoint={endpoint}
+        workspaceId={workspaceId}
+        preview={preview}
+        selected={selected}
+        results={results}
+        busy={busy}
+        canSave={stageFiles.length > 0}
+        onSelect={(token, next) => setSelected((current) => ({ ...current, [token]: next }))}
+        onSubmit={stageUpdates}
+      />
+      <p className="muted">
+        <output>{announcement}</output>
+      </p>
+      <FormError message={error} />
+    </div>
+  );
+}
+
+function ImageUpdateReview({
+  endpoint,
+  workspaceId,
+  preview,
+  selected,
+  results,
+  busy,
+  canSave,
+  onSelect,
+  onSubmit,
+}: Readonly<{
+  endpoint: string;
+  workspaceId: string;
+  preview: ImageUpdatePreview | null;
+  selected: Readonly<Record<string, FileSelection>>;
+  results: ImageUpdateStageResult['files'];
+  busy: 'preview' | 'stage' | null;
+  canSave: boolean;
+  onSelect: (token: string, selection: FileSelection) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+}>) {
+  const hasDraftableFiles = preview?.files.some(({ token }) => token !== null) ?? false;
+  return (
+    <>
       {preview ? (
         <form
           className="form"
-          aria-label="Save image update drafts"
+          aria-label={hasDraftableFiles ? 'Save image update drafts' : 'Image update preview'}
           method="post"
           action={`${endpoint}/stage`}
-          onSubmit={(event) => void stageUpdates(event)}
+          onSubmit={(event) => void onSubmit(event)}
         >
           <h3>Review Compose changes</h3>
           {preview.files.map((file) => {
@@ -433,76 +498,32 @@ export function ImageUpdatePlanner({
                 result.stackId === file.stackId && result.path === file.path && result.status === 'staged',
             );
             const updateSelection = (next: FileSelection) => {
-              if (token) setSelected((current) => ({ ...current, [token]: next }));
+              if (token) onSelect(token, next);
             };
             return (
-              <fieldset className="form" key={`${file.stackId}:${file.path}`} disabled={busy !== null}>
-                <legend>
-                  <strong>
-                    {file.stackName} / <code>{file.path}</code>
-                  </strong>{' '}
-                  <span className="pill">{previewLabels[file.status]}</span>
-                </legend>
-                {file.reason ? <p>{file.reason}</p> : null}
-                {file.changes.length ? (
-                  <ul className="stack">
-                    {file.changes.map((change) => (
-                      <li key={change.service}>
-                        <strong>{change.service}</strong>{' '}
-                        <span className="muted">{previewLabels[change.status]}</span>
-                        {change.before ? (
-                          <p>
-                            <code>{change.before}</code>
-                            {change.after ? (
-                              <>
-                                {' '}
-                                → <code>{change.after}</code>
-                              </>
-                            ) : null}
-                          </p>
-                        ) : null}
-                        {change.notes.map((note, index) => (
-                          <p key={`${index}-${note}`}>{note}</p>
-                        ))}
-                        {change.changelogUrl && isHttpsUrl(change.changelogUrl) ? (
-                          <a href={change.changelogUrl} target="_blank" rel="noreferrer">
-                            Changelog for {change.service}
-                          </a>
-                        ) : null}
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-                {selection && !staged ? (
-                  <label className="check-row">
-                    <input
-                      type="checkbox"
-                      name="selectFile"
-                      checked={selection.selected}
-                      onChange={(event) =>
-                        updateSelection({
-                          selected: event.target.checked,
-                          acknowledgeReview: file.status === 'review' && event.target.checked,
-                        })
-                      }
-                    />{' '}
-                    Include {file.path}
-                    {file.status === 'review' ? ' and acknowledge review' : ''}
-                  </label>
-                ) : null}
-              </fieldset>
+              <PreviewFileReview
+                key={`${file.stackId}:${file.path}`}
+                file={file}
+                selection={selection}
+                staged={staged}
+                disabled={busy !== null}
+                updateSelection={updateSelection}
+                setupHref={`/w/${workspaceId}/stacks/${file.stackId}/image-updates/setup`}
+              />
             );
           })}
-          <div className="actions">
-            <Button
-              variant="primary"
-              type="submit"
-              loading={busy === 'stage'}
-              disabled={!stageFiles.length || busy === 'preview'}
-            >
-              Save selected drafts
-            </Button>
-          </div>
+          {hasDraftableFiles ? (
+            <div className="actions">
+              <Button
+                variant="primary"
+                type="submit"
+                loading={busy === 'stage'}
+                disabled={!canSave || busy === 'preview'}
+              >
+                Save selected drafts
+              </Button>
+            </div>
+          ) : null}
         </form>
       ) : null}
 
@@ -527,10 +548,89 @@ export function ImageUpdatePlanner({
           ))}
         </ul>
       ) : null}
-      <p className="muted">
-        <output>{announcement}</output>
-      </p>
-      <FormError message={error} />
-    </div>
+    </>
+  );
+}
+
+function PreviewFileReview({
+  file,
+  selection,
+  staged,
+  disabled,
+  updateSelection,
+  setupHref,
+}: Readonly<{
+  file: ImageUpdatePreview['files'][number];
+  selection: FileSelection | undefined;
+  staged: boolean;
+  disabled: boolean;
+  updateSelection: (selection: FileSelection) => void;
+  setupHref: string;
+}>) {
+  return (
+    <fieldset className="form" disabled={disabled}>
+      <legend>
+        <strong>
+          {file.stackName} / <code>{file.path}</code>
+        </strong>{' '}
+        <span className="pill">{file.repositoryWorkflow ? 'Preview only' : previewLabels[file.status]}</span>
+      </legend>
+      {file.reason ? <p>{file.reason}</p> : null}
+      {file.repositoryWorkflow ? (
+        <p>
+          <Link href={setupHref}>Open setup guide</Link>
+        </p>
+      ) : null}
+      {file.changes.length ? (
+        <ul className="stack">
+          {file.changes.map((change) => (
+            <li key={change.service}>
+              <strong>{change.service}</strong>{' '}
+              <span className="muted">
+                {file.repositoryWorkflow && change.status === 'review'
+                  ? 'Check before updating'
+                  : previewLabels[change.status]}
+              </span>
+              {change.before ? (
+                <p>
+                  <code>{change.before}</code>
+                  {change.after ? (
+                    <>
+                      {' '}
+                      → <code>{change.after}</code>
+                    </>
+                  ) : null}
+                </p>
+              ) : null}
+              {change.notes.map((note, index) => (
+                <p key={`${index}-${note}`}>{note}</p>
+              ))}
+              {change.changelogUrl && isHttpsUrl(change.changelogUrl) ? (
+                <a href={change.changelogUrl} target="_blank" rel="noreferrer">
+                  Release notes for {change.service}
+                </a>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {selection && !staged ? (
+        <label className="check-row">
+          <input
+            type="checkbox"
+            name="selectFile"
+            checked={selection.selected}
+            onChange={(event) =>
+              updateSelection({
+                selected: event.target.checked,
+                acknowledgeReview: file.status === 'review' && event.target.checked,
+              })
+            }
+          />{' '}
+          Include {file.path}
+          {file.status === 'review' ? ' and acknowledge review' : ''}
+        </label>
+      ) : null}
+    </fieldset>
   );
 }
