@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, type FormEvent } from 'react';
 import type { WudBinding } from '@/shared/image-updates';
@@ -154,9 +155,17 @@ export function WudRefresh({
       {!workerEnabled ? <p className="muted">Refresh requires the background worker.</p> : null}
       {connection.lastError ? (
         <Alert tone="warn">
-          {connection.lastError === 'auth'
-            ? 'WUD refused the read token. Replace it in Settings.'
-            : 'The last WUD refresh failed. Check the connection and try again.'}
+          {connection.lastError === 'auth' ? (
+            <>
+              WUD refused the read token.{' '}
+              <Link href={`/w/${workspaceId}/settings/wud#wud-connection`}>
+                Replace the token in WUD settings
+              </Link>
+              .
+            </>
+          ) : (
+            'The last refresh could not read WUD. Check that Stack Manager can reach the WUD HTTPS URL, then choose Refresh from WUD.'
+          )}
         </Alert>
       ) : null}
       <FormError message={error} />

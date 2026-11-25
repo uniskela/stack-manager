@@ -210,24 +210,35 @@ export class ImageUpdateService {
     });
   }
 
-  async discoverMappings(workspaceId: string) {
-    return (await this.#discoverMappings(workspaceId)).discovery;
+  async discoverMappings(workspaceId: string, choiceStackId?: string) {
+    const { inputs, bindings, connection, now } = await this.#mappingSources(workspaceId);
+    return discoverWudMappings(inputs, bindings, connection.observations, now, choiceStackId);
   }
 
   async saveDiscoveredMappings(
     workspaceId: string,
     selected: readonly WudMappingSelection[],
     actorUserId: string,
+    confirmChoice = false,
   ): Promise<WudMappingSaveResult> {
-    const { discovery, sources, connection } = await this.#discoverMappings(workspaceId);
-    const suggested = new Map(discovery.suggestions.map((match) => [match.stackId, match]));
+    const { sources, inputs, bindings, connection, now } = await this.#mappingSources(workspaceId);
+    const choiceStackId = confirmChoice && selected.length === 1 ? selected[0]?.stackId : undefined;
+    const { suggestions, choices } = discoverWudMappings(
+      inputs,
+      bindings,
+      connection.observations,
+      now,
+      choiceStackId,
+    );
+    const suggested = new Map(suggestions.map((match) => [match.stackId, match]));
     const byStack = new Map(sources.map(({ stack, file }) => [stack.id, { stack, file }]));
     const results = await Promise.all(
       selected.map(async (selection): Promise<WudMappingSaveResult['results'][number]> => {
         const { stackId, watcher, project } = selection;
         const match = suggested.get(stackId);
         const source = byStack.get(stackId);
-        if (match?.watcher !== watcher || match.project !== project || !source?.file)
+        const eligible = stackId === choiceStackId && choices.length ? choices : [match];
+        if (!source?.file || !eligible.some((item) => item?.watcher === watcher && item.project === project))
           return { stackId, status: 'changed' };
         try {
           const saved = await this.repo.saveDiscoveredBinding(
@@ -251,34 +262,27 @@ export class ImageUpdateService {
     return { results };
   }
 
-  async #discoverMappings(workspaceId: string) {
+  async #mappingSources(workspaceId: string) {
     await this.#requireWorkspace(workspaceId);
     const [connection, bindings, stacks] = await Promise.all([
       this.repo.connection(workspaceId),
       this.repo.bindings(workspaceId),
       this.stacks.list(workspaceId),
     ]);
-    if (!connection) throw new ConflictError('Connect WUD in Settings to find stack matches.');
     const now = this.clock.now();
-    if (isStaleSnapshot(connection, now))
-      throw new ConflictError('Refresh from WUD before finding stack matches.');
+    requireFreshMappingSnapshot(connection, now);
     const linked = new Set(bindings.map(({ stackId }) => stackId));
     const unbound = stacks.filter(({ id }) => !linked.has(id));
     const sources = await readStacks(unbound, async (stack) => ({
       stack,
       file: await this.#readImages(stack).catch(() => null),
     }));
-    const discovery = discoverWudMappings(
-      sources.map(({ stack, file }) => ({
-        stackId: stack.id,
-        stackName: stack.name,
-        images: file?.images ?? [],
-      })),
-      bindings,
-      connection.observations,
-      now,
-    );
-    return { discovery, sources, connection };
+    const inputs = sources.map(({ stack, file }) => ({
+      stackId: stack.id,
+      stackName: stack.name,
+      images: file?.images ?? [],
+    }));
+    return { inputs, sources, bindings, connection, now };
   }
 
   async queue(workspaceId: string) {
@@ -389,6 +393,19 @@ function isStaleSnapshot(connection: WudConnection | null, now: Date) {
     connection?.lastError !== null ||
     now.getTime() - connection.lastSuccessAt.getTime() >= 2 * REFRESH_INTERVAL_MS
   );
+}
+
+function requireFreshMappingSnapshot(
+  connection: WudConnection | null,
+  now: Date,
+): asserts connection is WudConnection {
+  if (!connection) throw new ConflictError('Connect WUD before finding stack matches.', 'wud_not_connected');
+  if (connection.lastError === 'auth')
+    throw new ConflictError('WUD refused the read token.', 'wud_auth_failed');
+  if (connection.lastError === 'unavailable')
+    throw new ConflictError('The last refresh could not read WUD.', 'wud_unavailable');
+  if (isStaleSnapshot(connection, now))
+    throw new ConflictError('The saved WUD data is out of date.', 'wud_snapshot_stale');
 }
 
 async function readStacks<T>(stacks: readonly Stack[], read: (stack: Stack) => Promise<T>): Promise<T[]> {

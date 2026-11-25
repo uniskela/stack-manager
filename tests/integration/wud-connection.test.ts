@@ -9,6 +9,7 @@ import { sessionCookieName } from '@/server/http/cookies';
 import { gitServerOverrides, startGitServer } from '../support/git-server';
 import { call } from '../support/http';
 import { WUD_REFRESH_JOB } from '@/server/application/image-update-service';
+import { AppError } from '@/server/domain/errors';
 
 const token = 'fixture-read-only-token';
 let h: TestHarness | undefined;
@@ -146,6 +147,7 @@ describe('WUD image updates over authenticated routes', () => {
       const workspaceId = (await workspaces.create({ name: 'Homelab' }, user.id)).id;
       const otherId = (await workspaces.create({ name: 'Other' }, user.id)).id;
       const request = { cookie, params: { workspaceId } };
+      expect((await call(wudMappings.GET, request)).json.error.code).toBe('wud_not_connected');
       const repo = await call(reposRoute.POST, {
         ...request,
         method: 'POST',
@@ -192,8 +194,8 @@ describe('WUD image updates over authenticated routes', () => {
       expect((await call(stackUpdates.GET, base)).json.binding).toBeNull();
 
       const mapping = { stackId, watcher: 'local', project: 'wiki' };
-      const save = (mappings: (typeof mapping)[]) =>
-        call(wudMappings.POST, { ...request, method: 'POST', body: { mappings } });
+      const save = (mappings: (typeof mapping)[], confirmChoice?: true) =>
+        call(wudMappings.POST, { ...request, method: 'POST', body: { mappings, confirmChoice } });
       const manual = { watcher: 'another-host', project: 'wiki' };
       expect((await call(stackUpdates.PUT, { ...base, method: 'PUT', body: manual })).status).toBe(200);
       expect(
@@ -205,8 +207,28 @@ describe('WUD image updates over authenticated routes', () => {
       expect((await call(stackUpdates.GET, base)).json.binding).toEqual(manual);
 
       expect((await call(stackUpdates.DELETE, { ...base, method: 'DELETE' })).status).toBe(200);
+      const rows = await read();
+      const alternate = { ...rows[0], watcher: 'alternate-host' };
+      read.mockResolvedValueOnce([...rows, alternate]);
+      await imageUpdates.requestRefresh(workspaceId);
+      await worker.runOnce();
+      const scoped = { ...request, path: `/api/test?stackId=${stackId}` };
+      expect((await call(wudMappings.GET, scoped)).json.choices).toEqual([
+        { watcher: 'local', project: 'wiki', matchedServices: ['app'] },
+        { watcher: 'alternate-host', project: 'wiki', matchedServices: ['app'] },
+      ]);
+      expect((await save([mapping])).json.results).toEqual([{ stackId, status: 'changed' }]);
+      expect((await save([{ ...mapping, watcher: 'unknown-host' }], true)).json.results).toEqual([
+        { stackId, status: 'changed' },
+      ]);
       vi.spyOn(h.container.audit, 'record').mockRejectedValueOnce(new Error('Fixture audit failure'));
-      expect((await save([mapping])).json.results).toEqual([{ stackId, status: 'saved' }]);
+      expect((await save([{ ...mapping, watcher: 'alternate-host' }], true)).json.results).toEqual([
+        { stackId, status: 'saved' },
+      ]);
+      expect((await call(stackUpdates.GET, base)).json.binding).toEqual({
+        watcher: 'alternate-host',
+        project: 'wiki',
+      });
       const file = await source.readFile(workspaceId, stack!.repository.id, '', 'compose.yaml');
       await source.saveDraft(
         workspaceId,
@@ -227,7 +249,13 @@ describe('WUD image updates over authenticated routes', () => {
       ).toEqual(expected);
       expect((await imageUpdates.queue(otherId)).inventory).toEqual([]);
       h.clock.advance(30 * 60_000);
-      expect((await call(wudMappings.GET, request)).status).toBe(409);
+      const stale = await call(wudMappings.GET, request);
+      expect(stale.status).toBe(409);
+      expect(stale.json.error.code).toBe('wud_snapshot_stale');
+      read.mockRejectedValueOnce(new AppError(502, 'wud_auth_failed', 'Fixture token refused.'));
+      await imageUpdates.requestRefresh(workspaceId);
+      await worker.runOnce();
+      expect((await call(wudMappings.GET, request)).json.error.code).toBe('wud_auth_failed');
     } finally {
       await git.close();
     }

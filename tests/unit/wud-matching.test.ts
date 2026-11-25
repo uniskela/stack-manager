@@ -33,7 +33,7 @@ describe('WUD mapping discovery', () => {
       [observation, { ...observation, watcher: 'other', installedTag: '1.25' }],
       now,
     );
-    expect(matches).toEqual({
+    expect(matches).toMatchObject({
       suggestions: [
         {
           stackId: 'source-stack',
@@ -48,13 +48,40 @@ describe('WUD mapping discovery', () => {
     });
   });
 
-  it('withholds a project that matches multiple stacks and a stack that matches multiple projects', () => {
-    expect(discoverWudMappings([stack, { ...stack, stackId: 'copy' }], [], [observation], now)).toMatchObject(
-      { suggestions: [], ambiguousCount: 2 },
-    );
+  it('lists ambiguous stacks without suggesting a shared project automatically', () => {
+    const copy = { ...stack, stackId: 'copy', stackName: 'Copy' };
+    expect(discoverWudMappings([stack, copy], [], [observation], now)).toMatchObject({
+      suggestions: [],
+      ambiguousCount: 2,
+      ambiguousStacks: [
+        { stackId: stack.stackId, stackName: stack.stackName },
+        { stackId: copy.stackId, stackName: copy.stackName },
+      ],
+      choices: [],
+    });
+  });
+
+  it('returns compatible project choices for the requested ambiguous stack', () => {
     expect(
-      discoverWudMappings([stack], [], [observation, { ...observation, watcher: 'other' }], now),
-    ).toMatchObject({ suggestions: [], ambiguousCount: 1 });
+      discoverWudMappings(
+        [stack],
+        [],
+        [
+          observation,
+          { ...observation, watcher: 'other', project: 'wiki-test' },
+          { ...observation, watcher: 'old', installedTag: '1.25' },
+        ],
+        now,
+        stack.stackId,
+      ),
+    ).toMatchObject({
+      suggestions: [],
+      ambiguousCount: 1,
+      choices: [
+        { ...binding, matchedServices: ['web'] },
+        { watcher: 'other', project: 'wiki-test', matchedServices: ['web'] },
+      ],
+    });
   });
 
   it.each([
@@ -68,7 +95,7 @@ describe('WUD mapping discovery', () => {
       service,
     ],
   ] as const)('withholds %s', (_description, claimed, observations, image) => {
-    expect(discoverWudMappings([{ ...stack, images: [image] }], claimed, observations, now)).toEqual({
+    expect(discoverWudMappings([{ ...stack, images: [image] }], claimed, observations, now)).toMatchObject({
       suggestions: [],
       ambiguousCount: 0,
       unmatchedCount: 1,
