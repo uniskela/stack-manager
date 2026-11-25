@@ -111,7 +111,9 @@ On a stack’s **Image updates** tab, open **Image update setup guide** to conne
 
 For automatic suggestions, create an API token with the `read` scope in WUD 9.9. Enter the HTTPS base URL and token under **Settings → WUD** and choose **Test and save**. Stack Manager reads WUD's stored results every 15 minutes with the worker enabled. **Refresh from WUD** reads those results on demand, and WUD checks registries on its own schedule.
 
-From **Stacks → Image updates**, choose **Find WUD matches**. Stack Manager compares service names and image references in the fetched Compose files with what WUD sees running. Review and save the suggested matches together. **Docker host in WUD** is WUD’s watcher name. **Deployed Compose project** is the project name WUD sees on that host. If a stack has multiple possible matches or no matching WUD data, open its **Image updates** tab and choose **Enter WUD details manually**. Discovery preserves saved matches.
+From **Stacks → Image updates**, choose **Find WUD matches**. Stack Manager compares service names and image references in the fetched Compose files with what WUD sees running. Review and save the suggested matches together. If a stack needs your input, open it from the results, choose **Find WUD matches**, and select the Docker host and deployed Compose project. WUD calls the Docker host a watcher. If WUD offers no matching project, you can still choose **Enter WUD details manually**. Discovery preserves saved matches.
+
+If the saved data is out of date, follow the link to **WUD settings** and choose **Refresh from WUD** before trying again. If WUD refuses the token, create a new read token in WUD and use **Test and save** to replace it. For other connection failures, check that Stack Manager can reach the configured WUD HTTPS URL.
 
 When WUD reports an update without its last registry scan time, the planner asks you to acknowledge that the scan time is unavailable before staging. Results from an old or failed Stack Manager refresh need a new read from WUD.
 

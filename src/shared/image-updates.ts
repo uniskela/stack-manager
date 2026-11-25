@@ -5,10 +5,15 @@ export type WudBinding = { watcher: string; project: string };
 export const MAX_WUD_MAPPINGS_PER_SAVE = 150;
 
 export type WudMappingSelection = WudBinding & { stackId: string };
+export type WudMappingCandidate = WudBinding & { matchedServices: string[] };
+
+type WudMappingStack = { stackId: string; stackName: string };
 
 export interface WudMappingDiscovery {
-  suggestions: Array<WudMappingSelection & { stackName: string; matchedServices: string[] }>;
+  suggestions: Array<WudMappingStack & WudMappingCandidate>;
   ambiguousCount: number;
+  ambiguousStacks: WudMappingStack[];
+  choices: WudMappingCandidate[];
   unmatchedCount: number;
 }
 
@@ -231,11 +236,50 @@ function matchesInstalled(row: WudObservation, ref: ImageReference): boolean {
 const bindingKey = ({ watcher, project }: WudBinding) => watcher + ':' + project;
 
 export function discoverWudMappings(
-  stacks: ReadonlyArray<{ stackId: string; stackName: string; images: readonly StackImage[] }>,
+  stacks: ReadonlyArray<WudMappingStack & { images: readonly StackImage[] }>,
   claimed: readonly WudBinding[],
   observations: readonly WudObservation[],
   now: Date,
+  choiceStackId?: string,
 ): WudMappingDiscovery {
+  const matchesByProject = new Map<string, number>();
+  const matchesByStack = [];
+  let choices: WudMappingCandidate[] = [];
+  for (const { stackId, stackName, candidates } of wudMappingCandidates(stacks, claimed, observations, now)) {
+    for (const candidate of candidates) {
+      const key = bindingKey(candidate);
+      matchesByProject.set(key, (matchesByProject.get(key) ?? 0) + 1);
+    }
+    if (stackId === choiceStackId) choices = candidates;
+    matchesByStack.push({ stackId, stackName, first: candidates[0], count: candidates.length });
+  }
+
+  const suggestions: WudMappingDiscovery['suggestions'] = [];
+  const ambiguousStacks: WudMappingStack[] = [];
+  let unmatchedCount = 0;
+  for (const { stackId, stackName, first, count } of matchesByStack) {
+    if (!first) unmatchedCount++;
+    else if (count === 1 && matchesByProject.get(bindingKey(first)) === 1) {
+      suggestions.push({ stackId, stackName, ...first });
+    } else {
+      ambiguousStacks.push({ stackId, stackName });
+    }
+  }
+  return {
+    suggestions,
+    ambiguousStacks,
+    ambiguousCount: ambiguousStacks.length,
+    choices: ambiguousStacks.some(({ stackId }) => stackId === choiceStackId) ? choices : [],
+    unmatchedCount,
+  };
+}
+
+function* wudMappingCandidates(
+  stacks: ReadonlyArray<WudMappingStack & { images: readonly StackImage[] }>,
+  claimed: readonly WudBinding[],
+  observations: readonly WudObservation[],
+  now: Date,
+) {
   const reserved = new Set(claimed.map(bindingKey));
   const projects = new Map<string, { binding: WudBinding; services: Map<string, WudObservation[]> }>();
   for (const row of observations) {
@@ -251,33 +295,18 @@ export function discoverWudMappings(
     projects.set(key, project);
   }
 
-  const matchesByProject = new Map<string, number>();
-  const matchesByStack = stacks.map(({ stackId, stackName, images }) => {
+  for (const { stackId, stackName, images } of stacks) {
     const services = images.flatMap((image) => {
       const ref = image.editable && !image.excluded && image.image ? imageReference(image.image) : null;
       return ref ? [{ name: image.name, ref }] : [];
     });
-    let match: WudMappingDiscovery['suggestions'][number] | undefined;
-    let count = 0;
-    for (const [key, { binding, services: deployed }] of projects) {
+    const candidates: WudMappingCandidate[] = [];
+    for (const { binding, services: deployed } of projects.values()) {
       const matchedServices = matchingServices(services, deployed, now);
-      if (!matchedServices.length) continue;
-      count++;
-      matchesByProject.set(key, (matchesByProject.get(key) ?? 0) + 1);
-      match ??= { stackId, stackName, ...binding, matchedServices };
+      if (matchedServices.length) candidates.push({ ...binding, matchedServices });
     }
-    return { match, count };
-  });
-
-  const suggestions: WudMappingDiscovery['suggestions'] = [];
-  let ambiguousCount = 0;
-  let unmatchedCount = 0;
-  for (const { match, count } of matchesByStack) {
-    if (!match) unmatchedCount++;
-    else if (count === 1 && matchesByProject.get(bindingKey(match)) === 1) suggestions.push(match);
-    else ambiguousCount++;
+    yield { stackId, stackName, candidates };
   }
-  return { suggestions, ambiguousCount, unmatchedCount };
 }
 
 function matchingServices(

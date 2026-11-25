@@ -1,14 +1,18 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import {
   MAX_WUD_MAPPINGS_PER_SAVE,
+  type WudMappingCandidate,
   type WudMappingDiscovery as Discovery,
   type WudMappingSaveResult,
+  type WudMappingSelection,
 } from '@/shared/image-updates';
 import { api, ApiError } from '@/ui/api';
 import { FormError } from '@/ui/form';
+import { Alert } from '@/ui/primitives/alert';
 import { Button } from '@/ui/primitives/button';
 import { TableWrap } from '@/ui/primitives/table-wrap';
 
@@ -22,32 +26,35 @@ export function WudMappingDiscovery({
   const [discovery, setDiscovery] = useState<Discovery | null>(null);
   const [busy, setBusy] = useState<'find' | 'save' | null>(null);
   const [message, setMessage] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [problem, setProblem] = useState<{ code?: string; message: string } | null>(null);
   const found = discovery?.suggestions.filter((item) => !stackId || item.stackId === stackId) ?? [];
   const displayed = found.slice(0, MAX_WUD_MAPPINGS_PER_SAVE);
+  const choices = discovery?.choices ?? [];
+  const ambiguousStacks = stackId ? [] : (discovery?.ambiguousStacks ?? []);
 
   async function find() {
     setBusy('find');
-    setError(null);
+    setProblem(null);
     setMessage('');
     setDiscovery(null);
     try {
-      setDiscovery(await api<Discovery>(endpoint));
+      const query = stackId ? `?stackId=${encodeURIComponent(stackId)}` : '';
+      setDiscovery(await api<Discovery>(endpoint + query));
     } catch (error) {
-      setError(error instanceof ApiError ? error.message : 'Could not find WUD matches.');
+      setProblem(error instanceof ApiError ? error : { message: 'Could not find WUD matches.' });
     } finally {
       setBusy(null);
     }
   }
 
-  async function save() {
+  async function save(mappings: WudMappingSelection[], confirmChoice?: true) {
     setBusy('save');
-    setError(null);
+    setProblem(null);
     setMessage('');
     try {
       const { results } = await api<WudMappingSaveResult>(endpoint, {
         method: 'POST',
-        body: { mappings: displayed.map(({ stackId, watcher, project }) => ({ stackId, watcher, project })) },
+        body: { mappings, confirmChoice },
       });
       const saved = results.filter((row) => row.status === 'saved').length;
       const processed = new Set(results.map((row) => row.stackId));
@@ -60,15 +67,15 @@ export function WudMappingDiscovery({
       setMessage(summary.join(' '));
       if (saved) router.refresh();
     } catch (error) {
-      setError(error instanceof ApiError ? error.message : 'Could not save WUD matches.');
+      setProblem(error instanceof ApiError ? error : { message: 'Could not save WUD matches.' });
     } finally {
       setBusy(null);
     }
   }
 
   const nothingFound = stackId
-    ? 'No unique match for this stack. You can enter the WUD details manually.'
-    : 'No unique matches found. Open a stack to enter its WUD details manually.';
+    ? 'No matching project found. Check that WUD reports this stack’s services and images, or enter the details manually.'
+    : 'No automatic matches found.';
 
   return (
     <div className="stack">
@@ -77,10 +84,18 @@ export function WudMappingDiscovery({
           Find WUD matches
         </Button>
       </div>
-      {discovery && !displayed.length ? (
+      {discovery && !displayed.length && !choices.length && !ambiguousStacks.length ? (
         <p className="muted">
           <output>{nothingFound}</output>
         </p>
+      ) : null}
+      {stackId && choices.length > 0 ? (
+        <WudMatchChoice
+          choices={choices}
+          disabled={busy !== null}
+          saving={busy === 'save'}
+          onSave={({ watcher, project }) => void save([{ stackId, watcher, project }], true)}
+        />
       ) : null}
       {displayed.length > 0 ? (
         <>
@@ -113,7 +128,9 @@ export function WudMappingDiscovery({
           <div className="actions">
             <Button
               variant="primary"
-              onClick={() => void save()}
+              onClick={() =>
+                void save(displayed.map(({ stackId, watcher, project }) => ({ stackId, watcher, project })))
+              }
               loading={busy === 'save'}
               disabled={busy === 'find'}
             >
@@ -122,14 +139,102 @@ export function WudMappingDiscovery({
           </div>
         </>
       ) : null}
-      {!stackId && discovery && (discovery.ambiguousCount > 0 || discovery.unmatchedCount > 0) ? (
+      {ambiguousStacks.length > 0 ? (
+        <div>
+          <p>Open a stack to choose which WUD project it uses.</p>
+          <ul>
+            {ambiguousStacks.map(({ stackId, stackName }) => (
+              <li key={stackId}>
+                <Link href={`/w/${workspaceId}/stacks/${stackId}/image-updates#wud-mapping`}>
+                  {stackName}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {!stackId && discovery && discovery.unmatchedCount > 0 ? (
         <p className="muted">
-          {discovery.ambiguousCount ? `Multiple matches for ${discovery.ambiguousCount} stacks. ` : ''}
-          {discovery.unmatchedCount ? `No matching WUD data for ${discovery.unmatchedCount} stacks.` : ''}
+          No matching WUD data for {discovery.unmatchedCount}{' '}
+          {discovery.unmatchedCount === 1 ? 'stack' : 'stacks'}.
         </p>
       ) : null}
       <output>{message}</output>
-      <FormError message={error} />
+      {problem ? <WudMappingProblem workspaceId={workspaceId} problem={problem} /> : null}
     </div>
+  );
+}
+
+function WudMatchChoice({
+  choices,
+  disabled,
+  saving,
+  onSave,
+}: Readonly<{
+  choices: WudMappingCandidate[];
+  disabled: boolean;
+  saving: boolean;
+  onSave: (candidate: WudMappingCandidate) => void;
+}>) {
+  const id = useId();
+  const [key, setKey] = useState('');
+  const choice = choices.find((candidate) => candidateKey(candidate) === key);
+  return (
+    <div className="stack">
+      <div className="field">
+        <label htmlFor={id}>Choose the Docker host and Compose project</label>
+        <select id={id} value={key} onChange={(event) => setKey(event.target.value)} disabled={disabled}>
+          <option value="">Select a project</option>
+          {choices.map((candidate) => (
+            <option key={candidateKey(candidate)} value={candidateKey(candidate)}>
+              {candidate.watcher} · {candidate.project}
+            </option>
+          ))}
+        </select>
+        {choice ? <p className="hint">Matching services · {choice.matchedServices.join(', ')}</p> : null}
+      </div>
+      <div className="actions">
+        <Button
+          variant="primary"
+          disabled={!choice || disabled}
+          loading={saving}
+          onClick={() => choice && onSave(choice)}
+        >
+          Save chosen match
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+const candidateKey = ({ watcher, project }: WudMappingCandidate) => watcher + ':' + project;
+
+const recovery: Record<string, { section: string; label: string; instructions?: string } | undefined> = {
+  wud_not_connected: { section: 'wud-connection', label: 'Connect WUD in Settings' },
+  wud_auth_failed: { section: 'wud-connection', label: 'Replace the WUD read token' },
+  wud_snapshot_stale: {
+    section: 'wud-refresh',
+    label: 'Open WUD refresh settings',
+    instructions: 'Choose Refresh from WUD, then find matches again.',
+  },
+  wud_unavailable: {
+    section: 'wud-refresh',
+    label: 'Check the WUD connection',
+    instructions: 'Check that Stack Manager can reach the WUD HTTPS URL, then choose Refresh from WUD.',
+  },
+};
+
+function WudMappingProblem({
+  workspaceId,
+  problem,
+}: Readonly<{ workspaceId: string; problem: { code?: string; message: string } }>) {
+  const action = problem.code ? recovery[problem.code] : undefined;
+  if (!action) return <FormError message={problem.message} />;
+  return (
+    <Alert tone="error" role="alert">
+      <p>{problem.message}</p>
+      {action.instructions ? <p>{action.instructions}</p> : null}
+      <Link href={`/w/${workspaceId}/settings/wud#${action.section}`}>{action.label}</Link>
+    </Alert>
   );
 }
