@@ -15,14 +15,13 @@ export default async function ImageUpdateSetupPage({
 }: Readonly<{ params: Promise<{ workspaceId: string; stackId: string }> }>) {
   const { workspaceId, stackId } = await params;
   const { stacks, repositories, imageUpdates, imageUpdateStaging, config } = getContainer();
-  const [stack, settings, view, workflow] = await Promise.all([
+  const [stack, settings, binding, workflow] = await Promise.all([
     orNotFound(stacks.get(workspaceId, stackId)),
     imageUpdates.settings(workspaceId),
-    imageUpdates.stack(workspaceId, stackId),
-    imageUpdateStaging.repositoryWorkflowGuide(workspaceId, stackId),
+    imageUpdates.stackBinding(workspaceId, stackId),
+    imageUpdateStaging.repositoryWorkflowGuide(workspaceId, stackId).catch(() => undefined),
   ]);
   const { connection, refreshing } = settings;
-  const { binding } = view;
   const workspace = `/w/${workspaceId}`;
   const stackPage = `${workspace}/stacks/${stackId}`;
   const filesPage = `${workspace}/repositories/${stack.repository.id}/files`;
@@ -64,7 +63,9 @@ export default async function ImageUpdateSetupPage({
         )}
       </Section>
       <Section id="update-destination" title="3. Where to review the update">
-        {workflow ? (
+        {workflow === undefined ? (
+          <p>Could not check this repository’s update workflow. Reload the guide to try again.</p>
+        ) : workflow ? (
           <div className="stack">
             <p>
               <strong>{stack.repository.name} uses its own WUD update workflow.</strong> It prepares Compose,

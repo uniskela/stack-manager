@@ -135,7 +135,6 @@ export function ImageUpdatePlanner({
     }),
   );
   const remaining = MAX_IMAGE_UPDATE_CANDIDATES - candidates.length;
-  const hasDraftableFiles = preview?.files.some(({ token }) => token !== null) ?? false;
   const showManualForm = stacks.length > 1 || candidates.length === 0 || services.length > 0;
   const stageFiles = (preview?.files ?? []).flatMap(({ token, status }) => {
     if (!token || status === 'blocked') return [];
@@ -439,13 +438,56 @@ export function ImageUpdatePlanner({
         </form>
       ) : null}
 
+      <ImageUpdateReview
+        endpoint={endpoint}
+        workspaceId={workspaceId}
+        preview={preview}
+        selected={selected}
+        results={results}
+        busy={busy}
+        canSave={stageFiles.length > 0}
+        onSelect={(token, next) => setSelected((current) => ({ ...current, [token]: next }))}
+        onSubmit={stageUpdates}
+      />
+      <p className="muted">
+        <output>{announcement}</output>
+      </p>
+      <FormError message={error} />
+    </div>
+  );
+}
+
+function ImageUpdateReview({
+  endpoint,
+  workspaceId,
+  preview,
+  selected,
+  results,
+  busy,
+  canSave,
+  onSelect,
+  onSubmit,
+}: Readonly<{
+  endpoint: string;
+  workspaceId: string;
+  preview: ImageUpdatePreview | null;
+  selected: Readonly<Record<string, FileSelection>>;
+  results: ImageUpdateStageResult['files'];
+  busy: 'preview' | 'stage' | null;
+  canSave: boolean;
+  onSelect: (token: string, selection: FileSelection) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+}>) {
+  const hasDraftableFiles = preview?.files.some(({ token }) => token !== null) ?? false;
+  return (
+    <>
       {preview ? (
         <form
           className="form"
           aria-label={hasDraftableFiles ? 'Save image update drafts' : 'Image update preview'}
           method="post"
           action={`${endpoint}/stage`}
-          onSubmit={(event) => void stageUpdates(event)}
+          onSubmit={(event) => void onSubmit(event)}
         >
           <h3>Review Compose changes</h3>
           {preview.files.map((file) => {
@@ -456,7 +498,7 @@ export function ImageUpdatePlanner({
                 result.stackId === file.stackId && result.path === file.path && result.status === 'staged',
             );
             const updateSelection = (next: FileSelection) => {
-              if (token) setSelected((current) => ({ ...current, [token]: next }));
+              if (token) onSelect(token, next);
             };
             return (
               <PreviewFileReview
@@ -476,7 +518,7 @@ export function ImageUpdatePlanner({
                 variant="primary"
                 type="submit"
                 loading={busy === 'stage'}
-                disabled={!stageFiles.length || busy === 'preview'}
+                disabled={!canSave || busy === 'preview'}
               >
                 Save selected drafts
               </Button>
@@ -506,11 +548,7 @@ export function ImageUpdatePlanner({
           ))}
         </ul>
       ) : null}
-      <p className="muted">
-        <output>{announcement}</output>
-      </p>
-      <FormError message={error} />
-    </div>
+    </>
   );
 }
 
