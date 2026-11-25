@@ -133,7 +133,9 @@ Commit `.stack-manager/image-updates.json` at the root of a repository to config
 
 Both sources are enabled by default. Set `missingEvidence` or `riskSignals` to `block` to exclude those updates from staging. An exclusion without `service` covers the entire Compose file. Manual updates respect `wud.watch=false` by default. A repository can set `respectWudOptOut` to `false` for manual updates, while WUD suggestions always respect the label.
 
-An entered link takes precedence over the service or image link in Git, followed by a WUD-provided link when available. Link paths can contain `{{current}}` and `{{target}}`. Repositories with an external WUD group policy can preview candidates and see links from their existing changelog catalog. Their external workflow remains responsible for staging linked files and documentation.
+An entered link takes precedence over the service or image link in Git, followed by a WUD-provided link when available. Link paths can contain `{{current}}` and `{{target}}`.
+
+**Preview only** means the repository has a WUD update policy at `docs/wud-update-groups.json`. Use the repository’s WUD workflow to prepare the update with its associated files and documentation. Stack Manager can show the proposed image tag and release notes for these repositories.
 
 ### Drafts
 

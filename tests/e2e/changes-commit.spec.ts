@@ -114,6 +114,52 @@ test('plans and stages a manual image update without WUD', async ({ page }) => {
   }
 });
 
+test('shows the repository workflow instead of draft controls for preview-only updates', async ({ page }) => {
+  test.skip(SAMPLE_ROOT !== 'nginx-golang', 'Uses the proxy image in the nginx-golang fixture.');
+  const { workspaceId, stackId } = sample();
+  await page.route(`**/api/workspaces/${workspaceId}/image-updates/preview`, (route) =>
+    route.fulfill({
+      json: {
+        files: [
+          {
+            stackId,
+            stackName: 'Sample',
+            path: 'nginx-golang/compose.yaml',
+            repositoryWorkflow: true,
+            status: 'blocked',
+            reason: 'Use your repository’s WUD update workflow to make this change.',
+            token: null,
+            changes: [
+              {
+                service: 'proxy',
+                source: 'manual',
+                status: 'review',
+                before: 'nginx',
+                after: 'nginx:1.29.2',
+                notes: ['Missing release range.'],
+                changelogUrl: null,
+              },
+            ],
+          },
+        ],
+      },
+    }),
+  );
+
+  await page.goto(`${stackUrl()}/image-updates`);
+  const add = page.getByRole('form', { name: 'Add a manual image update' });
+  await add.getByLabel('Compose service to update').selectOption('proxy');
+  await add.getByLabel('New image tag').fill('1.29.2');
+  await add.getByRole('button', { name: 'Add tag to review' }).click();
+  await expect(add).toHaveCount(0);
+  await page.getByRole('button', { name: 'Review proposed updates' }).click();
+  const preview = page.getByRole('form', { name: 'Image update preview' });
+  await expect(preview.getByText('Preview only', { exact: true })).toBeVisible();
+  await expect(preview.getByText(/Use your repository’s WUD update workflow/)).toBeVisible();
+  await expect(preview.getByText('Check before updating')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Save selected drafts' })).toHaveCount(0);
+});
+
 test('changes shows diffs, commit form, missing identity and is accessible', async ({ page }) => {
   test.skip(isMobile(page), 'Desktop covers the full commit form; mobile has a dedicated layout test.');
   const marker = `commit-ui-${Date.now()}`;

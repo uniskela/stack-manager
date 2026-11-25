@@ -22,8 +22,11 @@ export default async function StackImageUpdatesPage({
   params: Promise<{ workspaceId: string; stackId: string }>;
 }>) {
   const { workspaceId, stackId } = await params;
-  const { imageUpdates } = getContainer();
-  const view = await imageUpdates.stack(workspaceId, stackId);
+  const { imageUpdates, imageUpdateStaging } = getContainer();
+  const [view, repositoryWorkflow] = await Promise.all([
+    imageUpdates.stack(workspaceId, stackId),
+    imageUpdateStaging.usesRepositoryWorkflow(workspaceId, stackId).catch(() => false),
+  ]);
   const { connected, binding, images, sourceStatus, stackName } = view;
   return (
     <div className="stack">
@@ -72,6 +75,7 @@ export default async function StackImageUpdatesPage({
             stacks={[{ id: stackId, name: stackName }]}
             known={[view]}
             initialStackId={stackId}
+            repositoryWorkflow={repositoryWorkflow}
           />
         </Section>
       ) : null}

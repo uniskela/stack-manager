@@ -25,6 +25,7 @@ export interface ImageUpdatePreview {
     path: string;
     status: 'ready' | 'review' | 'blocked';
     reason: string | null;
+    repositoryWorkflow?: true;
     changes: ImageUpdateReviewRow[];
     token: string | null;
   }>;

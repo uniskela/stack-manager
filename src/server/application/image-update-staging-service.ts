@@ -63,6 +63,13 @@ export class ImageUpdateStagingService {
     private readonly secret: Buffer,
   ) {}
 
+  async usesRepositoryWorkflow(workspaceId: string, stackId: string): Promise<boolean> {
+    const stack = await this.stacks.findById(workspaceId, stackId);
+    if (!stack) return false;
+    const policy = await this.#read(stack, '', LEGACY_GROUPS_PATH);
+    return Boolean(policy?.blobSha);
+  }
+
   async preview(
     workspaceId: string,
     actorUserId: string,
@@ -182,12 +189,16 @@ export class ImageUpdateStagingService {
       legacyChangelogs,
     });
     // The existing workflow owns this repository's linked and documentation edits.
-    if (externalPolicy)
-      return blockedFile(
-        summary,
-        'This repository uses an external WUD update policy. Stage the changes through that workflow.',
-        rows,
-      );
+    if (externalPolicy) {
+      return {
+        ...blockedFile(
+          summary,
+          'Use your repository’s WUD update workflow to make this change. It handles Compose, related files, and version documentation together.',
+          rows,
+        ),
+        repositoryWorkflow: true,
+      };
+    }
     const stageable = new Set(rows.filter((row) => row.status !== 'blocked').map((row) => row.service));
     if (!stageable.size) return blockedFile(summary, 'None of the selected updates can be staged.', rows);
 
@@ -442,7 +453,7 @@ function reviewEvidence(
   if (missing) notes.unshift(evidence?.detail || 'No changelog link was supplied.');
   if (major) notes.push('The image major version changes.');
   const risk = major || (evidence?.signals.length ?? 0) > 0;
-  if (scanTimeUnavailable) notes.push('WUD reports this candidate without its last scan time.');
+  if (scanTimeUnavailable) notes.push('WUD supplied this tag without saying when it checked the registry.');
   const blocked = (missing && policy.missingEvidence === 'block') || (risk && policy.riskSignals === 'block');
   const status = notes.length ? 'review' : 'ready';
   return { status: blocked ? 'blocked' : status, notes, changelogUrl: evidence?.url || null };
