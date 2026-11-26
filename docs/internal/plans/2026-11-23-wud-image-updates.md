@@ -22,6 +22,12 @@ For the first migration, the source repository owns the policy. Read its `AGENTS
 
 ## 3. Gitea PR publication and cutover
 
+The native pilot reads the legacy group policy as data, resolves exact GitHub release tags, prepares linked
+Compose and TechStack edits, and publishes a single commit to a dedicated Gitea proposal branch. Scheduled
+publication is opt-in. This pilot keeps one open image proposal per repository and adopts only an identical
+existing proposal. Refreshing a changed open PR, independent review lanes, and full compatibility parity with
+the earlier job remain cutover work.
+
 - [ ] Add a capability-gated branch/PR workflow to the Git provider. Use an isolated index and push without force. For the first migration, keep one routine PR per repository, independent review PRs per atomic group, and drafts for evidence gaps. Preserve confirmed incompatibilities and unsafe linked-image combinations as withheld outcomes. Reuse repository locking and source validation.
 - [ ] Detect overlaps against open PRs. Follow the source repository's WUD-first policy for ordinary project PRs by recording overlaps and relying on its image guard and reconciliation process. Keep existing automation PR identity and update trailers compatible with those checks. Reconcile by head branch and commit after uncertain publication. Preserve human changes on existing branches and verify that branch pushes leave tracked-branch deployment routing untouched.
 - [ ] Compare both workflows in report-only mode, including the installed WUD API shape and credential mechanism. Keep the existing CI image guard and reconciliation active through cutover. Document setup, matching, status meanings and rollback. Add an authenticated WUD HTTP trigger as an optional refresh signal after polling works independently.

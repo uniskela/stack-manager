@@ -75,7 +75,7 @@ export class SqliteWudRepository implements WudRepository {
     at: Date,
     result: Parameters<WudRepository['recordRefresh']>[3],
   ) {
-    this.db
+    const updated = this.db
       .update(wudConnections)
       .set(
         'observations' in result
@@ -90,6 +90,7 @@ export class SqliteWudRepository implements WudRepository {
         ),
       )
       .run();
+    return updated.changes === 1;
   }
 
   async bindings(workspaceId: string) {

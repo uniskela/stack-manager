@@ -3,9 +3,25 @@ import { ChangelogReader } from '@/server/providers/changelog/reader';
 import type { readHttps } from '@/server/security/https-read';
 
 const source = 'https://example.com/CHANGELOG.md';
+const github = 'https://github.com/henrygd/beszel/releases/tag/';
+const githubReleases = '/repos/henrygd/beszel/releases';
 
 function fixture(text: string, status = 200) {
   const read = vi.fn<typeof readHttps>().mockResolvedValue({ status, body: Buffer.from(text) });
+  return { read, reader: new ChangelogReader({ read }) };
+}
+
+function release(tag: string, body: string | null) {
+  return { tag_name: tag, draft: false, published_at: '2026-11-23T04:30:00Z', body };
+}
+
+function githubFixture(responses: Record<string, unknown>) {
+  const read = vi.fn<typeof readHttps>().mockImplementation(async (url) => {
+    const payload = responses[url.pathname];
+    return payload === undefined
+      ? { status: 404, body: Buffer.alloc(0) }
+      : { status: 200, body: Buffer.from(JSON.stringify(payload)) };
+  });
   return { read, reader: new ChangelogReader({ read }) };
 }
 
@@ -251,5 +267,187 @@ Breaking change: remove the legacy configuration.
     expect(result.status).toBe('unavailable');
     expect(result.url).toBe(source);
     expect(result.detail).not.toContain('secret detail');
+  });
+
+  it('resolves an adjacent GitHub release after the exact unprefixed tag returns 404', async () => {
+    const { read, reader } = githubFixture({
+      [githubReleases + '/tags/v0.21.0']: release('v0.21.0', 'Earlier release.'),
+      [githubReleases + '/tags/v0.21.1']: release('v0.21.1', '- Upgrade the database.'),
+    });
+
+    await expect(reader.check(github + '0.21.1', '0.21.0', '0.21.1')).resolves.toMatchObject({
+      status: 'checked',
+      url: github + 'v0.21.1',
+      signals: ['Upgrade the database.'],
+    });
+    const [first, options] = read.mock.calls[0]!;
+    expect(first.href).toBe('https://api.github.com' + githubReleases + '/tags/0.21.1');
+    expect(options.allowPrivateNetworks).toBe(false);
+  });
+
+  it('shares in-flight GitHub lookups and reuses the release responses on later checks', async () => {
+    const { read, reader } = githubFixture({
+      [githubReleases + '/tags/v0.21.0']: release('v0.21.0', 'Earlier release.'),
+      [githubReleases + '/tags/v0.21.1']: release('v0.21.1', 'New release.'),
+    });
+    const check = () => reader.check(github + '0.21.1', '0.21.0', '0.21.1');
+    await expect(Promise.all([check(), check()])).resolves.toEqual([
+      expect.objectContaining({ status: 'checked' }),
+      expect.objectContaining({ status: 'checked' }),
+    ]);
+    expect(read).toHaveBeenCalledTimes(4);
+    await expect(check()).resolves.toMatchObject({ status: 'checked' });
+    expect(read).toHaveBeenCalledTimes(4);
+  });
+
+  it('retries a transient GitHub API failure on the next check', async () => {
+    const { read, reader } = githubFixture({
+      [githubReleases + '/tags/v0.21.0']: release('v0.21.0', 'Earlier release.'),
+      [githubReleases + '/tags/v0.21.1']: release('v0.21.1', 'New release.'),
+    });
+    read.mockResolvedValueOnce({ status: 429, body: Buffer.alloc(0) });
+    const check = () => reader.check(github + 'v0.21.1', 'v0.21.0', 'v0.21.1');
+    await expect(check()).resolves.toMatchObject({ status: 'unavailable' });
+    await expect(check()).resolves.toMatchObject({ status: 'checked' });
+  });
+
+  it('retries a failed shared GitHub request under the waiting check’s own deadline', async () => {
+    const { read, reader } = githubFixture({
+      [githubReleases + '/tags/v0.21.0']: release('v0.21.0', 'Earlier release.'),
+      [githubReleases + '/tags/v0.21.1']: release('v0.21.1', 'New release.'),
+    });
+    read.mockRejectedValueOnce(new Error('First check timed out.'));
+    const check = () => reader.check(github + 'v0.21.1', 'v0.21.0', 'v0.21.1');
+    const first = check();
+    const waiting = check();
+    expect(read).toHaveBeenCalledOnce();
+    await expect(first).resolves.toMatchObject({ status: 'unavailable' });
+    await expect(waiting).resolves.toMatchObject({ status: 'checked' });
+    expect(read.mock.calls[1]?.[1].signal).not.toBe(read.mock.calls[0]?.[1].signal);
+  });
+
+  it.each([302, 403, 429, 503])(
+    'does not substitute a GitHub tag when its lookup returns %s',
+    async (status) => {
+      const { read, reader } = githubFixture({
+        [githubReleases + '/tags/v0.21.1']: release('v0.21.1', '- Upgrade the database.'),
+      });
+      read.mockResolvedValueOnce({ status, body: Buffer.alloc(0) });
+
+      await expect(reader.check(github + '0.21.1', '0.21.0', '0.21.1')).resolves.toMatchObject({
+        status: 'unavailable',
+        signals: [],
+      });
+      expect(read).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each([release('v0.21.1-rc.1', '- Breaking change.'), { ...release('v0.21.1', null), draft: true }])(
+    'rejects a GitHub payload without the exact published tag',
+    async (payload) => {
+      const { reader } = githubFixture({ [githubReleases + '/tags/v0.21.1']: payload });
+      await expect(reader.check(github + 'v0.21.1', '0.21.0', '0.21.1')).resolves.toMatchObject({
+        status: 'unavailable',
+        signals: [],
+      });
+    },
+  );
+
+  it('keeps target release evidence incomplete when the installed tag is missing', async () => {
+    const { reader } = githubFixture({
+      [githubReleases + '/tags/0.21.1']: release('0.21.1', '- Manual intervention required.'),
+    });
+
+    await expect(reader.check(github + '0.21.1', '0.21.0', '0.21.1')).resolves.toMatchObject({
+      status: 'incomplete',
+      url: github + '0.21.1',
+      signals: ['Manual intervention required.'],
+    });
+  });
+
+  it('reads the target and intervening GitHub releases without using older or newer release notes', async () => {
+    const current = release('v0.21.0', '- Deprecated in the installed release.');
+    const target = release('v0.21.2', '- Upgrade the database.');
+    const { reader } = githubFixture({
+      [githubReleases + '/tags/v0.21.0']: current,
+      [githubReleases + '/tags/v0.21.2']: target,
+      [githubReleases]: [
+        release('v0.21.3', '- Breaking change in a future version.'),
+        target,
+        release('v0.21.1', '- Manually migrate the configuration.'),
+        current,
+      ],
+    });
+
+    await expect(reader.check(github + 'v0.21.2', '0.21.0', '0.21.2')).resolves.toMatchObject({
+      status: 'checked',
+      url: github + 'v0.21.2',
+      signals: ['Upgrade the database.', 'Manually migrate the configuration.'],
+    });
+  });
+
+  it('does not claim a skipped GitHub release range from target notes alone', async () => {
+    const current = release('v0.21.0', 'Earlier release.');
+    const target = release('v0.21.2', '- Upgrade the database.');
+    const { reader } = githubFixture({
+      [githubReleases + '/tags/v0.21.0']: current,
+      [githubReleases + '/tags/v0.21.2']: target,
+      [githubReleases]: [target, current],
+    });
+
+    await expect(reader.check(github + 'v0.21.2', '0.21.0', '0.21.2')).resolves.toMatchObject({
+      status: 'incomplete',
+      url: github + 'v0.21.2',
+      signals: ['Upgrade the database.'],
+    });
+  });
+
+  it('verifies all intervening patch releases without fetching older GitHub history', async () => {
+    const current = release('v0.21.0', 'Earlier release.');
+    const target = release('v0.21.2', '- Upgrade the database.');
+    const { read, reader } = githubFixture({
+      [githubReleases + '/tags/v0.21.0']: current,
+      [githubReleases + '/tags/v0.21.2']: target,
+      [githubReleases]: [
+        target,
+        release('v0.21.1', '- Manually migrate the configuration.'),
+        current,
+        ...Array.from({ length: 17 }, (_, index) => release(`v0.20.${index}`, 'Older release.')),
+      ],
+    });
+
+    await expect(reader.check(github + 'v0.21.2', '0.21.0', '0.21.2')).resolves.toMatchObject({
+      status: 'checked',
+      url: github + 'v0.21.2',
+      signals: ['Upgrade the database.', 'Manually migrate the configuration.'],
+    });
+    expect(read.mock.calls.filter(([request]) => request.pathname === githubReleases)).toHaveLength(1);
+  });
+
+  it('does not treat a comparison link as the contents of an adjacent GitHub release', async () => {
+    const { reader } = githubFixture({
+      [githubReleases + '/tags/v0.21.0']: release('v0.21.0', 'Earlier release.'),
+      [githubReleases + '/tags/v0.21.1']: release(
+        'v0.21.1',
+        '**Full Changelog**: https://github.com/henrygd/beszel/compare/v0.21.0...v0.21.1',
+      ),
+    });
+
+    await expect(reader.check(github + 'v0.21.1', '0.21.0', '0.21.1')).resolves.toMatchObject({
+      status: 'incomplete',
+      url: github + 'v0.21.1',
+      signals: [],
+    });
+  });
+
+  it('rejects release links that reveal credential-shaped segments after normalization', async () => {
+    const { read, reader } = githubFixture({});
+    const encodedTag = '%67hp_' + 'a'.repeat(20);
+
+    await expect(reader.check(github + encodedTag, '0.21.0', '0.21.1')).resolves.toMatchObject({
+      status: 'unavailable',
+      url: '',
+    });
+    expect(read).not.toHaveBeenCalled();
   });
 });

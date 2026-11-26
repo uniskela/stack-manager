@@ -2,6 +2,7 @@ import { isIP } from 'node:net';
 import { raw } from 'hast-util-raw';
 import { fromMarkdown } from 'mdast-util-from-markdown';
 import { toHast } from 'mdast-util-to-hast';
+import { z } from 'zod';
 import { readHttps } from '@/server/security/https-read';
 import { classifyAddress } from '@/server/security/network-policy';
 import { scrubString } from '@/server/security/redact';
@@ -17,6 +18,20 @@ const MAX_RESPONSE_BYTES = 256 * 1024;
 const REQUEST_TIMEOUT_MS = 5_000;
 const MAX_SIGNALS = 8;
 const MAX_EXCERPT_LENGTH = 240;
+const GITHUB_RELEASE_PAGE_SIZE = 20;
+const MAX_GITHUB_RELEASE_PAGES = 3;
+const MAX_CACHED_GITHUB_RESPONSES = 64;
+const GITHUB_RELEASE_TTL_MS = 30 * 60_000;
+const GITHUB_NOT_FOUND_TTL_MS = 5 * 60_000;
+const githubRelease = z.object({
+  tag_name: z.string(),
+  draft: z.literal(false),
+  published_at: z.iso.datetime(),
+  body: z.string().nullish(),
+});
+const githubReleasePage = z.array(githubRelease).max(GITHUB_RELEASE_PAGE_SIZE);
+type GitHubRelease = z.infer<typeof githubRelease>;
+type StableVersion = [number, number, number];
 const VERSION_CORE = /^v?\d+(?:\.\d+){1,3}$/i;
 const VERSION_METADATA = /^[\da-z-]+(?:\.[\da-z-]+)*$/i;
 const VERSION_PREFIX = /^(?:release|version) /i;
@@ -264,7 +279,144 @@ function inspectNotes(url: string, text: string, currentTag: string, targetTag: 
   };
 }
 
+function stableVersion(tag: string): StableVersion | null {
+  const match = /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.exec(tag);
+  if (!match) return null;
+  const version: StableVersion = [Number(match[1]), Number(match[2]), Number(match[3])];
+  return version.every(Number.isSafeInteger) ? version : null;
+}
+
+function compareVersion(a: StableVersion, b: StableVersion): number {
+  return a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
+}
+
+function patchDistance(from: StableVersion, to: StableVersion): number | null {
+  return from[0] === to[0] && from[1] === to[1] ? to[2] - from[2] : null;
+}
+
+type ReadGitHub = (path: string) => Promise<{ status: number; body: Buffer }>;
+
+function parseJson(body: Buffer): unknown {
+  return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(body));
+}
+
+async function findGitHubRelease(read: ReadGitHub, tag: string): Promise<GitHubRelease | null> {
+  if (!/^[\da-z][\da-z._+/-]{0,254}$/i.test(tag) || tag.includes('..')) return null;
+  let response = await read(`/tags/${encodeURIComponent(tag)}`);
+  if (response.status === 404 && /^\d/.test(tag) && normalizedVersion(tag)) {
+    tag = `v${tag}`;
+    response = await read(`/tags/${encodeURIComponent(tag)}`);
+  }
+  if (response.status !== 200) return null;
+
+  const release = githubRelease.safeParse(parseJson(response.body)).data;
+  return release?.tag_name === tag ? release : null;
+}
+
+function gitHubNoteLines(release: GitHubRelease): string[] {
+  return Array.from(documentLines(release.body ?? ''), ({ text }) => text).filter(
+    (line) => !/^full changelog:?$/i.test(line),
+  );
+}
+
+async function gitHubRange(
+  read: ReadGitHub,
+  installed: GitHubRelease,
+  target: GitHubRelease,
+  from: StableVersion,
+  to: StableVersion,
+) {
+  const seen = new Set<string>();
+  const patches = new Set<number>();
+  const patchSteps = patchDistance(from, to);
+  const between: { version: StableVersion; release: GitHubRelease }[] = [];
+  let complete = false;
+  for (let page = 1; page <= MAX_GITHUB_RELEASE_PAGES; page++) {
+    const releases = await read(`?per_page=${GITHUB_RELEASE_PAGE_SIZE}&page=${page}`)
+      .then(({ status, body }) => (status === 200 ? githubReleasePage.safeParse(parseJson(body)).data : null))
+      .catch(() => null);
+    if (!releases || releases.some((release) => seen.has(release.tag_name))) break;
+    for (const release of releases) {
+      seen.add(release.tag_name);
+      const version = stableVersion(release.tag_name);
+      if (version && compareVersion(version, from) > 0 && compareVersion(version, to) < 0) {
+        between.push({ release, version });
+        patches.add(version[2]);
+      }
+    }
+    if (patchSteps !== null && patches.size === patchSteps - 1) {
+      complete = true;
+      break;
+    }
+    if (releases.length < GITHUB_RELEASE_PAGE_SIZE) {
+      // GitHub's release list is not sorted by version. Cross-minor ranges need the full list.
+      complete =
+        patchSteps === null &&
+        seen.has(installed.tag_name) &&
+        seen.has(target.tag_name) &&
+        between.length > 0;
+      break;
+    }
+  }
+
+  between.sort((a, b) => compareVersion(b.version, a.version));
+  return { complete, notes: between.map(({ release }) => gitHubNoteLines(release)) };
+}
+
+async function inspectGitHubRelease(
+  read: ReadGitHub,
+  publicUrl: string,
+  currentTag: string,
+  targetTag: string,
+  linkedTag: string,
+): Promise<ChangelogEvidence> {
+  const expected = normalizedVersion(targetTag);
+  const linked = normalizedVersion(linkedTag);
+  const requestedUrl = safeChangelogUrl(publicUrl + encodeURIComponent(linkedTag));
+  if (!requestedUrl) return unavailable('', 'Use a public HTTPS changelog URL without embedded credentials.');
+  if (expected && linked && expected !== linked) {
+    return unavailable(requestedUrl, 'The GitHub release link identifies a different version.');
+  }
+  const target = await findGitHubRelease(read, linkedTag);
+  if (!target) return unavailable(requestedUrl, 'Could not verify the exact published GitHub release.');
+
+  const url = publicUrl + encodeURIComponent(target.tag_name);
+  const targetNotes = gitHubNoteLines(target);
+  const from = stableVersion(currentTag);
+  const to = stableVersion(targetTag);
+  let complete = false;
+  let notes = [targetNotes];
+
+  if (from && to && expected === linked && compareVersion(to, from) > 0) {
+    const installed = await findGitHubRelease(read, currentTag).catch(() => null);
+    if (installed) {
+      if (patchDistance(from, to) === 1) {
+        complete = true;
+      } else {
+        const range = await gitHubRange(read, installed, target, from, to);
+        complete = range.complete;
+        notes = [targetNotes, ...range.notes];
+      }
+    }
+  }
+
+  const checked = complete && notes.every((lines) => lines.length > 0);
+  return {
+    status: checked ? 'checked' : 'incomplete',
+    url,
+    signals: extractSignals(notes.flat()),
+    detail: checked
+      ? 'Found published GitHub release notes spanning the installed and target versions.'
+      : 'Could not verify published GitHub release notes spanning the installed and target versions.',
+  };
+}
+
 export class ChangelogReader {
+  private readonly githubResponses = new Map<
+    string,
+    { response: ReturnType<ReadGitHub>; expiresAt: number }
+  >();
+
   constructor(private readonly options: { read?: typeof readHttps } = {}) {}
 
   async check(rawUrl: string, currentTag: string, targetTag: string): Promise<ChangelogEvidence> {
@@ -274,11 +426,31 @@ export class ChangelogReader {
     try {
       const request = new URL(url);
       request.hash = '';
-      const { status, body } = await (this.options.read ?? readHttps)(request, {
-        headers: { Accept: 'text/plain, text/markdown, text/html' },
+      const read = this.options.read ?? readHttps;
+      const options = {
         allowPrivateNetworks: false,
         maxBytes: MAX_RESPONSE_BYTES,
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      };
+      const github =
+        request.origin === 'https://github.com' &&
+        /^\/([\da-z-]+\/[\da-z_.-]+)\/releases\/tag\/(.+?)\/?$/i.exec(request.pathname);
+      if (github) {
+        const repo = github[1]!;
+        const tag = github[2]!;
+        const api = `https://api.github.com/repos/${repo.toLowerCase()}/releases`;
+        return await inspectGitHubRelease(
+          (path) => this.readGitHub(new URL(api + path), options.signal),
+          `https://github.com/${repo}/releases/tag/`,
+          currentTag,
+          targetTag,
+          decodeURIComponent(tag),
+        );
+      }
+
+      const { status, body } = await read(request, {
+        ...options,
+        headers: { Accept: 'text/plain, text/markdown, text/html' },
       });
       if (status !== 200) return unavailable(url, 'Unable to read the public changelog.');
       const text = new TextDecoder('utf-8', { fatal: true }).decode(body);
@@ -286,5 +458,50 @@ export class ChangelogReader {
     } catch {
       return unavailable(url, 'Unable to read the public changelog.');
     }
+  }
+
+  private async readGitHub(url: URL, signal: AbortSignal): ReturnType<ReadGitHub> {
+    signal.throwIfAborted();
+    const key = url.href;
+    const cached = this.githubResponses.get(key);
+    this.githubResponses.delete(key);
+    if (cached && cached.expiresAt > Date.now()) {
+      this.githubResponses.set(key, cached);
+      let result: Awaited<ReturnType<ReadGitHub>>;
+      try {
+        result = await cached.response;
+      } catch {
+        // The originating check can time out before this check's deadline.
+        return this.readGitHub(url, signal);
+      }
+      signal.throwIfAborted();
+      return result;
+    }
+
+    const read = this.options.read ?? readHttps;
+    const entry = {
+      expiresAt: Date.now() + REQUEST_TIMEOUT_MS,
+      response: read(url, {
+        allowPrivateNetworks: false,
+        maxBytes: MAX_RESPONSE_BYTES,
+        signal,
+        headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'Stack-Manager' },
+      }),
+    };
+    this.githubResponses.set(key, entry);
+    if (this.githubResponses.size > MAX_CACHED_GITHUB_RESPONSES) {
+      this.githubResponses.delete(this.githubResponses.keys().next().value!);
+    }
+    const forget = () => {
+      if (this.githubResponses.get(key) === entry) this.githubResponses.delete(key);
+    };
+    void entry.response.then(({ status }) => {
+      if (status === 200 || status === 404) {
+        entry.expiresAt = Date.now() + (status === 200 ? GITHUB_RELEASE_TTL_MS : GITHUB_NOT_FOUND_TTL_MS);
+      } else {
+        forget();
+      }
+    }, forget);
+    return entry.response;
   }
 }

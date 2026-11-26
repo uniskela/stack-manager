@@ -105,6 +105,25 @@ async function assertCloneUsable() {
 }
 
 describe('isolated Git commits', () => {
+  it('pushes an update proposal from the fetched base and reuses it on retry', async () => {
+    const proposalBranch = 'stack-manager/image-updates/' + 'a'.repeat(32);
+    const input = { ...commitInput(), proposalBranch };
+    const proposed = await provider.pushProposal(input);
+    expect(proposed.parents).toEqual([headSha]);
+    expect(await changedPaths(proposed.sha)).toEqual(['compose.yaml']);
+    expect(await provider.pushProposal(input)).toEqual(proposed);
+    const { stdout } = await git.run(
+      ['ls-remote', '--refs', '--', REMOTE, 'refs/heads/main', `refs/heads/${proposalBranch}`],
+      { cwd: cloneDir, auth: AUTH },
+    );
+    expect(stdout.trim().split('\n')).toEqual([
+      `${headSha}\trefs/heads/main`,
+      `${proposed.sha}\trefs/heads/${proposalBranch}`,
+    ]);
+    expect((await provider.inspectBranch(connection())).localHeadSha).toBe(headSha);
+    await assertCleanedUp();
+  });
+
   it('releases the repository lock even if closing its handle fails', async () => {
     const open = fs.open.bind(fs);
     const spy = vi.spyOn(fs, 'open').mockImplementationOnce(async (...args) => {
@@ -344,6 +363,19 @@ describe('isolated Git commits', () => {
     await assertCloneUsable();
     await provider.commit(commitInput());
     await assertCleanedUp();
+  });
+
+  it('preserves the original commit error when worktree cleanup also fails', async () => {
+    const operationError = new GitOperationError('unknown', 'Injected commit failure.');
+    git.beforeRun = (args) => {
+      if (args.includes('commit')) throw operationError;
+      if (args[0] === 'worktree' && args[1] !== 'add') {
+        throw new GitOperationError('unknown', 'Injected worktree cleanup failure.');
+      }
+    };
+    await expect(provider.commit(commitInput())).rejects.toBe(operationError);
+    expect(git.calls.some(([command, action]) => command === 'worktree' && action === 'remove')).toBe(true);
+    await assertCloneUsable();
   });
 
   it('recovers from a failed first worktree removal without leaving registrations or draft files', async () => {

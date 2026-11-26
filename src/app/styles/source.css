@@ -27,6 +27,8 @@
 }
 
 .tabs {
+  /* Keep the visually hidden draft label inside the horizontal scroller. */
+  position: relative;
   display: flex;
   gap: var(--space-1);
   overflow-x: auto;

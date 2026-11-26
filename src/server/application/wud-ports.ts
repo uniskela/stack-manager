@@ -33,7 +33,7 @@ export interface WudRepository {
     revision: string,
     at: Date,
     result: { observations: WudObservation[] } | { error: NonNullable<WudConnection['lastError']> },
-  ): Promise<void>;
+  ): Promise<boolean>;
   bindings(workspaceId: string): Promise<WudStackBinding[]>;
   setBinding(workspaceId: string, stackId: string, binding: WudBinding | null): Promise<void>;
   saveDiscoveredBinding(

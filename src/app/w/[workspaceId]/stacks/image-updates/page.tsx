@@ -1,10 +1,12 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { Suspense } from 'react';
 import { getContainer } from '@/server/container';
 import { WudRefresh } from '@/ui/image-updates/forms';
 import { ImageUpdateTable } from '@/ui/image-updates/image-table';
 import { WudMappingDiscovery } from '@/ui/image-updates/mapping-discovery';
 import { ImageUpdatePlanner } from '@/ui/image-updates/planner';
+import { ImageUpdatePullRequests } from '@/ui/image-updates/pull-requests';
 import { ButtonLink } from '@/ui/primitives/button';
 import { PageHeader } from '@/ui/primitives/page-header';
 import { Section, SectionTitle } from '@/ui/primitives/section';
@@ -34,6 +36,9 @@ export default async function WorkspaceImageUpdatesPage({
           <ButtonLink href={`${base}/settings/wud`}>{connection ? 'WUD settings' : 'Connect WUD'}</ButtonLink>
         }
       />
+      <Suspense fallback={null}>
+        <OpenImageUpdatePullRequests workspaceId={workspaceId} />
+      </Suspense>
       {connection ? (
         <>
           <WudRefresh
@@ -81,4 +86,11 @@ export default async function WorkspaceImageUpdatesPage({
       ))}
     </div>
   );
+}
+
+async function OpenImageUpdatePullRequests({ workspaceId }: Readonly<{ workspaceId: string }>) {
+  const { wudImageUpdateReview } = getContainer();
+  const queue = await wudImageUpdateReview.list(workspaceId);
+  if (!queue.pulls.length && !queue.unreadableRepositories) return null;
+  return <ImageUpdatePullRequests workspaceId={workspaceId} queue={queue} />;
 }

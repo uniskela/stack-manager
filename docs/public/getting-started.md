@@ -106,8 +106,8 @@ On a stack’s **Image updates** tab, open **Image update setup guide** to conne
 1. Open a stack's **Image updates** tab or go to **Stacks → Image updates** for a batch across stacks.
 2. Pick a **Compose service to update** and enter a **New image tag**, such as `1.5.5`. **Add tags suggested by WUD** adds the tags WUD found. You can use both in one batch.
 3. Optionally enter a public HTTPS **Release notes link** for each image. Choose a page that covers the tag saved in Git and the suggested or entered tag. Stack Manager shows relevant excerpts and flags incomplete evidence for review.
-4. Choose **Review proposed updates**, then select the files you want and choose **Save selected drafts**. Acknowledge any warnings for the files you include. A policy exclusion skips its update. If a file already has a draft, you can still save other files.
-5. Open **Changes** to inspect or discard the drafts and follow your repository’s Git workflow.
+4. Choose **Review proposed updates**. For a Gitea repository with linked update groups, review all changed files and choose **Create update pull request**. Use **Create draft pull request** when the update needs more review.
+5. For Compose-only updates, choose **Save selected drafts**, then open **Changes** to inspect and commit them. Existing drafts stay in place.
 
 For automatic suggestions, create an API token with the `read` scope in WUD 9.9. Enter the HTTPS base URL and token under **Settings → WUD** and choose **Test and save**. Stack Manager reads WUD's stored results every 15 minutes with the worker enabled. **Refresh from WUD** reads those results on demand, and WUD checks registries on its own schedule.
 
@@ -139,7 +139,27 @@ Both sources are enabled by default. Set `missingEvidence` or `riskSignals` to `
 
 An entered link takes precedence over the service or image link in Git, followed by a WUD-provided link when available. Link paths can contain `{{current}}` and `{{target}}`.
 
-**Preview only** means the repository has a WUD update policy at `docs/wud-update-groups.json`. Use the repository’s WUD workflow to prepare the update with its associated files and documentation. **Open setup guide** takes you to the repository’s workflow instructions and pull requests. If the fetched commit contains the Portainer WUD Updates skill, the guide links to that skill and explains how to use the existing Orca job.
+#### Linked updates and automatic pull requests
+
+For a Gitea repository with a write-capable token, `docs/wud-update-groups.json`, and both TechStack documents,
+Stack Manager reads the groups from Git and shows one diff for Compose, the linked files, and the matching
+entries in `docs/TechStack.md` and `docs/TechStack.json`. Select every member together when the policy requires it.
+Stack Manager puts the reviewed changes in one commit on a proposal branch. Git stays the source of truth
+and the tracked branch can keep its normal review and deployment rules.
+
+Open **Stacks → Image updates → Update pull requests** to see Gitea’s checks. **Merge update** is available
+for a ready proposal after its current commit passes checks. Gitea still enforces the repository’s review and
+branch protections. Draft pull requests need review and must be marked ready in Gitea first.
+
+Use `"automation": { "mode": "report" }` in `.stack-manager/image-updates.json` to check candidates after
+each WUD refresh and record the result in **Activity**. After comparing with your existing update job, set
+`"mode": "publish"` and provide an `author` with `name` and `email` in that object. Ready updates can then
+create a Gitea pull request on each refresh. Updates with missing evidence or compatibility warnings stay
+in **Image updates** for review. Stack Manager reuses an identical open proposal and waits when the
+repository already has another open update pull request.
+
+**Preview only** remains available for linked repositories that use an external workflow. **Open setup guide**
+links to that workflow and its pull requests.
 
 ### Drafts
 

@@ -168,6 +168,60 @@ test('shows the repository workflow instead of draft controls for preview-only u
     `${stackUrl()}/image-updates/setup`,
   );
   await expect(page.getByRole('button', { name: 'Save selected drafts' })).toHaveCount(0);
+
+  const publication = `/api/workspaces/${workspaceId}/image-updates/publish`;
+  let requested: unknown;
+  await page.route(`**${publication}`, (route) => {
+    requested = route.request().postDataJSON();
+    return route.fulfill({
+      json: {
+        number: 21,
+        url: 'https://git.test/test/stacks/pulls/21',
+        headSha: 'a'.repeat(40),
+        repositoryId: sample().repositoryId,
+      },
+    });
+  });
+  await page.unroute(`**/api/workspaces/${workspaceId}/image-updates/preview`);
+  await page.route(`**/api/workspaces/${workspaceId}/image-updates/preview`, (route) =>
+    route.fulfill({
+      json: {
+        files: [
+          {
+            stackId,
+            stackName: 'Sample',
+            path: 'nginx-golang/compose.yaml',
+            status: 'review',
+            reason: null,
+            token: 'reviewed-change',
+            changes: [],
+            proposal: [
+              {
+                path: 'docs/TechStack.md',
+                hunks: [
+                  {
+                    oldStart: 1,
+                    oldLines: 1,
+                    newStart: 1,
+                    newLines: 1,
+                    lines: ['-nginx:1.29.1', '+nginx:1.29.2'],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    }),
+  );
+  await page.getByRole('button', { name: 'Review proposed updates' }).press('Enter');
+  await preview.getByText('Review 1 changed file').click();
+  await expect(preview.getByRole('table', { name: 'Changes to docs/TechStack.md' })).toContainText(
+    'nginx:1.29.2',
+  );
+  await preview.getByRole('button', { name: 'Create draft pull request' }).press('Enter');
+  await expect(preview.getByRole('link', { name: 'Review pull request #21 in Stack Manager' })).toBeVisible();
+  expect(requested).toEqual({ token: 'reviewed-change', acknowledgeReview: true });
 });
 
 test('changes shows diffs, commit form, missing identity and is accessible', async ({ page }) => {
@@ -477,6 +531,7 @@ test('mobile: changes commit layout and accessibility', async ({ page }) => {
   const marker = `mobile-${Date.now()}`;
   await openChangesWithDraft(page, marker);
 
+  await expect(page.locator('html')).toHaveJSProperty('scrollWidth', page.viewportSize()?.width);
   await expect(page.getByRole('region', { name: 'Commit changes' })).toBeVisible();
   await expect(page.getByLabel('Commit message')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Commit', exact: true })).toBeVisible();

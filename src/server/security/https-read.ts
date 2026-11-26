@@ -10,6 +10,8 @@ export async function readHttps(
     resolver?: Resolver;
     signal: AbortSignal;
     maxBytes: number;
+    method?: 'GET' | 'POST';
+    body?: string;
   },
 ): Promise<{ status: number; body: Buffer }> {
   if (url.protocol !== 'https:' || url.username || url.password) throw new Error('HTTPS required');
@@ -30,15 +32,24 @@ export async function readHttps(
     else callback(null, address, family);
   };
   const response = await new Promise<import('node:http').IncomingMessage>((resolve, reject) => {
-    const request = https.get(
+    const request = https.request(
       url,
-      { agent: false, lookup, signal, maxHeaderSize: 16_384, headers: options.headers },
+      {
+        agent: false,
+        lookup,
+        signal,
+        maxHeaderSize: 16_384,
+        method: options.method ?? 'GET',
+        headers: options.headers,
+      },
       resolve,
     );
     request.on('error', reject);
+    request.end(options.body);
   });
   const status = response.statusCode ?? 0;
-  if (status !== 200) {
+  const success = options.method === 'POST' ? status >= 200 && status < 300 : status === 200;
+  if (!success) {
     response.destroy();
     return { status, body: Buffer.alloc(0) };
   }
