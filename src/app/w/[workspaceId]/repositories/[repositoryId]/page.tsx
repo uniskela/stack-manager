@@ -112,11 +112,7 @@ export default async function RepositoryPage({
 
       <Section id="repo-branches" title="Branches">
         {branches.length > 0 ? (
-          <ul className="branch-list">
-            {branches.map((b) => (
-              <li key={b}>{b}</li>
-            ))}
-          </ul>
+          <BranchList branches={branches} defaultBranch={repo.defaultBranch} />
         ) : (
           <p className="muted">Branches appear after the first successful fetch.</p>
         )}
@@ -145,5 +141,36 @@ export default async function RepositoryPage({
         <RemoveRepository workspaceId={workspaceId} repositoryId={repo.id} />
       </Section>
     </div>
+  );
+}
+
+const VISIBLE_BRANCHES = 12;
+
+/** Default branch first; long lists (bot branches pile up quickly) fold behind a native disclosure. */
+function BranchList({ branches, defaultBranch }: { branches: string[]; defaultBranch: string | null }) {
+  const ordered =
+    defaultBranch && branches.includes(defaultBranch)
+      ? [defaultBranch, ...branches.filter((b) => b !== defaultBranch)]
+      : branches;
+  const shown = ordered.slice(0, VISIBLE_BRANCHES);
+  const rest = ordered.slice(VISIBLE_BRANCHES);
+  const item = (b: string) => (
+    <li key={b} className={b === defaultBranch ? 'is-default' : undefined}>
+      {b}
+      {b === defaultBranch ? <span className="visually-hidden"> (default)</span> : null}
+    </li>
+  );
+  return (
+    <>
+      <ul className="branch-list">{shown.map(item)}</ul>
+      {rest.length > 0 ? (
+        <details className="branch-more">
+          <summary>
+            Show {rest.length} more {rest.length === 1 ? 'branch' : 'branches'}
+          </summary>
+          <ul className="branch-list">{rest.map(item)}</ul>
+        </details>
+      ) : null}
+    </>
   );
 }

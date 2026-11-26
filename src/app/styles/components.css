@@ -2,7 +2,9 @@
 
 /* ---------- Page header and breadcrumbs ---------- */
 .page-head {
-  margin-bottom: var(--space-5);
+  margin-bottom: var(--space-6);
+  padding-bottom: var(--space-5);
+  border-bottom: 1px solid var(--border);
 }
 
 .page-head-row {
@@ -32,7 +34,8 @@
 }
 
 .page-desc {
-  margin: var(--space-1) 0 0;
+  margin: var(--space-2) 0 0;
+  max-width: 68ch;
 }
 
 .breadcrumbs ol {
@@ -94,6 +97,119 @@
   margin-bottom: var(--space-5);
 }
 
+/* First-run and sign-in: an ink panel that says what the app is, beside the form that starts using it. */
+.auth-shell {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: minmax(18rem, 0.9fr) minmax(0, 1.1fr);
+}
+
+.auth-intro {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding: var(--space-8) clamp(var(--space-6), 5vw, 4rem);
+  background: var(--ink);
+  color: var(--ink-text);
+  overflow: hidden;
+}
+
+.auth-intro .brand {
+  position: relative;
+  color: var(--ink-text-strong);
+}
+
+/* The logo's ribbon at poster size, cropped by the panel edge. */
+.auth-ribbon {
+  position: absolute;
+  top: -3rem;
+  right: -5rem;
+  width: min(26rem, 70%);
+  height: auto;
+  pointer-events: none;
+}
+
+.auth-intro > :not(.auth-ribbon) {
+  position: relative;
+}
+
+.auth-intro h2 {
+  max-width: 18ch;
+  margin: auto 0 0;
+  color: var(--ink-text-strong);
+  font-size: clamp(1.6rem, 2.6vw, 2.25rem);
+  font-stretch: 118%;
+  line-height: 1.1;
+}
+
+.auth-points {
+  display: grid;
+  gap: var(--space-4);
+  max-width: 30rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.auth-points li {
+  display: grid;
+  grid-template-columns: 1.5rem minmax(0, 1fr);
+  gap: var(--space-3);
+}
+
+.auth-points .icon {
+  margin-top: 0.2em;
+  color: var(--signal);
+}
+
+.auth-points strong {
+  display: block;
+  color: var(--ink-text-strong);
+  font-weight: 650;
+}
+
+.auth-intro .fine-print {
+  margin: 0;
+  color: var(--ink-text);
+}
+
+.auth-main {
+  display: grid;
+  place-items: center;
+  padding: var(--space-8) var(--space-5);
+}
+
+.auth-main .auth-card .card {
+  padding: var(--space-7) var(--space-6);
+}
+
+@media (max-width: 860px) {
+  .auth-shell {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+  }
+  .auth-intro {
+    gap: var(--space-4);
+    padding: var(--space-5) var(--space-4) var(--space-6);
+  }
+  .auth-intro h2 {
+    margin-top: var(--space-2);
+    font-size: 1.45rem;
+  }
+  .auth-points,
+  .auth-ribbon {
+    display: none;
+  }
+  .auth-main {
+    align-items: start;
+    padding: var(--space-6) var(--space-4);
+  }
+  .auth-main .auth-card .card {
+    padding: var(--space-5);
+  }
+}
+
 .steps {
   display: flex;
   gap: var(--space-2);
@@ -134,9 +250,9 @@
 }
 
 .steps [aria-current='step'] .num {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-contrast);
+  background: var(--signal);
+  border-color: var(--signal-fold);
+  color: var(--signal-ink);
 }
 
 .steps .done .num {
@@ -186,7 +302,12 @@
   align-items: baseline;
   justify-content: space-between;
   gap: var(--space-1) var(--space-4);
-  margin: var(--space-7) 0 var(--space-3);
+  margin: var(--space-8) 0 var(--space-3);
+}
+
+.section-title > :not(h2) {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
 }
 
 .section-title h2 {
@@ -226,9 +347,15 @@
   align-items: flex-start;
 }
 
+a.list-row,
+button.list-row {
+  transition: background-color var(--duration-fast);
+}
+
 a.list-row:hover,
 button.list-row:hover {
   background: var(--surface-2);
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 /* Reset UA button colours so dark-mode titles keep AA contrast on collapse headers. */
@@ -290,18 +417,18 @@ button.list-row {
 }
 
 .empty .empty-icon {
-  width: 40px;
-  height: 40px;
-  padding: var(--space-2);
+  width: 48px;
+  height: 48px;
+  padding: 11px;
   border-radius: var(--radius);
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--ink);
+  color: var(--signal);
 }
 
 .empty h1,
 .empty h2 {
-  font-size: 1.15rem;
-  margin: 0;
+  font-size: 1.3rem;
+  margin: var(--space-2) 0 0;
 }
 
 .empty p {
@@ -330,6 +457,29 @@ button.list-row {
   border-radius: var(--radius-pill);
   background: var(--surface-2);
   border: 1px solid var(--border);
+}
+
+.branch-list li.is-default {
+  background: var(--signal-soft);
+  border-color: var(--signal-fold);
+  color: var(--text);
+}
+
+.branch-more {
+  margin-top: var(--space-3);
+}
+
+.branch-more summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-height-sm);
+  color: var(--accent);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.branch-more[open] summary {
+  margin-bottom: var(--space-2);
 }
 
 /* ---------- Status pills ---------- */
@@ -424,6 +574,29 @@ textarea {
   line-height: 1.45;
 }
 
+input[type='text'],
+input[type='password'],
+input[type='url'],
+input[type='email'],
+input[type='search'],
+input[type='number'],
+textarea,
+select {
+  transition:
+    border-color var(--duration-fast),
+    box-shadow var(--duration-fast);
+}
+
+:is(input, textarea, select):hover:not(:disabled, :focus) {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border-strong));
+}
+
+:is(input, textarea, select):focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
 input[aria-invalid='true'] {
   border-color: var(--danger);
 }
@@ -490,7 +663,14 @@ fieldset {
   color: var(--text);
   cursor: pointer;
   text-decoration: none;
-  transition: background-color var(--duration-fast);
+  transition:
+    background-color var(--duration-fast),
+    border-color var(--duration-fast),
+    transform var(--duration-fast);
+}
+
+.btn:not(.primary, .danger, .ghost):hover:not(:disabled) {
+  border-color: var(--text-muted);
 }
 
 .btn:hover {
@@ -506,14 +686,21 @@ fieldset {
   cursor: progress;
 }
 
+/* Signal yellow: the one action that moves work forward. The darker lower edge is the paper's fold. */
 .btn.primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-contrast);
+  background: var(--signal);
+  border-color: var(--signal-fold);
+  color: var(--signal-ink);
+  box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--signal-fold) 55%, transparent);
 }
 
 .btn.primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent) 88%, black);
+  background: var(--signal-hover);
+}
+
+.btn.primary:active:not(:disabled) {
+  box-shadow: none;
+  transform: translateY(1px);
 }
 
 .btn.danger {
@@ -534,6 +721,7 @@ fieldset {
 .btn.ghost:hover:not(:disabled) {
   color: var(--text);
   background: var(--surface-2);
+  border-color: transparent;
 }
 
 .btn.small {
@@ -553,9 +741,10 @@ fieldset {
   gap: var(--space-2);
   align-items: flex-start;
   border-radius: var(--radius-sm);
-  padding: 0.7rem 0.9rem;
+  padding: 0.75rem 0.95rem;
   font-size: 0.92rem;
   border: 1px solid transparent;
+  border-inline-start: 4px solid currentColor;
 }
 
 .alert > .icon {
@@ -587,8 +776,9 @@ fieldset {
 }
 
 .alert.info {
-  background: var(--surface-2);
-  border-color: var(--border);
+  background: var(--accent-soft);
+  border-color: transparent;
+  border-inline-start-color: var(--accent);
   color: var(--text);
 }
 
@@ -618,6 +808,12 @@ table.simple tbody tr:last-child td {
 table.simple th {
   color: var(--text-muted);
   font-weight: 600;
+  font-size: var(--text-sm);
+  background: var(--surface-2);
+}
+
+table.simple tbody tr:hover td {
+  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
 }
 
 /* ---------- Loading skeletons ---------- */
@@ -650,13 +846,68 @@ table.simple th {
 
 /* Source workspace dashboard: compact and readable with many stacks. */
 .dashboard-overview {
+  display: grid;
+  gap: var(--space-4);
   margin-bottom: var(--space-5);
+}
+
+/* The "what now" panel: one sentence of direction before any numbers. */
+.next-step {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3) var(--space-4);
+  padding: var(--space-5);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.next-step-icon {
+  width: 40px;
+  height: 40px;
+  padding: 9px;
+  border-radius: var(--radius-sm);
+  background: var(--ink);
+  color: var(--signal);
+}
+
+.next-step-error .next-step-icon {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.next-step-error {
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+}
+
+.next-step-warn {
+  border-color: color-mix(in srgb, var(--warn) 35%, var(--border));
+}
+
+.next-step-title {
+  margin: 0 0 var(--space-1);
+  font-size: 1.1rem;
+}
+
+.next-step-text p {
+  margin: 0;
+  max-width: 62ch;
+  color: var(--text-muted);
+}
+
+/* Title block: the metrics share one ruled frame, like the corner box on a drawing sheet. */
+.title-block {
+  border: 1.5px solid var(--text);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  overflow: hidden;
 }
 
 .dashboard-metrics {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--space-3);
   margin: 0;
 }
 
@@ -664,11 +915,12 @@ table.simple th {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
-  padding: var(--space-4);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  padding: var(--space-4) var(--space-5);
   min-width: 0;
+}
+
+.dashboard-metric + .dashboard-metric {
+  border-inline-start: 1px solid var(--border-strong);
 }
 
 .dashboard-metric dt {
@@ -680,17 +932,24 @@ table.simple th {
 .dashboard-metric dd {
   order: 1;
   margin: 0;
-  font-size: 1.65rem;
-  font-weight: 700;
-  line-height: 1.2;
+  font-size: 2rem;
+  font-weight: 750;
+  font-stretch: 118%;
+  line-height: 1.1;
   font-variant-numeric: tabular-nums;
+}
+
+.dashboard-metric.is-alert dd {
+  color: var(--danger);
 }
 
 .dashboard-source-status {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2) var(--space-5);
-  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-5);
+  border-top: 1px solid var(--border-strong);
+  background: var(--surface-2);
   color: var(--text-muted);
   font-size: var(--text-sm);
 }
@@ -700,7 +959,17 @@ table.simple th {
 }
 
 .dashboard-source-note {
-  margin: var(--space-2) 0 0;
+  margin: 0;
+}
+
+.dashboard-count-warning {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-inline-start: 4px solid var(--warn);
+  border-radius: var(--radius-sm);
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-size: var(--text-sm);
 }
 
 .dashboard-fetch-control {
@@ -774,7 +1043,32 @@ table.simple th {
   }
 
   .dashboard-metric {
-    padding: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .dashboard-metric + .dashboard-metric {
+    border-inline-start: 0;
+  }
+
+  .dashboard-metric:nth-child(even) {
+    border-inline-start: 1px solid var(--border-strong);
+  }
+
+  .dashboard-metric:nth-child(n + 3) {
+    border-top: 1px solid var(--border-strong);
+  }
+
+  .dashboard-source-status {
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .next-step {
+    grid-template-columns: auto minmax(0, 1fr);
+    padding: var(--space-4);
+  }
+
+  .next-step .btn {
+    grid-column: 1 / -1;
   }
 
   .meta-grid {
