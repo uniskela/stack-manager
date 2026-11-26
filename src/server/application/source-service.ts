@@ -121,51 +121,56 @@ export class SourceService {
       throw new ValidationError('Invalid request.', { baseBlobSha: 'Not an object id.' });
     }
 
-    const snap = await this.#snapshot(workspaceId, repositoryId);
-    const entry = snap.byPath.get(path);
-    if (entry && entry.kind !== 'file') {
-      throw new ValidationError('This entry cannot be edited.', {
-        path: `${entry.kind} entries are read-only.`,
-      });
-    }
-    if (!entry) this.#assertCreatable(snap, path);
-    const committed = entry ? await this.#readCommitted(snap, entry) : null;
-    if (entry && committed === null) {
-      throw new ValidationError('This file cannot be edited.', { path: 'Binary or larger than 1 MiB.' });
-    }
+    let baseBlobSha = input.baseBlobSha;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const snap = await this.#snapshot(workspaceId, repositoryId);
+      const entry = snap.byPath.get(path);
+      if (entry && entry.kind !== 'file') {
+        throw new ValidationError('This entry cannot be edited.', {
+          path: `${entry.kind} entries are read-only.`,
+        });
+      }
+      if (!entry) this.#assertCreatable(snap, path);
+      const committed = entry ? await this.#readCommitted(snap, entry) : null;
+      if (entry && committed === null) {
+        throw new ValidationError('This file cannot be edited.', { path: 'Binary or larger than 1 MiB.' });
+      }
+      // Remember the first base when retrying the save against a concurrently fetched revision.
+      if (attempt === 0) baseBlobSha ??= entry?.objectSha ?? null;
 
-    const existing = await this.drafts.find(repositoryId, path);
-    // Saving the committed content back is "no change": drop the draft instead of storing a copy.
-    if (committed !== null && committed === input.content) {
-      if (existing) {
-        await this.drafts.delete(repositoryId, path);
+      const now = this.clock.now();
+      const result = await this.drafts.saveAtHead(
+        {
+          id: this.newId(),
+          workspaceId,
+          repositoryId,
+          path,
+          content: input.content,
+          baseBlobSha,
+          baseCommitSha: snap.commitSha,
+          createdByUserId: actorUserId,
+          updatedByUserId: actorUserId,
+          createdAt: now,
+          updatedAt: now,
+        },
+        committed === input.content,
+      );
+      if (result.status === 'source_changed') continue;
+      if (result.status === 'saved') {
+        await this.#auditDraft('draft.save', workspaceId, repositoryId, path, actorUserId, {
+          bytes,
+          isNew: !entry,
+        });
+        return (await this.#fileView(snap, path, result.draft))!;
+      }
+      if (result.discarded) {
         await this.#auditDraft('draft.discard', workspaceId, repositoryId, path, actorUserId, {
           reverted: true,
         });
       }
       return (await this.#fileView(snap, path, null))!;
     }
-
-    const now = this.clock.now();
-    const draft = await this.drafts.upsert({
-      id: existing?.id ?? this.newId(),
-      workspaceId,
-      repositoryId,
-      path,
-      content: input.content,
-      // Keep the base the draft was started from; later saves only change the content.
-      baseBlobSha: existing ? existing.baseBlobSha : (input.baseBlobSha ?? entry?.objectSha ?? null),
-      baseCommitSha: existing?.baseCommitSha ?? snap.commitSha,
-      createdByUserId: existing?.createdByUserId ?? actorUserId,
-      updatedByUserId: actorUserId,
-      createdAt: existing?.createdAt ?? now,
-      updatedAt: now,
-    });
-    await this.#auditDraft('draft.save', workspaceId, repositoryId, path, actorUserId, {
-      bytes,
-      isNew: !entry,
-    });
-    return (await this.#fileView(snap, path, draft))!;
+    throw new ConflictError('The repository changed while saving. Try saving again.', 'source_changed');
   }
 
   /** Stage an already-reviewed change against the exact fetched file, preserving existing drafts. */

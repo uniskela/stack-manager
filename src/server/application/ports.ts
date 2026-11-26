@@ -186,8 +186,15 @@ export interface SourceDraftRepository {
   find(repositoryId: string, path: string): Promise<SourceDraft | null>;
   /** Drafts of a repository, optionally only those at or under `rootPath`. */
   list(repositoryId: string, rootPath?: string): Promise<SourceDraft[]>;
-  /** Inserts or replaces the draft for (repositoryId, path). Keeps the original id/createdAt/base commit. */
-  upsert(draft: SourceDraft): Promise<SourceDraft>;
+  /** Saves or clears a draft only if its candidate base commit is still the fetched head. */
+  saveAtHead(
+    draft: SourceDraft,
+    matchesCommitted: boolean,
+  ): Promise<
+    | { status: 'saved'; draft: SourceDraft }
+    | { status: 'unchanged'; discarded: boolean }
+    | { status: 'source_changed' }
+  >;
   /** Check the fetched head and stack's Compose path while inserting a new draft. */
   insertAtHead(draft: SourceDraft, stackId: string): Promise<'staged' | 'draft_exists' | 'source_changed'>;
   delete(repositoryId: string, path: string): Promise<boolean>;

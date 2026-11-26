@@ -58,19 +58,23 @@ describe('dashboard draft metadata query', () => {
       ['r2', 'w1', 'apps/web/compose.yaml'],
       ['r3', 'w2', 'apps/private/compose.yaml'],
     ] as const) {
-      await h.container.repos.drafts.upsert({
-        id: `draft-${repositoryId}-${path}`,
-        repositoryId,
-        workspaceId,
-        path,
-        content: 'sensitive content that must not be loaded for counting',
-        baseBlobSha: null,
-        baseCommitSha: 'a'.repeat(40),
-        createdByUserId: null,
-        updatedByUserId: null,
-        createdAt: now,
-        updatedAt: now,
-      });
+      const saved = await h.container.repos.drafts.saveAtHead(
+        {
+          id: `draft-${repositoryId}-${path}`,
+          repositoryId,
+          workspaceId,
+          path,
+          content: 'sensitive content that must not be loaded for counting',
+          baseBlobSha: null,
+          baseCommitSha: 'a'.repeat(40),
+          createdByUserId: null,
+          updatedByUserId: null,
+          createdAt: now,
+          updatedAt: now,
+        },
+        false,
+      );
+      expect(saved.status).toBe('saved');
     }
 
     const query = await h.container.source.listDraftPaths(['r1', 'r2']);
