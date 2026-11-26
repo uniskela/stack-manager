@@ -104,9 +104,9 @@ can't be opened or edited.
 On a stack’s **Image updates** tab, open **Image update setup guide** to connect WUD, match the running Compose project, and see where to review the update. You can use manual tags without connecting WUD.
 
 1. Open a stack's **Image updates** tab or go to **Stacks → Image updates** for a batch across stacks.
-2. Pick a **Compose service to update** and enter a **New image tag**, such as `1.5.5`. **Add tags suggested by WUD** adds the tags WUD found. You can use both in one batch.
-3. Optionally enter a public HTTPS **Release notes link** for each image. Choose a page that covers the tag saved in Git and the suggested or entered tag. Stack Manager shows relevant excerpts and flags incomplete evidence for review.
-4. Choose **Review proposed updates**. For a Gitea repository with linked update groups, review all changed files and choose **Create update pull request**. Use **Create draft pull request** when the update needs more review.
+2. Choose **Review 1 WUD suggestion** (the count varies) to go straight to the preview. To enter your own tag, open **Enter an image tag manually**, pick a service, and choose **Add tag to review**. You can combine manual and suggested tags in one batch.
+3. To change a suggestion, open **Edit selected tags**. Expand **Release notes (optional)** to supply a public HTTPS link for an image. Choose a page that covers the tag saved in Git and the suggested or entered tag. Stack Manager shows relevant excerpts and flags incomplete evidence for review.
+4. After editing a tag or link, choose **Review proposed updates** to refresh the preview. For a Gitea repository with linked update groups, review all changed files and choose **Create update pull request**. Use **Create draft pull request** when the update needs more review.
 5. For Compose-only updates, choose **Save selected drafts**, then open **Changes** to inspect and commit them. Existing drafts stay in place.
 
 For automatic suggestions, create an API token with the `read` scope in WUD 9.9. Enter the HTTPS base URL and token under **Settings → WUD** and choose **Test and save**. Stack Manager reads WUD's stored results every 15 minutes with the worker enabled. **Refresh from WUD** reads those results on demand, and WUD checks registries on its own schedule.
@@ -144,6 +144,7 @@ An entered link takes precedence over the service or image link in Git, followed
 For a Gitea repository with a write-capable token, `docs/wud-update-groups.json`, and both TechStack documents,
 Stack Manager reads the groups from Git and shows one diff for Compose, the linked files, and the matching
 entries in `docs/TechStack.md` and `docs/TechStack.json`. Select every member together when the policy requires it.
+Stack Manager brings stale documentation tags up to date when it can identify the service and image. If a Markdown section or service entry is missing, ambiguous, or uses free text for the version, the preview and draft pull request name the service to check before merging. Other matched entries in the batch still update.
 Stack Manager puts the reviewed changes in one commit on a proposal branch. Git stays the source of truth
 and the tracked branch can keep its normal review and deployment rules.
 

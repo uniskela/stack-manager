@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
+import { FormError } from '../form';
 import { Brand } from '../brand';
 import { Button } from '../primitives/button';
 
@@ -127,7 +128,12 @@ function SidebarContent({
         <ul>
           {items.map(({ href, label, Icon, active }) => (
             <li key={href}>
-              <Link className="nav-link" href={href} aria-current={active ? 'page' : undefined}>
+              <Link
+                className="nav-link"
+                onNavigate={onClose}
+                href={href}
+                aria-current={active ? 'page' : undefined}
+              >
                 <Icon className="icon" aria-hidden="true" />
                 {label}
               </Link>
@@ -189,19 +195,30 @@ function WorkspaceSwitcher({ current, workspaces }: { current: WorkspaceRef; wor
 function SignOutButton() {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   return (
-    <Button
-      variant="ghost"
-      loading={busy}
-      icon={<LogOut className="icon" aria-hidden="true" />}
-      onClick={async () => {
-        setBusy(true);
-        await api('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
-        router.replace('/login');
-        router.refresh();
-      }}
-    >
-      Sign out
-    </Button>
+    <>
+      <Button
+        variant="ghost"
+        loading={busy}
+        icon={<LogOut className="icon" aria-hidden="true" />}
+        onClick={async () => {
+          setBusy(true);
+          setError(null);
+          try {
+            await api('/api/auth/logout', { method: 'POST' });
+          } catch {
+            setBusy(false);
+            setError('Sign-out could not be confirmed. Try signing out again.');
+            return;
+          }
+          router.replace('/login');
+          router.refresh();
+        }}
+      >
+        Sign out
+      </Button>
+      <FormError message={error} />
+    </>
   );
 }

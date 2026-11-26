@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useId, useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import {
   MAX_IMAGE_UPDATE_CANDIDATES,
   type ImageUpdateIntent,
@@ -138,6 +138,7 @@ export function ImageUpdatePlanner({
     }),
   );
   const remaining = MAX_IMAGE_UPDATE_CANDIDATES - candidates.length;
+  const suggestionCount = Math.min(remaining, suggestions.length);
   const showManualForm = stacks.length > 1 || candidates.length === 0 || services.length > 0;
   const stageFiles = (preview?.files ?? []).flatMap(({ token, status, proposal }) => {
     if (!token || status === 'blocked' || proposal) return [];
@@ -150,6 +151,8 @@ export function ImageUpdatePlanner({
   function changeCandidates(next: ImageUpdateIntent[], message = '') {
     setCandidates(next);
     setPreview(null);
+    setResults([]);
+    setPublished({});
     setError(null);
     setAnnouncement(message);
   }
@@ -172,19 +175,20 @@ export function ImageUpdatePlanner({
 
   function addSuggestions() {
     const additions = suggestions.slice(0, remaining);
+    const next = [...candidates, ...additions];
     changeCandidates(
-      [...candidates, ...additions],
+      next,
       `Added ${additions.length} WUD ${additions.length === 1 ? 'suggestion' : 'suggestions'}.`,
     );
+    if (!candidates.length) void previewUpdates(next);
     if (additions.some((item) => item.stackId === stackId && item.service === selectedService)) {
       setService('');
       setManualTag('');
     }
   }
 
-  async function previewUpdates(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const intents = candidates.map((item): ImageUpdateIntent => ({
+  async function previewUpdates(batch: ImageUpdateIntent[]) {
+    const intents = batch.map((item): ImageUpdateIntent => ({
       ...item,
       targetTag: item.targetTag.trim(),
       changelogUrl: item.changelogUrl?.trim() || undefined,
@@ -202,6 +206,7 @@ export function ImageUpdatePlanner({
     setAnnouncement('');
     setPreview(null);
     setResults([]);
+    setPublished({});
     try {
       const data = await api<ImageUpdatePreview>(`${endpoint}/preview`, {
         method: 'POST',
@@ -217,9 +222,9 @@ export function ImageUpdatePlanner({
           ),
         ),
       );
-      const canSave = data.files.some(({ token }) => token !== null);
+      const actionable = data.files.filter(({ token }) => token !== null).length;
       setAnnouncement(
-        canSave ? 'Review the changes below.' : 'Preview finished. See the next step for each file below.',
+        `Preview complete. ${actionable} of ${data.files.length} ${data.files.length === 1 ? 'file has' : 'files have'} an update you can apply.`,
       );
     } catch (error) {
       setError(errorMessage(error));
@@ -294,14 +299,20 @@ export function ImageUpdatePlanner({
           here. Use your repository’s WUD update workflow to apply changes to Compose and its related files.
         </Alert>
       ) : null}
-      {suggestions.length > 0 ? (
+      {suggestionCount > 0 ? (
         <div className="actions">
-          <Button disabled={!remaining || busy !== null} onClick={addSuggestions}>
-            Add tags suggested by WUD ({suggestions.length})
+          <Button
+            variant={candidates.length ? 'secondary' : 'primary'}
+            disabled={busy !== null}
+            onClick={addSuggestions}
+          >
+            {candidates.length ? 'Add' : 'Review'} {suggestionCount} WUD{' '}
+            {suggestionCount === 1 ? 'suggestion' : 'suggestions'}
           </Button>
         </div>
       ) : null}
-      <div hidden={!showManualForm}>
+      <details hidden={!showManualForm} open={!suggestions.length && !candidates.length}>
+        <summary>Enter an image tag manually</summary>
         <form className="form" aria-label="Add a manual image update" method="post" onSubmit={addManual}>
           <fieldset className="form" disabled={busy !== null}>
             <legend className="visually-hidden">Manual image update</legend>
@@ -385,74 +396,85 @@ export function ImageUpdatePlanner({
             ) : null}
           </fieldset>
         </form>
-      </div>
+      </details>
 
       {candidates.length ? (
-        <form
-          className="form"
-          aria-label="Preview image updates"
-          method="post"
-          action={`${endpoint}/preview`}
-          onSubmit={(event) => void previewUpdates(event)}
-        >
-          {candidates.map((item) => {
-            const key = candidateKey(item);
-            const stackName = stacks.find((stack) => stack.id === item.stackId)?.name ?? item.stackId;
-            const update = (changes: Partial<ImageUpdateIntent>) =>
-              changeCandidates(
-                candidates.map((candidate) =>
-                  candidate === item ? { ...candidate, ...changes } : candidate,
-                ),
+        <details open={!preview}>
+          <summary>Edit selected tags ({candidates.length})</summary>
+          <form
+            className="form"
+            aria-label="Preview image updates"
+            method="post"
+            action={`${endpoint}/preview`}
+            onSubmit={(event) => {
+              event.preventDefault();
+              void previewUpdates(candidates);
+            }}
+          >
+            {candidates.map((item) => {
+              const key = candidateKey(item);
+              const stackName = stacks.find((stack) => stack.id === item.stackId)?.name ?? item.stackId;
+              const update = (changes: Partial<ImageUpdateIntent>) =>
+                changeCandidates(
+                  candidates.map((candidate) =>
+                    candidate === item ? { ...candidate, ...changes } : candidate,
+                  ),
+                );
+              return (
+                <fieldset key={key} className="form update-candidate" disabled={busy !== null}>
+                  <legend>
+                    <strong>
+                      {stackName} / {item.service}
+                    </strong>{' '}
+                    <span className="muted">
+                      {item.source === 'wud' ? 'WUD suggestion' : 'Manual update'}
+                    </span>
+                  </legend>
+                  <Field
+                    label="New image tag"
+                    name={`tag-${key}`}
+                    required
+                    value={item.targetTag}
+                    onChange={(targetTag) => {
+                      if (targetTag !== item.targetTag) update({ targetTag, source: 'manual' });
+                    }}
+                  />
+                  <details>
+                    <summary>Release notes (optional)</summary>
+                    <Field
+                      label="Release notes link"
+                      name={`changelog-${key}`}
+                      type="url"
+                      inputMode="url"
+                      hint="Use a page that lists both the tag saved in Git and the new tag. On GitHub, try the Releases list."
+                      value={item.changelogUrl ?? ''}
+                      onChange={(changelogUrl) => update({ changelogUrl })}
+                    />
+                  </details>
+                  <div className="actions">
+                    <Button
+                      size="sm"
+                      aria-label={`Remove ${item.service} from ${stackName}`}
+                      onClick={() =>
+                        changeCandidates(
+                          candidates.filter((candidate) => candidate !== item),
+                          `Removed ${item.service}.`,
+                        )
+                      }
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                </fieldset>
               );
-            return (
-              <fieldset key={key} className="form" disabled={busy !== null}>
-                <legend>
-                  <strong>
-                    {stackName} / {item.service}
-                  </strong>{' '}
-                  <span className="muted">{item.source === 'wud' ? 'WUD suggestion' : 'Manual update'}</span>
-                </legend>
-                <Field
-                  label="New image tag"
-                  name={`tag-${key}`}
-                  required
-                  value={item.targetTag}
-                  onChange={(targetTag) => {
-                    if (targetTag !== item.targetTag) update({ targetTag, source: 'manual' });
-                  }}
-                />
-                <Field
-                  label="Release notes link (optional)"
-                  name={`changelog-${key}`}
-                  type="url"
-                  inputMode="url"
-                  hint="Use a page that lists both the tag saved in Git and the new tag. On GitHub, try the Releases list."
-                  value={item.changelogUrl ?? ''}
-                  onChange={(changelogUrl) => update({ changelogUrl })}
-                />
-                <div className="actions">
-                  <Button
-                    size="sm"
-                    aria-label={`Remove ${item.service} from ${stackName}`}
-                    onClick={() =>
-                      changeCandidates(
-                        candidates.filter((candidate) => candidate !== item),
-                        `Removed ${item.service}.`,
-                      )
-                    }
-                  >
-                    Remove
-                  </Button>
-                </div>
-              </fieldset>
-            );
-          })}
-          <div className="actions">
-            <Button variant="primary" type="submit" loading={busy === 'preview'} disabled={busy !== null}>
-              Review proposed updates
-            </Button>
-          </div>
-        </form>
+            })}
+            <div className="actions">
+              <Button variant="primary" type="submit" loading={busy === 'preview'} disabled={busy !== null}>
+                Review proposed updates
+              </Button>
+            </div>
+          </form>
+        </details>
       ) : null}
 
       <ImageUpdateReview
@@ -468,9 +490,7 @@ export function ImageUpdatePlanner({
         onSubmit={stageUpdates}
         onPublish={publishUpdate}
       />
-      <p className="muted">
-        <output>{announcement}</output>
-      </p>
+      <output className="muted planner-status">{announcement}</output>
       <FormError message={error} />
     </div>
   );
@@ -501,6 +521,10 @@ function ImageUpdateReview({
   onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   onPublish: (token: string, acknowledgeReview: boolean) => Promise<void>;
 }>) {
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (preview) heading.current?.focus();
+  }, [preview]);
   const hasDraftableFiles =
     preview?.files.some(({ token, proposal }) => token !== null && !proposal) ?? false;
   return (
@@ -513,7 +537,7 @@ function ImageUpdateReview({
           action={`${endpoint}/stage`}
           onSubmit={(event) => void onSubmit(event)}
         >
-          <h3>
+          <h3 ref={heading} tabIndex={-1}>
             {preview.files.some(({ proposal }) => proposal)
               ? 'Review image updates'
               : 'Review Compose changes'}
@@ -610,7 +634,11 @@ function PreviewFileReview({
         <strong>
           {file.stackName} / <code>{file.path}</code>
         </strong>{' '}
-        <span className="pill">{file.repositoryWorkflow ? 'Preview only' : previewLabels[file.status]}</span>
+        <span
+          className={`pill ${file.repositoryWorkflow ? '' : { ready: 'ok', review: 'pending', blocked: 'error' }[file.status]}`}
+        >
+          {file.repositoryWorkflow ? 'Preview only' : previewLabels[file.status]}
+        </span>
       </legend>
       {file.reason ? <p>{file.reason}</p> : null}
       {file.repositoryWorkflow ? (

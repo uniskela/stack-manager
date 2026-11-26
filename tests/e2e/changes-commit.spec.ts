@@ -77,6 +77,54 @@ async function openChangesWithDraft(page: Page, marker: string) {
   await expect(page.locator('.diff').first()).toBeVisible();
 }
 
+test('opens a WUD suggestion directly in review and clears the preview when edited', async ({ page }) => {
+  const { workspaceId, stackId } = sample();
+  const endpoint = `**/api/workspaces/${workspaceId}`;
+  await page.route(`${endpoint}/stacks/*/image-updates`, (route) =>
+    route.fulfill({
+      json: {
+        stackId,
+        stackName: 'Sample',
+        images: [
+          { name: 'wallos', image: 'bellamy/wallos:5.11.2', status: 'available', candidateTag: '5.11.3' },
+        ],
+      },
+    }),
+  );
+  let requested: unknown;
+  await page.route(`${endpoint}/image-updates/preview`, (route) => {
+    requested = route.request().postDataJSON();
+    return route.fulfill({
+      json: {
+        files: [
+          {
+            stackId,
+            stackName: 'Sample',
+            path: 'compose.yaml',
+            status: 'review',
+            reason: 'Check the wallos entry in docs/TechStack.md before merging.',
+            token: 'review-token',
+            changes: [],
+            proposal: [],
+          },
+        ],
+      },
+    });
+  });
+  await page.goto(`/w/${workspaceId}/stacks/image-updates`);
+  await page.getByRole('button', { name: 'Review 1 WUD suggestion' }).click();
+  await expect(page.getByRole('heading', { name: 'Review image updates', exact: true })).toBeFocused();
+  expect(requested).toEqual({
+    candidates: [{ stackId, service: 'wallos', source: 'wud', targetTag: '5.11.3' }],
+  });
+  await expect(page.getByRole('button', { name: 'Create draft pull request' })).toBeVisible();
+  await page.getByText('Edit selected tags (1)', { exact: true }).click();
+  const plan = page.getByRole('form', { name: 'Preview image updates' });
+  await expect(plan.getByLabel('Release notes link')).toBeHidden();
+  await plan.getByLabel('New image tag').fill('5.11.4');
+  await expect(page.getByRole('button', { name: 'Create draft pull request' })).toHaveCount(0);
+});
+
 test('plans and stages a manual image update without WUD', async ({ page }) => {
   // The desktop run stages a draft on the shared stack. Running on mobile would mutate it twice.
   // The scenario selects the proxy service from the nginx-golang fixture.
@@ -214,6 +262,7 @@ test('shows the repository workflow instead of draft controls for preview-only u
       },
     }),
   );
+  await page.getByText('Edit selected tags (1)', { exact: true }).click();
   await page.getByRole('button', { name: 'Review proposed updates' }).press('Enter');
   await preview.getByText('Review 1 changed file').click();
   await expect(preview.getByRole('table', { name: 'Changes to docs/TechStack.md' })).toContainText(
