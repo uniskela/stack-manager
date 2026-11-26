@@ -63,6 +63,9 @@ export interface GitProvider {
   /** Pushes exactly the retained commit, after checking the freshly fetched remote head. No force. */
   push(input: GitPushInput): Promise<GitCommitMetadata>;
 
+  /** Create a dedicated branch for an exact image update without moving the tracked branch. */
+  pushProposal(input: GitProposalInput): Promise<GitCommitMetadata>;
+
   getCommit(cloneDir: string, commitSha: string): Promise<GitCommitMetadata>;
 }
 
@@ -101,6 +104,10 @@ export interface GitCommitInput extends GitBranchInput {
 export interface GitPushInput extends GitBranchInput {
   commitSha: string;
   expectedRemoteSha: string;
+}
+
+export interface GitProposalInput extends GitCommitInput {
+  proposalBranch: string;
 }
 
 export interface GitCommitMetadata {

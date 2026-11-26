@@ -51,6 +51,9 @@ After sign-in, set your Git author name and email under **Settings → Account**
 use that identity; it does not grant repository permissions. See [Git workflow](GIT_WORKFLOW.md) for committing,
 pushing and history.
 
+To publish native image update pull requests, connect Gitea with a token that can push a proposal branch and
+create a pull request in that repository. Configure scheduled publication in [Image updates](getting-started.md#linked-updates-and-automatic-pull-requests).
+
 Every variable is described in the [self-hosting reference](SELF_HOSTING.md#configuration).
 
 Scheduled-fetch policy precedence is: `STACK_MANAGER_WORKER_ENABLED=false` stops background fetching;

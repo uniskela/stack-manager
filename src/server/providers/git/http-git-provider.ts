@@ -13,6 +13,7 @@ import {
   type RemoteProbe,
   type GitBranchInput,
   type GitCommitInput,
+  type GitProposalInput,
   type GitPushInput,
 } from './types';
 
@@ -119,6 +120,9 @@ export class HttpGitProvider implements GitProvider {
   }
   push(input: GitPushInput) {
     return this.mutation.push(input);
+  }
+  pushProposal(input: GitProposalInput) {
+    return this.mutation.pushProposal(input);
   }
   getCommit(cloneDir: string, commitSha: string) {
     return this.mutation.getCommit(cloneDir, commitSha);

@@ -19,6 +19,9 @@ import { GitWebhookService } from '@/server/application/git-webhook-service';
 import { JobQueue } from '@/server/application/job-queue';
 import { ImageUpdateService, WUD_REFRESH_JOB } from '@/server/application/image-update-service';
 import { ImageUpdateStagingService } from '@/server/application/image-update-staging-service';
+import { WudImageUpdatePublication } from '@/server/application/wud-image-update-publication';
+import { WudImageUpdateReview } from '@/server/application/wud-image-update-review';
+import { WudImageUpdateAutomation } from '@/server/application/wud-image-update-automation';
 import { RepositoryAutoFetch } from '@/server/application/repository-auto-fetch';
 import type { Repositories } from '@/server/application/ports';
 import { SourceService } from '@/server/application/source-service';
@@ -39,6 +42,7 @@ import { GitCli } from '@/server/providers/git/git-cli';
 import { createDefaultGitProviderRegistry, type GitProviderRegistry } from '@/server/providers/git/registry';
 import { GitSourceReader } from '@/server/providers/git/source-reader';
 import { GitHistoryReader } from '@/server/providers/git/history-reader';
+import { GiteaImageUpdatePulls } from '@/server/providers/git/gitea-image-update-pulls';
 import { WudClient } from '@/server/providers/wud/client';
 import { ChangelogReader } from '@/server/providers/changelog/reader';
 import type { Resolver } from '@/server/security/network-policy';
@@ -72,6 +76,7 @@ export interface Container {
   autoFetch: RepositoryAutoFetch;
   imageUpdates: ImageUpdateService;
   imageUpdateStaging: ImageUpdateStagingService;
+  wudImageUpdateReview: WudImageUpdateReview;
   ping(): boolean;
   close(): Promise<void>;
 }
@@ -86,6 +91,7 @@ export interface ContainerOverrides {
   migrationsFolder?: string;
   wudClient?: Pick<WudClient, 'read'>;
   changelog?: Pick<ChangelogReader, 'check'>;
+  imageUpdatePulls?: Pick<GiteaImageUpdatePulls, 'list' | 'create'>;
 }
 
 /** Ensures the data directory layout exists with owner-only permissions. */
@@ -210,6 +216,23 @@ export function createContainer(config: AppConfig, overrides: ContainerOverrides
       newId,
       config.workerEnabled,
     );
+    const giteaPulls = new GiteaImageUpdatePulls({
+      allowPrivateNetworks: config.allowPrivateNetworks,
+      resolver: overrides.resolver,
+    });
+    const publication = new WudImageUpdatePublication(
+      repos.gitRepositories,
+      repositories,
+      repos.users,
+      overrides.imageUpdatePulls ?? giteaPulls,
+      audit,
+    );
+    const wudImageUpdateReview = new WudImageUpdateReview(
+      repos.gitRepositories,
+      repositories,
+      giteaPulls,
+      audit,
+    );
     const imageUpdateStaging = new ImageUpdateStagingService(
       repos.stacks,
       source,
@@ -217,6 +240,15 @@ export function createContainer(config: AppConfig, overrides: ContainerOverrides
       overrides.changelog ?? new ChangelogReader(),
       clock,
       config.sessionSecret,
+      publication,
+    );
+    const imageUpdateAutomation = new WudImageUpdateAutomation(
+      repos.stacks,
+      source,
+      imageUpdates,
+      imageUpdateStaging,
+      audit,
+      logger.child({ component: 'image-updates' }),
     );
     const historyReader = new GitHistoryReader(git, config.reposDir);
     const deploymentRouting = new DeploymentRoutingService(
@@ -240,7 +272,15 @@ export function createContainer(config: AppConfig, overrides: ContainerOverrides
 
     const syncLogger = logger.child({ component: 'stacks' });
     const handlers = new Map<string, JobHandler>([
-      [WUD_REFRESH_JOB, (job, ctx) => imageUpdates.refresh(job, ctx.signal)],
+      [
+        WUD_REFRESH_JOB,
+        async (job, ctx) => {
+          const refreshed = await imageUpdates.refresh(job, ctx.signal);
+          if (refreshed && typeof job.payload.workspaceId === 'string') {
+            await imageUpdateAutomation.run(job.payload.workspaceId, ctx.signal);
+          }
+        },
+      ],
       [DEPLOYMENT_ROUTE_JOB, (job, ctx) => deploymentRouting.execute(job, ctx)],
       [DEPLOYMENT_TRIGGER_JOB, (job, ctx) => deployments.execute(job, ctx)],
       [
@@ -316,6 +356,7 @@ export function createContainer(config: AppConfig, overrides: ContainerOverrides
       autoFetch,
       imageUpdates,
       imageUpdateStaging,
+      wudImageUpdateReview,
       ping: () => pingSqlite(handle.db),
       close: async () => {
         await autoFetch.stop();

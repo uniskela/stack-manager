@@ -125,12 +125,12 @@ export class ImageUpdateService {
     return { jobId: (await this.#enqueue(connection)).job.id };
   }
 
-  async refresh(job: Job, signal: AbortSignal): Promise<void> {
+  async refresh(job: Job, signal: AbortSignal): Promise<boolean> {
     const { workspaceId, revision } = job.payload;
     if (typeof workspaceId !== 'string' || typeof revision !== 'string')
       throw new Error('Invalid WUD refresh job');
     const connection = await this.repo.connection(workspaceId);
-    if (connection?.revision !== revision) return;
+    if (connection?.revision !== revision) return false;
     const attemptedAt = this.clock.now();
     let observations;
     try {
@@ -148,7 +148,7 @@ export class ImageUpdateService {
       });
       throw new Error('WUD refresh failed.');
     }
-    await this.repo.recordRefresh(workspaceId, revision, attemptedAt, { observations });
+    return this.repo.recordRefresh(workspaceId, revision, attemptedAt, { observations });
   }
 
   start(logger: Pick<Logger, 'warn'>): void {

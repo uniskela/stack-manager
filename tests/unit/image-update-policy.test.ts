@@ -48,6 +48,37 @@ describe('repository image update policy', () => {
     });
   });
 
+  it('allows audit-only automation without a Git author', () => {
+    expect(parse({ automation: { mode: 'report' } }).automation).toEqual({ mode: 'report' });
+    expect(parseImageUpdatePolicy(null).automation).toBeUndefined();
+  });
+
+  it('normalizes the Git author before enabling publication', () => {
+    const automation = { mode: 'publish', author: { name: ' Update Bot ', email: ' bot@example.org ' } };
+    expect(parse({ automation }).automation).toEqual({
+      mode: 'publish',
+      author: { name: 'Update Bot', email: 'bot@example.org' },
+    });
+  });
+
+  it.each([
+    { mode: 'publish' },
+    { mode: 'publish', author: { name: 'Bot', email: 'invalid' } },
+    { mode: 'report', author: { name: 'Bot <other>', email: 'bot@example.org' } },
+    { mode: 'preview' },
+    { mode: 'report', enabled: true },
+  ])('rejects invalid automation settings %j', (automation) => {
+    expect(() => parse({ automation })).toThrow(ValidationError);
+  });
+
+  it('rejects a duplicate mode that can turn reporting into publication', () => {
+    expect(() =>
+      parseImageUpdatePolicy(
+        '{"version":1,"automation":{"mode":"report","mode":"publish","author":{"name":"Bot","email":"bot@example.org"}}}',
+      ),
+    ).toThrow(ValidationError);
+  });
+
   it.each([
     '{',
     '{}',

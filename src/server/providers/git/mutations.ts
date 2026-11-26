@@ -13,6 +13,7 @@ import {
   type GitBranchState,
   type GitCommitInput,
   type GitCommitMetadata,
+  type GitProposalInput,
   type GitPushInput,
 } from './types';
 
@@ -38,6 +39,103 @@ export class GitMutations {
   }
 
   async commit(input: GitCommitInput): Promise<GitCommitMetadata> {
+    const paths = this.validateCommit(input);
+    return withRepositoryLock(this.reposDir, input.cloneDir, async (dir) => {
+      const retained = await this.retainedHead(dir, input.branch);
+      const state = await this.fetchState({ ...input, cloneDir: dir });
+      if (state.localHeadSha !== input.expectedHeadSha || state.behind > 0) {
+        throw new GitOperationError(
+          'conflict',
+          'The branch has changed. Fetch and review the drafts before committing.',
+        );
+      }
+      const commit = await this.commitTree(dir, input, paths);
+      // Publish only after cleanup; compare-and-swap also protects against unexpected ref changes.
+      await this.git.run(
+        [
+          'update-ref',
+          localRef(input.branch),
+          commit.sha,
+          retained ?? '0'.repeat(input.expectedHeadSha.length),
+        ],
+        { cwd: dir },
+      );
+      return commit;
+    });
+  }
+
+  /** Publish a proposal on its own branch. An empty lease permits branch creation only. */
+  async pushProposal(input: GitProposalInput): Promise<GitCommitMetadata> {
+    const paths = this.validateCommit(input);
+    if (
+      !/^stack-manager\/image-updates\/[0-9a-f]{32}$/.test(input.proposalBranch) ||
+      input.proposalBranch === input.branch
+    ) {
+      throw new GitOperationError('invalid', 'Invalid image update proposal branch.');
+    }
+    const baseRef = 'refs/heads/' + input.branch;
+    const proposalRef = 'refs/heads/' + input.proposalBranch;
+    return withRepositoryLock(this.reposDir, input.cloneDir, async (dir) => {
+      const options = { cwd: dir, auth: input.auth, signal: input.signal };
+      const { stdout } = await this.git.run(
+        ['ls-remote', '--refs', '--', input.remoteUrl, baseRef, proposalRef],
+        options,
+      );
+      const refs = new Map(
+        stdout
+          .trim()
+          .split('\n')
+          .filter(Boolean)
+          .map((line) => {
+            const [sha, ref] = line.split('\t');
+            return [ref, sha];
+          }),
+      );
+      if (refs.get(baseRef) !== input.expectedHeadSha) {
+        throw new GitOperationError(
+          'conflict',
+          'The tracked branch moved. Fetch it and review the update again.',
+        );
+      }
+
+      const commit = await this.commitTree(dir, input, paths);
+      const existing = refs.get(proposalRef);
+      if (existing) {
+        await this.git.run(['fetch', '--no-tags', '--', input.remoteUrl, proposalRef], options);
+        const previous = await this.getCommit(dir, existing);
+        const [previousTree, proposalTree] = await Promise.all(
+          [previous.sha, commit.sha].map((sha) =>
+            this.git.run(['rev-parse', '--verify', sha + '^{tree}'], { cwd: dir, signal: input.signal }),
+          ),
+        );
+        if (
+          previous.parents.length === 1 &&
+          previous.parents[0] === input.expectedHeadSha &&
+          previous.message === commit.message &&
+          previousTree?.stdout === proposalTree?.stdout
+        ) {
+          return previous;
+        }
+        throw new GitOperationError('conflict', 'The proposal branch already contains different changes.');
+      }
+      await this.git.run(
+        [
+          'push',
+          '--porcelain',
+          '--no-follow-tags',
+          '--no-mirror',
+          '--force-with-lease=' + proposalRef + ':',
+          '--',
+          input.remoteUrl,
+          commit.sha + ':' + proposalRef,
+        ],
+        options,
+      );
+      return commit;
+    });
+  }
+
+  private validateCommit(input: GitCommitInput): Set<string> {
     validateInput(input);
     assertSha(input.expectedHeadSha);
     if (
@@ -76,109 +174,97 @@ export class GitMutations {
         throw new GitOperationError('invalid', 'Changes must be text files of at most 1 MiB.');
       }
     }
-    return withRepositoryLock(this.reposDir, input.cloneDir, async (dir) => {
-      const retained = await this.retainedHead(dir, input.branch);
-      const state = await this.fetchState({ ...input, cloneDir: dir });
-      if (state.localHeadSha !== input.expectedHeadSha || state.behind > 0) {
+    return paths;
+  }
+
+  private async commitTree(
+    dir: string,
+    input: GitCommitInput,
+    paths: Set<string>,
+  ): Promise<GitCommitMetadata> {
+    const entries = await this.reader.listTree(dir, input.expectedHeadSha);
+    const tree = new Map(entries.map((entry) => [entry.path, entry]));
+    for (const change of input.changes) {
+      const entry = tree.get(change.path);
+      if ((entry?.objectSha ?? null) !== change.baseBlobSha) {
         throw new GitOperationError(
           'conflict',
-          'The branch has changed. Fetch and review the drafts before committing.',
+          'A selected draft is outdated. Review its current base before committing.',
         );
       }
-      const entries = await this.reader.listTree(dir, input.expectedHeadSha);
-      const tree = new Map(entries.map((entry) => [entry.path, entry]));
+      if ((entry && entry.kind !== 'file') || (change.content === null && !entry)) {
+        throw new GitOperationError('invalid', 'Only regular files can be changed or deleted.');
+      }
+      // Refuse file/directory collisions, including symlink and submodule ancestors.
+      // ponytail: scan the bounded source tree per selected file; index prefixes if large selections become slow.
+      for (const existing of tree.keys()) {
+        if (existing.startsWith(`${change.path}/`) || change.path.startsWith(`${existing}/`)) {
+          throw new GitOperationError('invalid', 'A selected path conflicts with an existing tree entry.');
+        }
+      }
+      for (const selected of paths) {
+        if (selected !== change.path && selected.startsWith(`${change.path}/`)) {
+          throw new GitOperationError('invalid', 'Selected file paths overlap.');
+        }
+      }
+    }
+    const parent = await fs.mkdtemp(path.join(path.dirname(dir), '.mutation-'));
+    const worktree = path.join(parent, 'tree');
+    let commit: GitCommitMetadata;
+    try {
+      // No repository files are checked out: secret files and symlinks never reach this workspace.
+      await this.git.run(
+        ['worktree', 'add', '--detach', '--no-checkout', '--', worktree, input.expectedHeadSha],
+        { cwd: dir, signal: input.signal },
+      );
+      await this.git.run(['read-tree', input.expectedHeadSha], { cwd: worktree, signal: input.signal });
       for (const change of input.changes) {
-        const entry = tree.get(change.path);
-        if ((entry?.objectSha ?? null) !== change.baseBlobSha) {
-          throw new GitOperationError(
-            'conflict',
-            'A selected draft is outdated. Review its current base before committing.',
-          );
-        }
-        if ((entry && entry.kind !== 'file') || (change.content === null && !entry)) {
-          throw new GitOperationError('invalid', 'Only regular files can be changed or deleted.');
-        }
-        // Refuse file/directory collisions, including symlink and submodule ancestors.
-        // ponytail: scan the bounded source tree per selected file; index prefixes if large selections become slow.
-        for (const existing of tree.keys()) {
-          if (existing.startsWith(`${change.path}/`) || change.path.startsWith(`${existing}/`)) {
-            throw new GitOperationError('invalid', 'A selected path conflicts with an existing tree entry.');
-          }
-        }
-        for (const selected of paths) {
-          if (selected !== change.path && selected.startsWith(`${change.path}/`)) {
-            throw new GitOperationError('invalid', 'Selected file paths overlap.');
-          }
-        }
-      }
-      const parent = await fs.mkdtemp(path.join(path.dirname(dir), '.mutation-'));
-      const worktree = path.join(parent, 'tree');
-      let commit: GitCommitMetadata;
-      try {
-        // No repository files are checked out: secret files and symlinks never reach this workspace.
-        await this.git.run(
-          ['worktree', 'add', '--detach', '--no-checkout', '--', worktree, input.expectedHeadSha],
-          { cwd: dir, signal: input.signal },
-        );
-        await this.git.run(['read-tree', input.expectedHeadSha], { cwd: worktree, signal: input.signal });
-        for (const change of input.changes) {
-          if (change.content === null) {
-            await this.git.run(['update-index', '--force-remove', '--', change.path], {
-              cwd: worktree,
-              signal: input.signal,
-            });
-            continue;
-          }
-          const file = resolveRealWithin(worktree, change.path);
-          await fs.mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
-          await fs.writeFile(file, change.content, { flag: 'wx', mode: 0o600 });
-          // Stage exact bytes without repository-controlled clean filters or pathspec interpretation.
-          const { stdout } = await this.git.run(['hash-object', '--no-filters', '-w', '--', file], {
+        if (change.content === null) {
+          await this.git.run(['update-index', '--force-remove', '--', change.path], {
             cwd: worktree,
             signal: input.signal,
           });
-          const blob = stdout.trim();
-          assertSha(blob);
-          const mode = tree.get(change.path)?.executable ? '100755' : '100644';
-          await this.git.run(['update-index', '--add', '--cacheinfo', mode, blob, change.path], {
-            cwd: worktree,
-            signal: input.signal,
-          });
+          continue;
         }
-        const messageFile = path.join(parent, 'message');
-        await fs.writeFile(messageFile, input.message, { mode: 0o600 });
-        await this.git.run(
-          [
-            '-c',
-            `user.name=${input.author.name}`,
-            '-c',
-            `user.email=${input.author.email}`,
-            'commit',
-            '--no-gpg-sign',
-            '--no-verify',
-            '--cleanup=verbatim',
-            '--file',
-            messageFile,
-          ],
-          { cwd: worktree, signal: input.signal },
-        );
-        const { stdout } = await this.git.run(['rev-parse', '--verify', 'HEAD'], { cwd: worktree });
-        commit = await this.getCommit(dir, stdout.trim());
-      } finally {
-        await this.cleanup(dir, worktree, parent);
+        const file = resolveRealWithin(worktree, change.path);
+        await fs.mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
+        await fs.writeFile(file, change.content, { flag: 'wx', mode: 0o600 });
+        // Stage exact bytes without repository-controlled clean filters or pathspec interpretation.
+        const { stdout } = await this.git.run(['hash-object', '--no-filters', '-w', '--', file], {
+          cwd: worktree,
+          signal: input.signal,
+        });
+        const blob = stdout.trim();
+        assertSha(blob);
+        const mode = tree.get(change.path)?.executable ? '100755' : '100644';
+        await this.git.run(['update-index', '--add', '--cacheinfo', mode, blob, change.path], {
+          cwd: worktree,
+          signal: input.signal,
+        });
       }
-      // Publish only after cleanup; compare-and-swap also protects against unexpected ref changes.
+      const messageFile = path.join(parent, 'message');
+      await fs.writeFile(messageFile, input.message, { mode: 0o600 });
       await this.git.run(
         [
-          'update-ref',
-          localRef(input.branch),
-          commit.sha,
-          retained ?? '0'.repeat(input.expectedHeadSha.length),
+          '-c',
+          `user.name=${input.author.name}`,
+          '-c',
+          `user.email=${input.author.email}`,
+          'commit',
+          '--no-gpg-sign',
+          '--no-verify',
+          '--cleanup=verbatim',
+          '--file',
+          messageFile,
         ],
-        { cwd: dir },
+        { cwd: worktree, signal: input.signal },
       );
-      return commit;
-    });
+      const { stdout } = await this.git.run(['rev-parse', '--verify', 'HEAD'], { cwd: worktree });
+      commit = await this.getCommit(dir, stdout.trim());
+    } finally {
+      await this.cleanup(dir, worktree, parent);
+    }
+    return commit;
   }
 
   async push(input: GitPushInput): Promise<GitCommitMetadata> {

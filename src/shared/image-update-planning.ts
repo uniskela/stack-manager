@@ -26,9 +26,26 @@ export interface ImageUpdatePreview {
     status: 'ready' | 'review' | 'blocked';
     reason: string | null;
     repositoryWorkflow?: true;
+    proposal?: Array<{
+      path: string;
+      hunks: Array<{
+        oldStart: number;
+        oldLines: number;
+        newStart: number;
+        newLines: number;
+        lines: string[];
+      }>;
+    }>;
     changes: ImageUpdateReviewRow[];
     token: string | null;
   }>;
+}
+
+export interface ImageUpdatePublication {
+  number: number;
+  url: string;
+  headSha: string;
+  repositoryId: string;
 }
 
 export interface ImageUpdateStageResult {

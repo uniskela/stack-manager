@@ -62,11 +62,22 @@ export default async function ImageUpdateSetupPage({
           <p>Connect WUD above to find a match for this stack.</p>
         )}
       </Section>
-      <Section id="update-destination" title="3. Where to review the update">
+      <Section id="update-destination" title="3. Review updates">
         {workflow === undefined ? (
           <p>Could not check this repository’s update workflow. Reload the guide to try again.</p>
         ) : null}
-        {workflow ? (
+        {workflow?.native ? (
+          <div className="stack">
+            <p>
+              Stack Manager prepares Compose, linked files and TechStack entries together. Review the diff and
+              create a Gitea pull request from Image updates.
+            </p>
+            <ButtonLink variant="primary" href={`${stackPage}/image-updates`}>
+              Open image updates
+            </ButtonLink>
+          </div>
+        ) : null}
+        {workflow && !workflow.native ? (
           <div className="stack">
             <p>
               <strong>{stack.repository.name} uses its own WUD update workflow.</strong> It prepares Compose,

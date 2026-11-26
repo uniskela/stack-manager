@@ -6,6 +6,7 @@ import { useEffect, useId, useState, type FormEvent } from 'react';
 import {
   MAX_IMAGE_UPDATE_CANDIDATES,
   type ImageUpdateIntent,
+  type ImageUpdatePublication,
   type ImageUpdatePreview,
   type ImageUpdateStageResult,
 } from '@/shared/image-update-planning';
@@ -14,6 +15,7 @@ import { api, ApiError } from '@/ui/api';
 import { Field, FormError } from '@/ui/form';
 import { Alert } from '@/ui/primitives/alert';
 import { Button } from '@/ui/primitives/button';
+import { UnifiedDiff } from '@/ui/source/unified-diff';
 
 interface StackInventory {
   stackId: string;
@@ -87,7 +89,8 @@ export function ImageUpdatePlanner({
   const [preview, setPreview] = useState<ImageUpdatePreview | null>(null);
   const [selected, setSelected] = useState<Record<string, FileSelection>>({});
   const [results, setResults] = useState<ImageUpdateStageResult['files']>([]);
-  const [busy, setBusy] = useState<'preview' | 'stage' | null>(null);
+  const [published, setPublished] = useState<Record<string, ImageUpdatePublication>>({});
+  const [busy, setBusy] = useState<'preview' | 'stage' | 'publish' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState('');
 
@@ -136,8 +139,8 @@ export function ImageUpdatePlanner({
   );
   const remaining = MAX_IMAGE_UPDATE_CANDIDATES - candidates.length;
   const showManualForm = stacks.length > 1 || candidates.length === 0 || services.length > 0;
-  const stageFiles = (preview?.files ?? []).flatMap(({ token, status }) => {
-    if (!token || status === 'blocked') return [];
+  const stageFiles = (preview?.files ?? []).flatMap(({ token, status, proposal }) => {
+    if (!token || status === 'blocked' || proposal) return [];
     const selection = selected[token];
     return selection?.selected && (status === 'ready' || selection.acknowledgeReview)
       ? [{ token, acknowledgeReview: selection.acknowledgeReview }]
@@ -207,8 +210,8 @@ export function ImageUpdatePlanner({
       setPreview(data);
       setSelected(
         Object.fromEntries(
-          data.files.flatMap(({ token, status }) =>
-            token && status !== 'blocked'
+          data.files.flatMap(({ token, status, proposal }) =>
+            token && status !== 'blocked' && !proposal
               ? [[token, { selected: status === 'ready', acknowledgeReview: false }]]
               : [],
           ),
@@ -216,10 +219,26 @@ export function ImageUpdatePlanner({
       );
       const canSave = data.files.some(({ token }) => token !== null);
       setAnnouncement(
-        canSave
-          ? 'Review the proposed changes below.'
-          : 'Preview finished. See the next step for each file below.',
+        canSave ? 'Review the changes below.' : 'Preview finished. See the next step for each file below.',
       );
+    } catch (error) {
+      setError(errorMessage(error));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function publishUpdate(token: string, acknowledgeReview: boolean) {
+    setBusy('publish');
+    setError(null);
+    try {
+      const pull = await api<ImageUpdatePublication>(`${endpoint}/publish`, {
+        method: 'POST',
+        body: { token, acknowledgeReview },
+      });
+      setPublished((current) => ({ ...current, [token]: pull }));
+      setAnnouncement(`Update pull request #${pull.number} is available.`);
+      router.refresh();
     } catch (error) {
       setError(errorMessage(error));
     } finally {
@@ -274,9 +293,7 @@ export function ImageUpdatePlanner({
           <strong>Preview only for this repository.</strong> You can see the proposed tag and release notes
           here. Use your repository’s WUD update workflow to apply changes to Compose and its related files.
         </Alert>
-      ) : (
-        <p className="muted">Choose a new tag, review release notes, then save a draft in Changes.</p>
-      )}
+      ) : null}
       {suggestions.length > 0 ? (
         <div className="actions">
           <Button disabled={!remaining || busy !== null} onClick={addSuggestions}>
@@ -431,7 +448,7 @@ export function ImageUpdatePlanner({
             );
           })}
           <div className="actions">
-            <Button variant="primary" type="submit" loading={busy === 'preview'} disabled={busy === 'stage'}>
+            <Button variant="primary" type="submit" loading={busy === 'preview'} disabled={busy !== null}>
               Review proposed updates
             </Button>
           </div>
@@ -444,10 +461,12 @@ export function ImageUpdatePlanner({
         preview={preview}
         selected={selected}
         results={results}
+        published={published}
         busy={busy}
         canSave={stageFiles.length > 0}
         onSelect={(token, next) => setSelected((current) => ({ ...current, [token]: next }))}
         onSubmit={stageUpdates}
+        onPublish={publishUpdate}
       />
       <p className="muted">
         <output>{announcement}</output>
@@ -463,22 +482,27 @@ function ImageUpdateReview({
   preview,
   selected,
   results,
+  published,
   busy,
   canSave,
   onSelect,
   onSubmit,
+  onPublish,
 }: Readonly<{
   endpoint: string;
   workspaceId: string;
   preview: ImageUpdatePreview | null;
   selected: Readonly<Record<string, FileSelection>>;
   results: ImageUpdateStageResult['files'];
-  busy: 'preview' | 'stage' | null;
+  published: Readonly<Record<string, ImageUpdatePublication>>;
+  busy: 'preview' | 'stage' | 'publish' | null;
   canSave: boolean;
   onSelect: (token: string, selection: FileSelection) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+  onPublish: (token: string, acknowledgeReview: boolean) => Promise<void>;
 }>) {
-  const hasDraftableFiles = preview?.files.some(({ token }) => token !== null) ?? false;
+  const hasDraftableFiles =
+    preview?.files.some(({ token, proposal }) => token !== null && !proposal) ?? false;
   return (
     <>
       {preview ? (
@@ -489,7 +513,11 @@ function ImageUpdateReview({
           action={`${endpoint}/stage`}
           onSubmit={(event) => void onSubmit(event)}
         >
-          <h3>Review Compose changes</h3>
+          <h3>
+            {preview.files.some(({ proposal }) => proposal)
+              ? 'Review image updates'
+              : 'Review Compose changes'}
+          </h3>
           {preview.files.map((file) => {
             const { token } = file;
             const selection = token ? selected[token] : undefined;
@@ -509,6 +537,9 @@ function ImageUpdateReview({
                 disabled={busy !== null}
                 updateSelection={updateSelection}
                 setupHref={`/w/${workspaceId}/stacks/${file.stackId}/image-updates/setup`}
+                published={token ? published[token] : undefined}
+                updatePullsHref={`/w/${workspaceId}/stacks/image-updates#image-update-pull-requests`}
+                onPublish={onPublish}
               />
             );
           })}
@@ -518,7 +549,7 @@ function ImageUpdateReview({
                 variant="primary"
                 type="submit"
                 loading={busy === 'stage'}
-                disabled={!canSave || busy === 'preview'}
+                disabled={!canSave || busy !== null}
               >
                 Save selected drafts
               </Button>
@@ -559,6 +590,9 @@ function PreviewFileReview({
   disabled,
   updateSelection,
   setupHref,
+  published,
+  updatePullsHref,
+  onPublish,
 }: Readonly<{
   file: ImageUpdatePreview['files'][number];
   selection: FileSelection | undefined;
@@ -566,6 +600,9 @@ function PreviewFileReview({
   disabled: boolean;
   updateSelection: (selection: FileSelection) => void;
   setupHref: string;
+  published: ImageUpdatePublication | undefined;
+  updatePullsHref: string;
+  onPublish: (token: string, acknowledgeReview: boolean) => Promise<void>;
 }>) {
   return (
     <fieldset className="form" disabled={disabled}>
@@ -613,6 +650,33 @@ function PreviewFileReview({
             </li>
           ))}
         </ul>
+      ) : null}
+      {file.proposal ? (
+        <details>
+          <summary>
+            Review {file.proposal.length} changed {file.proposal.length === 1 ? 'file' : 'files'}
+          </summary>
+          {file.proposal.map(({ path, hunks }) => (
+            <div key={path}>
+              <p>
+                <code>{path}</code>
+              </p>
+              <UnifiedDiff hunks={hunks} label={`Changes to ${path}`} />
+            </div>
+          ))}
+        </details>
+      ) : null}
+      {file.proposal && file.token && !published ? (
+        <Button
+          type="button"
+          variant="primary"
+          onClick={() => void onPublish(file.token!, file.status === 'review')}
+        >
+          {file.status === 'review' ? 'Create draft pull request' : 'Create update pull request'}
+        </Button>
+      ) : null}
+      {published ? (
+        <Link href={updatePullsHref}>Review pull request #{published.number} in Stack Manager</Link>
       ) : null}
       {selection && !staged ? (
         <label className="check-row">

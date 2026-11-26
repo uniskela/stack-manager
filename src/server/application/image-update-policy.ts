@@ -1,5 +1,7 @@
+import { parseDocument } from 'yaml';
 import { z } from 'zod';
 import { ValidationError } from '@/server/domain/errors';
+import { parseGitAuthorIdentity } from '@/server/domain/user';
 import { canonicalImageRepository } from '@/shared/image-updates';
 import { normalizeRepoPath } from '@/shared/source/paths';
 
@@ -20,6 +22,7 @@ export interface ImageUpdatePolicy {
   exclude: Array<{ path: string; service?: string }>;
   changelogs: Record<string, string>;
   serviceChangelogs: Array<{ path: string; service: string; url: string }>;
+  automation?: z.infer<typeof automation>;
 }
 
 const path = z.string().refine((value) => {
@@ -77,6 +80,11 @@ const changelogs = z.preprocess(
   },
   z.record(imageName, urlTemplate).refine((values) => Object.keys(values).length <= MAX_RULES),
 );
+const author = z.strictObject({ name: z.string(), email: z.string() }).transform(parseGitAuthorIdentity);
+const automation = z.discriminatedUnion('mode', [
+  z.strictObject({ mode: z.literal('report'), author: author.optional() }),
+  z.strictObject({ mode: z.literal('publish'), author }),
+]);
 const schema = z.strictObject({
   version: z.literal(1),
   sources: z.strictObject({ manual: z.boolean().optional(), wud: z.boolean().optional() }).optional(),
@@ -92,6 +100,7 @@ const schema = z.strictObject({
     .array(z.strictObject({ path, service, url: urlTemplate }))
     .max(MAX_RULES)
     .optional(),
+  automation: automation.optional(),
 });
 
 export function parseImageUpdatePolicy(text: string | null): ImageUpdatePolicy {
@@ -104,6 +113,14 @@ export function parseImageUpdatePolicy(text: string | null): ImageUpdatePolicy {
       input = JSON.parse(text);
     } catch {
       throw new ValidationError('Repository image update policy must be valid JSON.');
+    }
+    if (
+      input &&
+      typeof input === 'object' &&
+      Object.hasOwn(input, 'automation') &&
+      parseDocument(text, { schema: 'json', uniqueKeys: true, prettyErrors: false }).errors.length
+    ) {
+      throw new ValidationError('Repository image update automation cannot use duplicate fields.');
     }
   }
   const result = schema.safeParse(input);
@@ -118,6 +135,7 @@ export function parseImageUpdatePolicy(text: string | null): ImageUpdatePolicy {
     exclude: config.exclude ?? [],
     changelogs: config.changelogs ?? {},
     serviceChangelogs: config.serviceChangelogs ?? [],
+    ...(config.automation ? { automation: config.automation } : {}),
   };
 }
 

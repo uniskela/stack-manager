@@ -1,14 +1,23 @@
+import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as previewRoute from '@/app/api/workspaces/[workspaceId]/image-updates/preview/route';
+import * as publishRoute from '@/app/api/workspaces/[workspaceId]/image-updates/publish/route';
 import * as stageRoute from '@/app/api/workspaces/[workspaceId]/image-updates/stage/route';
 import { createHarness, type TestHarness } from '../support/container';
 import type { ContainerOverrides } from '@/server/container';
+import type {
+  GiteaCreateImageUpdatePullInput,
+  GiteaImageUpdatePull,
+} from '@/server/providers/git/gitea-image-update-pulls';
+import { GitCli } from '@/server/providers/git/git-cli';
+import type { ImageUpdatePreview } from '@/shared/image-update-planning';
 import { gitServerOverrides, startGitServer, type GitServer } from '../support/git-server';
 import { call } from '../support/http';
 import { sessionCookieName } from '@/server/http/cookies';
 import * as repositoriesRoute from '@/app/api/workspaces/[workspaceId]/repositories/route';
 
-const repoName = 'image-updates.git';
+const repoName = 'acme/image-updates.git';
+const remoteUrl = 'https://git.test/' + repoName;
 let h: TestHarness | undefined;
 let git: GitServer | undefined;
 afterEach(async () => {
@@ -19,10 +28,14 @@ afterEach(async () => {
   if (failure) throw failure.reason;
 });
 
-async function arrange(extraFiles: Record<string, string> = {}, overrides: ContainerOverrides = {}) {
-  git = await startGitServer();
+async function arrange(
+  extraFiles: Record<string, string> = {},
+  overrides: ContainerOverrides = {},
+  authToken?: string,
+) {
+  git = await startGitServer({ token: authToken });
   git.createRepo(repoName);
-  git.commitFiles(repoName, 'main', {
+  const baseSha = git.commitFiles(repoName, 'main', {
     'second/compose.yaml':
       'services:\n  cache:\n    image: redis:7.2\n    env_file: /run/infisical/cache.env\n',
     ...extraFiles,
@@ -39,14 +52,29 @@ async function arrange(extraFiles: Record<string, string> = {}, overrides: Conta
     method: 'POST',
     params: { workspaceId: workspace.id },
     cookie,
-    body: { gitProviderType: 'gitea', remoteUrl: 'https://git.test/' + repoName, auth: { type: 'none' } },
+    body: {
+      gitProviderType: 'gitea',
+      remoteUrl,
+      auth: authToken ? { type: 'token', token: authToken } : { type: 'none' },
+    },
   });
   expect(connection.status).toBe(201);
   await container.worker.runOnce();
   const stacks = await container.stacks.list(workspace.id);
   const main = stacks.find((stack) => stack.composePath === 'compose.yaml')!;
   const second = stacks.find((stack) => stack.composePath === 'second/compose.yaml')!;
-  return { container, workspace, user, main, second, cookie };
+  return {
+    container,
+    workspace,
+    user,
+    main,
+    second,
+    cookie,
+    stacks,
+    baseSha,
+    server: git,
+    dataDir: h.dataDir,
+  };
 }
 
 describe('image update draft staging', () => {
@@ -195,6 +223,7 @@ describe('image update draft staging', () => {
     ).resolves.toEqual({
       policyPath: 'docs/wud-update-groups.json',
       skillPath: '.opencode/skills/portainer-wud-updates/SKILL.md',
+      native: false,
     });
     const { files } = await container.imageUpdateStaging.preview(workspace.id, user.id, [
       { stackId: main.id, service: 'app', source: 'manual', targetTag: '1.28' },
@@ -261,4 +290,216 @@ describe('image update draft staging', () => {
     ]);
     expect(staged.files[0]?.status).toBe('candidate_changed');
   });
+});
+
+const beszelPath = 'flowvps/beszel/docker-compose.yml';
+const inventoryPath = 'docs/TechStack.json';
+const markdownPath = 'docs/TechStack.md';
+const beszelFiles = {
+  [beszelPath]: 'services:\n  beszel:\n    image: docker.io/henrygd/beszel:0.21.0 # current pin\n',
+  [inventoryPath]:
+    '{"stacks":[{"stack":"flowvps","services":[{"name":"beszel","image":"henrygd/beszel:0.21.0"}]}]}\n',
+  [markdownPath]:
+    'Portainer Stacks (from repo)\nflowvps (previously oracle-vps)\n- beszel: henrygd/beszel:0.21.0\n',
+};
+
+async function arrangeNativePublication() {
+  const pullUrl = 'https://git.test/acme/image-updates/pulls/12';
+  const openPulls: GiteaImageUpdatePull[] = [];
+  const create = vi.fn(async ({ head, base, title }: GiteaCreateImageUpdatePullInput) => {
+    const headSha = (await remoteGit('rev-parse', 'refs/heads/' + head)).trimEnd();
+    const pull = { title, head, base, headSha, sameRepository: true, number: 12, url: pullUrl };
+    openPulls.push(pull);
+    return pull;
+  });
+  const changelogUrl = 'https://releases.example.org/beszel/0.21.2';
+  const check = vi.fn().mockResolvedValue({
+    status: 'incomplete',
+    url: changelogUrl,
+    signals: [],
+    detail: 'Missing release range.',
+  });
+  const read = vi.fn().mockResolvedValue([
+    {
+      watcher: 'local',
+      project: 'beszel',
+      service: 'beszel',
+      repository: 'index.docker.io/henrygd/beszel',
+      installedTag: '0.21.0',
+      installedDigest: null,
+      checkedAt: null,
+      available: true,
+      failed: false,
+      candidateTag: '0.21.2',
+      digestOnly: false,
+    },
+  ]);
+  const { container, workspace, user, stacks, cookie, baseSha, server, dataDir } = await arrange(
+    {
+      ...beszelFiles,
+      'docs/wud-update-groups.json': '{"version":1,"groups":[]}\n',
+      'docs/container-changelogs.json': JSON.stringify({
+        sources: { 'henrygd/beszel': { displayUrl: 'https://releases.example.org/beszel/{target_tag}' } },
+      }),
+    },
+    {
+      imageUpdatePulls: { list: async () => [...openPulls], create },
+      changelog: { check },
+      wudClient: { read },
+    },
+    'publication-test-token',
+  );
+  const cli = new GitCli({ homeDir: path.join(dataDir, 'git-home') });
+  async function remoteGit(...args: string[]) {
+    return (await cli.run(args, { cwd: path.join(server.root, repoName) })).stdout;
+  }
+
+  const stack = stacks.find(({ composePath }) => composePath === beszelPath)!;
+  await container.auth.updateGitIdentity(user.id, {
+    name: 'Stack Operator',
+    email: 'operator@example.invalid',
+  });
+  await container.imageUpdates.configure(
+    workspace.id,
+    { baseUrl: 'https://wud.example.org', token: 'fake-read-token', expectedRevision: null },
+    user.id,
+  );
+  await container.imageUpdates.setBinding(
+    workspace.id,
+    stack.id,
+    { watcher: 'local', project: 'beszel' },
+    user.id,
+  );
+  const request = { method: 'POST', cookie, params: { workspaceId: workspace.id } };
+  const response = await call(previewRoute.POST, {
+    ...request,
+    body: { candidates: [{ stackId: stack.id, service: 'beszel', source: 'wud', targetTag: '0.21.2' }] },
+  });
+  expect(response.status).toBe(200);
+  const preview = (response.json as ImageUpdatePreview).files[0]!;
+  expect(preview).toMatchObject({ status: 'review', token: expect.any(String) });
+  const token = preview.token!;
+  const publish = (acknowledgeReview = true) =>
+    call(publishRoute.POST, { ...request, body: { token, acknowledgeReview } });
+
+  return {
+    container,
+    stack,
+    request,
+    preview,
+    token,
+    publish,
+    baseSha,
+    remoteGit,
+    openPulls,
+    server,
+    create,
+    changelogUrl,
+    check,
+    pullUrl,
+  };
+}
+
+describe('native Gitea image update publication', () => {
+  it('publishes the reviewed WUD edits once on a proposal branch and leaves main unchanged', async () => {
+    const {
+      container,
+      stack,
+      request,
+      preview,
+      token,
+      publish,
+      baseSha,
+      remoteGit,
+      openPulls,
+      create,
+      changelogUrl,
+      check,
+      pullUrl,
+    } = await arrangeNativePublication();
+    expect(check).toHaveBeenCalledWith(changelogUrl, '0.21.0', '0.21.2');
+    expect(preview.changes).toMatchObject([
+      {
+        status: 'review',
+        before: 'docker.io/henrygd/beszel:0.21.0',
+        after: 'docker.io/henrygd/beszel:0.21.2',
+        changelogUrl,
+      },
+    ]);
+    const expectedFiles = Object.fromEntries(
+      Object.entries(beszelFiles).map(([file, value]) => [file, value.replace(':0.21.0', ':0.21.2')]),
+    );
+    expect(preview.proposal).toEqual(
+      ([inventoryPath, markdownPath, beszelPath] as const).map((file) => ({
+        path: file,
+        hunks: [
+          expect.objectContaining({
+            lines: [
+              '-' + beszelFiles[file]!.trimEnd().split('\n').at(-1),
+              '+' + expectedFiles[file]!.trimEnd().split('\n').at(-1),
+            ],
+          }),
+        ],
+      })),
+    );
+
+    const stage = await call(stageRoute.POST, {
+      ...request,
+      body: { files: [{ token, acknowledgeReview: true }] },
+    });
+    expect(stage.status).toBe(200);
+    expect(stage.json.files[0].status).toBe('failed');
+    expect(await container.repos.drafts.find(stack.repository.id, beszelPath)).toBeNull();
+    expect((await publish(false)).status).toBe(409);
+    expect(await remoteGit('for-each-ref', '--format=%(refname)', 'refs/heads')).toBe('refs/heads/main\n');
+
+    const published = await publish();
+    expect(published.status).toBe(200);
+    const { head, headSha, title, base } = openPulls[0]!;
+    expect(published.json).toEqual({ number: 12, url: pullUrl, repositoryId: stack.repository.id, headSha });
+    expect(title).toMatch(/^WIP:/);
+    expect(base).toBe('main');
+    expect(head).toMatch(/^stack-manager\/image-updates\/[a-f0-9]{32}$/);
+    expect(await remoteGit('rev-parse', 'refs/heads/main')).toBe(baseSha + '\n');
+    expect(await remoteGit('rev-list', '--parents', '-n', '1', headSha)).toBe(`${headSha} ${baseSha}\n`);
+    expect(await remoteGit('diff-tree', '--no-commit-id', '--name-only', '-r', headSha)).toBe(
+      [inventoryPath, markdownPath, beszelPath, ''].join('\n'),
+    );
+    for (const [file, content] of Object.entries(expectedFiles)) {
+      expect(await remoteGit('show', `${headSha}:${file}`)).toBe(content);
+    }
+
+    const replay = await publish();
+    expect(replay.status).toBe(200);
+    expect(replay.json).toEqual(published.json);
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['moved main', 'an open legacy update pull request'])(
+    'retains the remote refs when publishing is blocked by %s',
+    async (conflict) => {
+      const { publish, baseSha, remoteGit, openPulls, server, create } = await arrangeNativePublication();
+      const headSha =
+        conflict === 'moved main'
+          ? server.commit(repoName, 'main', 'README.md', '# Another change\n')
+          : baseSha;
+      if (conflict === 'an open legacy update pull request') {
+        openPulls.push({
+          number: 3,
+          url: 'https://git.test/acme/image-updates/pulls/3',
+          base: 'main',
+          head: 'auto-portainer-wud-updates-2026-11-26',
+          headSha,
+          title: 'chore: update images',
+          sameRepository: true,
+        });
+      }
+      const outcome = await publish();
+      expect(outcome.status).toBe(409);
+      expect(create).not.toHaveBeenCalled();
+      expect(await remoteGit('for-each-ref', '--format=%(objectname) %(refname)', 'refs/heads')).toBe(
+        headSha + ' refs/heads/main\n',
+      );
+    },
+  );
 });
