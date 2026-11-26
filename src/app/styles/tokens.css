@@ -1,38 +1,59 @@
-/* Design tokens. Every colour, space and size used by the UI comes from here. Light/dark via prefers-color-scheme. */
+/*
+ * Design tokens. Every colour, space and size used by the UI comes from here. Light/dark via prefers-color-scheme.
+ *
+ * Direction: a drafting office. An ink-violet rail holds the instruments, cool tracing-paper surfaces hold the
+ * work, and signal yellow marks the one action that moves a draft forward. The logo is a strip of that yellow
+ * paper folded into an "S".
+ */
 :root {
   color-scheme: light dark;
 
-  /* Colour */
-  --bg: #f7f7f5;
+  /* Ink (navigation rail, brand) */
+  --ink: #241c36;
+  --ink-raised: #2f2645;
+  --ink-border: #3d3256;
+  --ink-text: #cdc6e0;
+  --ink-text-strong: #ffffff;
+  --ink-danger: #ffb4ad;
+
+  /* Signal (primary actions, active markers) */
+  --signal: #ffd24c;
+  --signal-hover: #f7c530;
+  --signal-ink: #1e1830;
+  --signal-fold: #b8862b;
+  --signal-soft: #fff3c8;
+
+  /* Paper and text */
+  --bg: #efeef4;
   --surface: #ffffff;
-  --surface-2: #f1f1ee;
-  --border: #e2e2dc;
-  --border-strong: #cfcfc7;
-  --text: #1c1d1f;
-  --text-muted: #5f6166;
-  --accent: #2f5bd3;
+  --surface-2: #f6f5fa;
+  --border: #dedbe8;
+  --border-strong: #c3bdd3;
+  --text: #1e1830;
+  --text-muted: #5b5570;
+  --accent: #5a3fc0;
   --accent-contrast: #ffffff;
-  --accent-soft: #e8eefc;
-  --danger: #b42318;
-  --danger-soft: #fdecea;
-  --ok: #1f7a4d;
-  --ok-soft: #e6f4ec;
-  --warn: #8a5a00;
-  --warn-soft: #fdf3dc;
-  --focus: #2f5bd3;
-  --backdrop: rgb(0 0 0 / 0.35);
+  --accent-soft: #ece8fa;
+  --danger: #b3261e;
+  --danger-soft: #fcebea;
+  --ok: #1b7a4c;
+  --ok-soft: #e4f4ea;
+  --warn: #855600;
+  --warn-soft: #fdf1d6;
+  --focus: #5a3fc0;
+  --backdrop: rgb(20 14 34 / 0.45);
 
   /* Syntax highlighting (editor) */
-  --syntax-key: #1f5fbf;
-  --syntax-string: #1f7a4d;
-  --syntax-number: #9a4dc4;
+  --syntax-key: #4b32b0;
+  --syntax-string: #1b7a4c;
+  --syntax-number: #a2408f;
   --syntax-keyword: #b3261e;
-  --syntax-comment: #5f6268;
-  --syntax-meta: #8a5a00;
-  --syntax-heading: #1c1d1f;
-  --syntax-link: #2f5bd3;
-  --diff-add: #e6f4ec;
-  --diff-remove: #fdecea;
+  --syntax-comment: #5f5a70;
+  --syntax-meta: #855600;
+  --syntax-heading: #1e1830;
+  --syntax-link: #5a3fc0;
+  --diff-add: #e4f4ea;
+  --diff-remove: #fcebea;
 
   /* Space (4px grid) */
   --space-1: 0.25rem;
@@ -44,27 +65,33 @@
   --space-7: 2rem;
   --space-8: 2.5rem;
 
-  /* Type */
-  --font: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  --mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  /* Type: Archivo for everything (its width axis gives headings a drafting-title stance), JetBrains Mono for code. */
+  --font:
+    'Archivo Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
+  --mono:
+    'JetBrains Mono Variable', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono',
+    monospace;
+  --stretch-display: 112%;
   --text-xs: 0.78rem;
   --text-sm: 0.875rem;
   --text-md: 0.9375rem;
-  --text-lg: 1.1rem;
-  --text-xl: 1.5rem;
+  --text-lg: 1.15rem;
+  --text-xl: 1.65rem;
 
   /* Shape and depth */
-  --radius: 10px;
+  --radius: 8px;
   --radius-sm: 6px;
   --radius-pill: 999px;
-  --shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 1px 1px rgb(0 0 0 / 0.03);
-  --shadow-overlay: 0 10px 30px rgb(0 0 0 / 0.18);
+  --chamfer: 7px;
+  --shadow: 0 1px 0 rgb(30 24 48 / 0.05), 0 1px 3px rgb(30 24 48 / 0.05);
+  --shadow-overlay: 0 18px 40px rgb(30 24 48 / 0.22);
 
   /* Sizes */
   --control-height: 44px;
   --control-height-sm: 36px;
-  --sidebar-width: 248px;
-  --content-width: 960px;
+  --sidebar-width: 256px;
+  --content-width: 1000px;
   --form-width: 640px;
   --mobile-bar-height: 56px;
 
@@ -76,39 +103,45 @@
   /* Motion */
   --duration-fast: 120ms;
   --duration-base: 200ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #111214;
-    --surface: #18191c;
-    --surface-2: #1f2024;
-    --border: #2b2d31;
-    --border-strong: #3a3c42;
-    --text: #e8e8ea;
-    --text-muted: #a0a2a8;
-    --accent: #7b9cff;
-    --accent-contrast: #0d1020;
-    --accent-soft: #1d2540;
-    --danger: #ff8a80;
-    --danger-soft: #3a1b1a;
+    --ink: #0f0b18;
+    --ink-raised: #1d1730;
+    --ink-border: #2a2240;
+    --ink-text: #b9b1cf;
+    --signal-soft: #3a3014;
+    --bg: #16121f;
+    --surface: #1d1829;
+    --surface-2: #251f34;
+    --border: #332b48;
+    --border-strong: #463b61;
+    --text: #ece8f6;
+    --text-muted: #aaa2c1;
+    --accent: #b9a7ff;
+    --accent-contrast: #1a1428;
+    --accent-soft: #2d2449;
+    --danger: #ff8f86;
+    --danger-soft: #3b1c20;
     --ok: #6fd3a0;
-    --ok-soft: #173125;
+    --ok-soft: #16301f;
     --warn: #f3c969;
     --warn-soft: #362b12;
-    --focus: #9db5ff;
-    --backdrop: rgb(0 0 0 / 0.6);
-    --syntax-key: #8fb3ff;
+    --focus: #c9bbff;
+    --backdrop: rgb(6 4 12 / 0.65);
+    --syntax-key: #b9a7ff;
     --syntax-string: #7fd6a6;
-    --syntax-number: #d5a6ff;
+    --syntax-number: #f0a6e0;
     --syntax-keyword: #ff9b8f;
-    --syntax-comment: #9b9ea5;
+    --syntax-comment: #9c96b0;
     --syntax-meta: #f3c969;
-    --syntax-heading: #f2f2f4;
-    --syntax-link: #9db5ff;
+    --syntax-heading: #f4f1fb;
+    --syntax-link: #c9bbff;
     --diff-add: #15301f;
-    --diff-remove: #3a1b1a;
+    --diff-remove: #3b1c20;
     --shadow: none;
-    --shadow-overlay: 0 10px 30px rgb(0 0 0 / 0.5);
+    --shadow-overlay: 0 18px 40px rgb(0 0 0 / 0.55);
   }
 }

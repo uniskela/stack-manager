@@ -1,4 +1,6 @@
 import type { Metadata, Viewport } from 'next';
+import '@fontsource-variable/archivo/standard.css';
+import '@fontsource-variable/jetbrains-mono';
 import './globals.css';
 
 // Every page reads the session or database at request time; nothing is prerendered at build time.
@@ -14,8 +16,8 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#f7f7f5' },
-    { media: '(prefers-color-scheme: dark)', color: '#111214' },
+    { media: '(prefers-color-scheme: light)', color: '#efeef4' },
+    { media: '(prefers-color-scheme: dark)', color: '#0f0b18' },
   ],
 };
 

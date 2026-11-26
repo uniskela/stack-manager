@@ -5,7 +5,9 @@ import { loadDashboardDraftCounts } from '@/server/application/dashboard-draft-c
 import { safeErrorMessage } from '@/server/security/redact';
 import {
   DASHBOARD_ROUTINE_ACTIONS,
+  dashboardNextStep,
   dashboardRecentActivity,
+  type DashboardNextStep,
   dashboardSyncSummary,
   dashboardWork,
 } from '@/shared/dashboard/overview';
@@ -17,7 +19,7 @@ import { ButtonLink } from '@/ui/primitives/button';
 import { EmptyState } from '@/ui/primitives/empty-state';
 import { PageHeader } from '@/ui/primitives/page-header';
 import { SectionTitle } from '@/ui/primitives/section';
-import { FolderGit2 } from 'lucide-react';
+import { CircleAlert, CircleCheck, FilePen, FolderGit2, GitPullRequestArrow } from 'lucide-react';
 
 export const metadata: Metadata = { title: 'Dashboard' };
 
@@ -79,12 +81,18 @@ export default async function DashboardPage({ params }: { params: Promise<{ work
   const oneRepository = repositories.length === 1 ? repositories[0] : null;
   const visibleAttention = work.attention.slice(0, 8);
   const visibleDrafts = work.draftsInProgress.slice(0, 4);
+  const next = dashboardNextStep({
+    attention: work.attention,
+    openDrafts,
+    draftsInProgress: work.draftsInProgress,
+    stackCount: stackList.length,
+  });
 
   return (
     <>
       <PageHeader
         title={workspace.name}
-        description="Git source workspace · Sync status, drafts and recent changes"
+        description="Your Compose repositories, the drafts in progress and what changed recently."
         actions={
           oneRepository ? (
             <DashboardFetchAction workspaceId={workspaceId} repositoryId={oneRepository.id} />
@@ -93,32 +101,36 @@ export default async function DashboardPage({ params }: { params: Promise<{ work
       />
 
       <section aria-label="Workspace summary" className="dashboard-overview">
-        <dl className="dashboard-metrics">
-          <div className="dashboard-metric">
-            <dt>Repositories</dt>
-            <dd>{repositories.length}</dd>
+        <NextStepPanel step={next} base={base} />
+        <div className="title-block">
+          <dl className="dashboard-metrics">
+            <div className="dashboard-metric">
+              <dt>Repositories</dt>
+              <dd>{repositories.length}</dd>
+            </div>
+            <div className="dashboard-metric">
+              <dt>Stacks</dt>
+              <dd>{stackList.length}</dd>
+            </div>
+            <div className="dashboard-metric">
+              <dt>Open drafts</dt>
+              <dd>{openDrafts ?? '—'}</dd>
+            </div>
+            <div className={sync.error ? 'dashboard-metric is-alert' : 'dashboard-metric'}>
+              <dt>Sync errors</dt>
+              <dd>{sync.error}</dd>
+            </div>
+          </dl>
+          <div className="dashboard-source-status">
+            <span>
+              <strong>Source sync:</strong> {sync.ready} ready · {sync.syncing} syncing · {sync.pending}{' '}
+              queued
+              {sync.error ? ` · ${sync.error} failed` : ''}
+            </span>
+            <span>
+              <strong>Latest sync attempt:</strong> <LocalTime iso={sync.latestAttempt} />
+            </span>
           </div>
-          <div className="dashboard-metric">
-            <dt>Stacks</dt>
-            <dd>{stackList.length}</dd>
-          </div>
-          <div className="dashboard-metric">
-            <dt>Open drafts</dt>
-            <dd>{openDrafts ?? '—'}</dd>
-          </div>
-          <div className="dashboard-metric">
-            <dt>Sync errors</dt>
-            <dd>{sync.error}</dd>
-          </div>
-        </dl>
-        <div className="dashboard-source-status">
-          <span>
-            <strong>Source sync:</strong> {sync.ready} ready · {sync.syncing} syncing · {sync.pending} queued
-            {sync.error ? ` · ${sync.error} failed` : ''}
-          </span>
-          <span>
-            <strong>Latest sync attempt:</strong> <LocalTime iso={sync.latestAttempt} />
-          </span>
         </div>
         <p className="fine-print dashboard-source-note">
           These are Git source states, not container health or deployment status.
@@ -232,5 +244,47 @@ export default async function DashboardPage({ params }: { params: Promise<{ work
         </ol>
       )}
     </>
+  );
+}
+
+const NEXT_STEP_ICON = {
+  error: CircleAlert,
+  warn: GitPullRequestArrow,
+  progress: FilePen,
+  calm: CircleCheck,
+} as const;
+
+function nextStepHref(base: string, target: NonNullable<DashboardNextStep['action']>['target']) {
+  switch (target.type) {
+    case 'repository':
+      return `${base}/repositories/${target.id}`;
+    case 'stack':
+      return `${base}/stacks/${target.id}`;
+    case 'stacks-with-drafts':
+      return `${base}/stacks?drafts=1`;
+    case 'stacks':
+      return `${base}/stacks`;
+  }
+}
+
+/** One plain-language "what now" for the workspace, so a newcomer never has to decode the metrics first. */
+function NextStepPanel({ step, base }: { step: DashboardNextStep; base: string }) {
+  const Icon = NEXT_STEP_ICON[step.tone];
+  return (
+    <div className={`next-step next-step-${step.tone}`}>
+      <Icon className="next-step-icon" aria-hidden="true" />
+      <div className="next-step-text">
+        <h2 className="next-step-title">{step.title}</h2>
+        <p>{step.body}</p>
+      </div>
+      {step.action ? (
+        <ButtonLink
+          variant={step.tone === 'calm' ? 'secondary' : 'primary'}
+          href={nextStepHref(base, step.action.target)}
+        >
+          {step.action.label}
+        </ButtonLink>
+      ) : null}
+    </div>
   );
 }

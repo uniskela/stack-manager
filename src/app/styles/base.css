@@ -13,8 +13,16 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font: var(--text-md) / 1.5 var(--font);
+  font: var(--text-md) / 1.55 var(--font);
+  font-optical-sizing: auto;
   min-height: 100dvh;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--signal);
+  color: var(--signal-ink);
 }
 
 a {
@@ -30,19 +38,33 @@ a {
 code,
 .mono {
   font-family: var(--mono);
-  font-size: 0.9em;
+  font-size: 0.88em;
+}
+
+p,
+li {
+  text-wrap: pretty;
 }
 
 h1,
 h2,
 h3 {
-  line-height: 1.25;
+  line-height: 1.2;
   margin: 0 0 var(--space-2);
+  font-weight: 700;
+  text-wrap: balance;
+}
+
+/* Headings use Archivo's width axis: wide, firm lettering like the title block on a drawing. */
+h1,
+h2 {
+  font-stretch: var(--stretch-display);
+  letter-spacing: -0.012em;
 }
 
 h1 {
   font-size: var(--text-xl);
-  letter-spacing: -0.01em;
+  font-weight: 750;
 }
 
 h2 {
@@ -105,7 +127,9 @@ p {
   left: var(--space-4);
   top: var(--space-4);
   z-index: var(--z-skip-link);
-  background: var(--surface);
+  background: var(--signal);
+  color: var(--signal-ink);
+  font-weight: 650;
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
 }

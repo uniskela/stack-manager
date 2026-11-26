@@ -1,21 +1,18 @@
 import Link from 'next/link';
 
-/** Stacked-layers mark; `src/app/icon.svg` is the same drawing for the browser tab. */
-export function BrandMark() {
+/**
+ * Folded-ribbon "S": one strip of signal-yellow paper folded twice, the darker triangles are its underside.
+ * `src/app/icon.svg` and `docs/assets/logo.svg` are the same drawing with fixed colours.
+ */
+export function BrandMark({ className = 'brand-mark' }: { className?: string }) {
   return (
-    <svg className="brand-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
-      <rect width="32" height="32" rx="8" fill="var(--accent)" />
-      <g
-        fill="none"
-        stroke="var(--accent-contrast)"
-        strokeWidth="2.2"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      >
-        <path d="M8.5 12 16 8l7.5 4-7.5 4z" fill="var(--accent-contrast)" />
-        <path d="m8.5 16.5 7.5 4 7.5-4" />
-        <path d="m8.5 20.5 7.5 4 7.5-4" />
-      </g>
+    <svg className={className} viewBox="0 0 100 100" aria-hidden="true" focusable="false">
+      <rect width="100" height="100" rx="22" fill="var(--ink)" />
+      <path fill="var(--signal-fold)" d="M21 31h7l11 12H11zM79 69h-7L61 57h28z" />
+      <path
+        fill="var(--signal)"
+        d="M24 13h53l12 12v6H21L11 43V26zM11 43h66l12 14H23zM76 87H23L11 75v-6h68l10-12v17z"
+      />
     </svg>
   );
 }
@@ -24,7 +21,7 @@ export function Brand({ href = '/' }: { href?: string }) {
   return (
     <Link className="brand" href={href} aria-label="stack-manager home">
       <BrandMark />
-      <span>stack-manager</span>
+      <span className="brand-word">stack-manager</span>
     </Link>
   );
 }

@@ -1,8 +1,10 @@
-/* Signed-in application shell: sidebar on wide screens, top bar + drawer on narrow ones. */
+/* Signed-in application shell: an ink rail on wide screens, an ink top bar + drawer on narrow ones. */
 .app-shell {
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   min-height: 100dvh;
+  /* Paint the rail's column to the bottom of long pages; the sticky sidebar itself is one viewport tall. */
+  background: linear-gradient(to right, var(--ink) var(--sidebar-width), transparent var(--sidebar-width));
 }
 
 .sidebar {
@@ -10,16 +12,17 @@
   top: 0;
   height: 100dvh;
   overflow-y: auto;
-  background: var(--surface);
-  border-right: 1px solid var(--border);
+  background: var(--ink);
+  color: var(--ink-text);
+  scrollbar-color: var(--ink-border) transparent;
 }
 
 .sidebar-inner {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-5);
   min-height: 100%;
-  padding: var(--space-4) var(--space-3);
+  padding: var(--space-5) var(--space-3) var(--space-4);
 }
 
 .sidebar-head {
@@ -31,28 +34,44 @@
   min-height: 40px;
 }
 
+.sidebar :focus-visible,
+.drawer :focus-visible,
+.mobile-bar :focus-visible {
+  outline-color: var(--signal);
+}
+
 /* ---------- Brand ---------- */
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
-  font-weight: 650;
+  gap: 0.6rem;
+  min-height: 40px;
+  font-weight: 700;
+  font-stretch: var(--stretch-display);
+  font-size: 1.05rem;
+  letter-spacing: -0.01em;
   color: var(--text);
   text-decoration: none;
   white-space: nowrap;
 }
 
+.sidebar .brand,
+.drawer .brand,
+.mobile-bar .brand {
+  color: var(--ink-text-strong);
+}
+
 .brand-mark {
-  width: 24px;
-  height: 24px;
+  width: 30px;
+  height: 30px;
   flex: none;
 }
 
 /* ---------- Workspace switcher ---------- */
 .ws-switcher {
-  border: 1px solid var(--border);
+  border: 1px solid var(--ink-border);
   border-radius: var(--radius-sm);
-  background: var(--surface-2);
+  background: var(--ink-raised);
 }
 
 .ws-current {
@@ -62,6 +81,7 @@
   padding: var(--space-2) var(--space-3);
   min-height: var(--control-height);
   list-style: none;
+  color: var(--ink-text-strong);
 }
 
 .ws-current::-webkit-details-marker {
@@ -75,12 +95,12 @@ summary.ws-current {
 .ws-label {
   display: block;
   font-size: var(--text-xs);
-  color: var(--text-muted);
+  color: var(--ink-text);
 }
 
 .ws-name {
   display: block;
-  font-weight: 600;
+  font-weight: 650;
 }
 
 .ws-current .grow {
@@ -88,11 +108,15 @@ summary.ws-current {
   min-width: 0;
 }
 
+.ws-current .muted {
+  color: var(--ink-text);
+}
+
 .ws-list {
   list-style: none;
   margin: 0;
   padding: var(--space-1);
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--ink-border);
 }
 
 .ws-list a {
@@ -102,16 +126,18 @@ summary.ws-current {
   min-height: 40px;
   padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
-  color: var(--text);
+  color: var(--ink-text);
   text-decoration: none;
 }
 
 .ws-list a:hover {
-  background: var(--surface);
+  color: var(--ink-text-strong);
+  background: var(--ink);
 }
 
 .ws-list a[aria-current='page'] {
-  font-weight: 600;
+  color: var(--ink-text-strong);
+  font-weight: 650;
 }
 
 /* ---------- Primary navigation ---------- */
@@ -124,29 +150,44 @@ summary.ws-current {
 }
 
 .nav-link {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  min-height: 40px;
+  min-height: 42px;
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
-  color: var(--text-muted);
+  color: var(--ink-text);
   text-decoration: none;
-  font-weight: 500;
+  font-weight: 550;
+  transition:
+    background-color var(--duration-fast),
+    color var(--duration-fast);
 }
 
 .nav-link:hover {
-  color: var(--text);
-  background: var(--surface-2);
+  color: var(--ink-text-strong);
+  background: var(--ink-raised);
 }
 
+/* The active page carries a folded yellow tab, the same cut as the logo's corners. */
 .nav-link[aria-current='page'] {
-  color: var(--text);
-  background: var(--accent-soft);
+  color: var(--ink-text-strong);
+  background: var(--ink-raised);
+}
+
+.nav-link[aria-current='page']::before {
+  content: '';
+  position: absolute;
+  inset-block: 8px;
+  inset-inline-start: calc(-1 * var(--space-3));
+  width: 5px;
+  background: var(--signal);
+  clip-path: polygon(0 0, 100% 4px, 100% calc(100% - 4px), 0 100%);
 }
 
 .nav-link[aria-current='page'] .icon {
-  color: var(--accent);
+  color: var(--signal);
 }
 
 /* ---------- Account ---------- */
@@ -155,7 +196,7 @@ summary.ws-current {
   display: grid;
   gap: var(--space-2);
   padding-top: var(--space-3);
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--ink-border);
 }
 
 .account {
@@ -164,6 +205,7 @@ summary.ws-current {
   gap: var(--space-2);
   padding: 0 var(--space-2);
   min-width: 0;
+  color: var(--ink-text-strong);
 }
 
 .avatar {
@@ -172,10 +214,10 @@ summary.ws-current {
   width: 28px;
   height: 28px;
   flex: none;
-  border-radius: 50%;
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-weight: 700;
+  border-radius: var(--radius-sm);
+  background: var(--signal);
+  color: var(--signal-ink);
+  font-weight: 750;
   font-size: var(--text-sm);
   text-transform: uppercase;
 }
@@ -183,7 +225,25 @@ summary.ws-current {
 .sidebar-footer .btn {
   justify-content: flex-start;
   width: 100%;
-  font-weight: 500;
+  font-weight: 550;
+}
+
+.sidebar .btn.ghost,
+.drawer .btn.ghost,
+.mobile-bar .btn.ghost {
+  color: var(--ink-text);
+}
+
+.sidebar .btn.ghost:hover:not(:disabled),
+.drawer .btn.ghost:hover:not(:disabled),
+.mobile-bar .btn.ghost:hover:not(:disabled) {
+  color: var(--ink-text-strong);
+  background: var(--ink-raised);
+}
+
+.sidebar .error-text,
+.drawer .error-text {
+  color: var(--ink-danger);
 }
 
 /* ---------- Main column ---------- */
@@ -191,7 +251,7 @@ summary.ws-current {
   width: 100%;
   max-width: var(--content-width);
   margin: 0 auto;
-  padding: var(--space-7) var(--space-6) 4rem;
+  padding: var(--space-8) var(--space-7) 4rem;
 }
 
 /* ---------- Narrow screens ---------- */
@@ -206,9 +266,8 @@ summary.ws-current {
   height: 100dvh;
   max-height: 100dvh;
   border: 0;
-  border-right: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text);
+  background: var(--ink);
+  color: var(--ink-text);
   box-shadow: var(--shadow-overlay);
 }
 
@@ -217,7 +276,7 @@ summary.ws-current {
 }
 
 .drawer[open] {
-  animation: drawer-in var(--duration-base) ease-out;
+  animation: drawer-in 260ms var(--ease-out);
 }
 
 @keyframes drawer-in {
@@ -230,6 +289,7 @@ summary.ws-current {
   .app-shell {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto 1fr;
+    background: none;
   }
   .sidebar {
     display: none;
@@ -243,15 +303,24 @@ summary.ws-current {
     gap: var(--space-2);
     height: var(--mobile-bar-height);
     padding: 0 var(--space-2);
-    background: color-mix(in srgb, var(--surface) 92%, transparent);
-    backdrop-filter: saturate(1.2) blur(6px);
-    border-bottom: 1px solid var(--border);
+    background: var(--ink);
+    color: var(--ink-text);
+  }
+  .mobile-bar .brand-mark {
+    width: 26px;
+    height: 26px;
   }
   .mobile-bar .ws-crumb {
     min-width: 0;
-    color: var(--text-muted);
+    color: var(--ink-text);
   }
   .main {
     padding: var(--space-5) var(--space-4) 4rem;
+  }
+}
+
+@media (max-width: 420px) {
+  .mobile-bar .brand-word {
+    display: none;
   }
 }

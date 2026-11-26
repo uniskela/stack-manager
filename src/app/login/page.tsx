@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { getContainer } from '@/server/container';
-import { Brand } from '@/ui/brand';
+import { AuthShell } from '@/ui/auth-shell';
 import { LoginForm } from '@/ui/login-form';
 import { getSession } from '../_lib/session';
 
@@ -22,14 +22,12 @@ export default async function LoginPage({
   const next = safeNext((await searchParams).next);
   if (await getSession()) redirect(next);
   return (
-    <main className="center-shell">
-      <div className="auth-card">
-        <Brand />
-        <div className="card">
-          <h1>Sign in</h1>
-          <LoginForm next={next} />
-        </div>
+    <AuthShell>
+      <div className="card">
+        <h1>Sign in</h1>
+        <p className="muted">Use the admin account created when this instance was set up.</p>
+        <LoginForm next={next} />
       </div>
-    </main>
+    </AuthShell>
   );
 }

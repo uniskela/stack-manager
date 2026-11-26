@@ -140,3 +140,88 @@ export function dashboardRecentActivity<T extends { action: string; outcome: str
     .filter((event) => event.outcome === 'failure' || !routineActions.has(event.action))
     .slice(0, limit);
 }
+
+export interface DashboardNextStep {
+  tone: 'error' | 'warn' | 'progress' | 'calm';
+  title: string;
+  body: string;
+  action?: {
+    label: string;
+    target: { type: 'repository' | 'stack' | 'stacks-with-drafts' | 'stacks'; id?: string };
+  };
+}
+
+/**
+ * The single most useful thing to do next, for people who are new to the Git workflow. Failures outrank
+ * drafts changed upstream, which outrank open drafts. `openDrafts` is null when counts could not be loaded,
+ * so the calm "everything committed" message is never shown on incomplete data.
+ */
+export function dashboardNextStep(input: {
+  attention: readonly DashboardAttention[];
+  openDrafts: number | null;
+  draftsInProgress: readonly DashboardDraftWork[];
+  stackCount: number;
+}): DashboardNextStep {
+  const failures = input.attention.filter((item) => item.kind === 'sync-error');
+  const outdated = input.attention.filter((item) => item.kind === 'outdated');
+  const first = failures[0];
+  if (first) {
+    return {
+      tone: 'error',
+      title:
+        failures.length === 1
+          ? `${first.label} could not be fetched`
+          : `${failures.length} repositories could not be fetched`,
+      body: 'Edits stay safe as drafts, but stacks show the last fetched commit until Git is reachable again. Open the repository to see the error and test its credential.',
+      action: { label: 'Open repository', target: first.target },
+    };
+  }
+  const firstOutdated = outdated[0];
+  if (firstOutdated) {
+    return {
+      tone: 'warn',
+      title:
+        outdated.length === 1
+          ? `Drafts in ${firstOutdated.label} changed upstream`
+          : `Drafts in ${outdated.length} places changed upstream`,
+      body: 'Someone committed to these files after you started editing. Compare your draft with the new version before you commit.',
+      action: {
+        label: firstOutdated.target.type === 'stack' ? 'Open stack' : 'Open repository',
+        target: firstOutdated.target,
+      },
+    };
+  }
+  if (input.openDrafts === null) {
+    return {
+      tone: 'warn',
+      title: 'Draft counts are unavailable',
+      body: 'Some repositories could not report their drafts. Open Stacks to check for unsaved work.',
+      action: { label: 'Open stacks', target: { type: 'stacks' } },
+    };
+  }
+  if (input.openDrafts > 0) {
+    const only = input.draftsInProgress.length === 1 ? input.draftsInProgress[0] : undefined;
+    return {
+      tone: 'progress',
+      title: `${plural(input.openDrafts, 'draft')} ready to review`,
+      body: 'Drafts stay on this server until you commit them. Review the changes, then commit and push them to Git.',
+      action: only
+        ? { label: `Open ${only.label}`, target: { type: 'stack', id: only.id } }
+        : { label: 'Stacks with drafts', target: { type: 'stacks-with-drafts' } },
+    };
+  }
+  if (input.stackCount === 0) {
+    return {
+      tone: 'calm',
+      title: 'No stacks found yet',
+      body: 'A stack is a folder with a Compose file. Check the stack folder in the repository settings, or add a Compose file to Git and fetch again.',
+      action: { label: 'Open stacks', target: { type: 'stacks' } },
+    };
+  }
+  return {
+    tone: 'calm',
+    title: 'Everything is committed',
+    body: 'Open a stack to edit its Compose file, docs or environment. Your edits are saved as drafts until you commit them.',
+    action: { label: 'Browse stacks', target: { type: 'stacks' } },
+  };
+}

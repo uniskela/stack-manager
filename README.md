@@ -1,3 +1,5 @@
+<img src="docs/assets/logo.svg" alt="" width="64" height="64">
+
 # stack-manager
 
 **Git-native source workspace for self-hosted Compose infrastructure, with deployment awareness.**

@@ -14,8 +14,9 @@ Open the app. The first visit starts setup:
 Setup can only happen once. After that, `/setup` redirects to sign-in.
 
 After sign-in, the sidebar lists **Dashboard**, **Stacks**, **Repositories** and **Settings** (in that order). The
-**Dashboard** is your workspace home: a quick view of repository and stack counts, open drafts, sync
-errors and the most recent Git sync attempt. **Needs attention** groups outdated drafts by stack and highlights
+**Dashboard** is your workspace home. It opens with one suggested next step, such as fixing a failed fetch,
+comparing drafts that changed upstream or reviewing open drafts, with a button that goes straight there. Below it
+are repository and stack counts, open drafts, sync errors and the most recent Git sync attempt. **Needs attention** groups outdated drafts by stack and highlights
 failed repository fetches; ordinary drafts appear separately under **Work in progress**. Recent activity shows up
 to five meaningful events with a link to the full audit log in **Settings → Activity**. Successful routine
 routing evaluations and skips are hidden from this feed; failures remain visible. A single-repository
