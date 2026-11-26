@@ -253,6 +253,25 @@ describe('WUD image updates over authenticated routes', () => {
       expect(
         (await imageUpdates.queue(workspaceId)).inventory.find((item) => item.stackId === stackId)?.images,
       ).toEqual(expected);
+      const readFile = source.readFile.bind(source);
+      const sourceRead = vi.spyOn(source, 'readFile');
+      for (const sourceIssue of ['unavailable', 'invalid'] as const) {
+        sourceRead.mockImplementation(async (...args) => {
+          if (args[3] !== cache.composePath) return readFile(...args);
+          if (sourceIssue === 'unavailable') throw new Error('Fixture source read failed');
+          return { ...(await readFile(...args)), content: 'services: [' };
+        });
+        const queue = await imageUpdates.queue(workspaceId);
+        expect(queue.needsSetup).toContainEqual({
+          id: cache.id,
+          name: cache.name,
+          unmatched: [],
+          sourceIssue,
+        });
+        expect(queue.needsSetup.map((item) => item.id)).not.toContain(stackId);
+        expect(queue.inventory.find((item) => item.stackId === stackId)?.images).toEqual(expected);
+      }
+      sourceRead.mockRestore();
       expect((await imageUpdates.queue(otherId)).inventory).toEqual([]);
       h.clock.advance(30 * 60_000);
       const stale = await call(wudMappings.GET, request);

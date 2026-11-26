@@ -297,7 +297,7 @@ export class ImageUpdateService {
     const bound = connection ? stacks.filter((stack) => byStackId.has(stack.id)) : [];
     const inventory = await readConcurrently(bound, 8, (stack) => {
       const binding = byStackId.get(stack.id) ?? null;
-      return this.#inventory(stack, binding, connection).catch(() => ({
+      return this.#inventory(stack, binding, connection).catch((): StackInventory => ({
         stackId: stack.id,
         stackName: stack.name,
         binding: bindingView(binding),
@@ -305,16 +305,15 @@ export class ImageUpdateService {
         images: [],
       }));
     });
-    const unmatchedServices = new Map(
-      inventory.map((stack) => [
-        stack.stackId,
-        stack.images.filter((image) => image.status === 'unmatched').map((image) => image.name),
-      ]),
-    );
+    const inventoryByStack = new Map(inventory.map((entry) => [entry.stackId, entry]));
     const allStacks = stacks.map(({ id, name }) => ({ id, name }));
     const needsSetup = allStacks.flatMap((stack) => {
-      const unmatched = unmatchedServices.get(stack.id);
-      return unmatched?.length === 0 ? [] : [{ ...stack, unmatched: unmatched ?? [] }];
+      const entry = inventoryByStack.get(stack.id);
+      const unmatched =
+        entry?.images.filter((image) => image.status === 'unmatched').map((image) => image.name) ?? [];
+      if (entry?.sourceStatus === 'ready' && !unmatched.length) return [];
+      const sourceIssue = entry && entry.sourceStatus !== 'ready' ? entry.sourceStatus : null;
+      return [{ ...stack, unmatched, sourceIssue }];
     });
     return {
       connected: Boolean(connection),

@@ -134,22 +134,30 @@ function WudSetupList({
   connected: boolean;
   unboundCount: number;
 }>) {
+  const sourceHints = {
+    invalid: 'Check invalid Compose source',
+    unavailable: 'Check unavailable Compose source',
+  };
   const setupLabel = connected ? 'Match WUD project' : 'Set up WUD';
   const emptyMessage = hasStacks ? 'All stacks are linked to WUD.' : 'Add a stack to match it to WUD.';
   return (
     <Section id="wud-matches" title="Match stacks to WUD">
       {stacks.length > 0 ? (
         <ul className="list">
-          {stacks.map((stack) => (
-            <li key={stack.id}>
-              <Link className="list-row" href={`/w/${workspaceId}/stacks/${stack.id}/image-updates/setup`}>
-                <strong className="grow">{stack.name}</strong>
-                <span>
-                  {stack.unmatched.length ? `Missing from WUD: ${stack.unmatched.join(', ')}` : setupLabel}
-                </span>
-              </Link>
-            </li>
-          ))}
+          {stacks.map((stack) => {
+            const href = `/w/${workspaceId}/stacks/${stack.id}`;
+            const mapping = stack.unmatched.length
+              ? `Missing from WUD: ${stack.unmatched.join(', ')}`
+              : setupLabel;
+            return (
+              <li key={stack.id}>
+                <Link className="list-row" href={stack.sourceIssue ? href : `${href}/image-updates/setup`}>
+                  <strong className="grow">{stack.name}</strong>
+                  <span>{stack.sourceIssue ? sourceHints[stack.sourceIssue] : mapping}</span>
+                </Link>
+              </li>
+            );
+          })}
         </ul>
       ) : (
         <p>{emptyMessage}</p>
