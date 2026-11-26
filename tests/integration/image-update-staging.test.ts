@@ -307,7 +307,7 @@ const beszelFiles = {
     'Portainer Stacks (from repo)\nflowvps (previously oracle-vps)\n- beszel: henrygd/beszel:0.21.0\n',
 };
 
-async function arrangeNativePublication() {
+async function arrangeNativePublication({ markdown = beszelFiles[markdownPath], checked = false } = {}) {
   const pullUrl = 'https://git.test/acme/image-updates/pulls/12';
   const openPulls: GiteaImageUpdatePull[] = [];
   const create = vi.fn(async ({ head, base, title }: GiteaCreateImageUpdatePullInput) => {
@@ -318,10 +318,10 @@ async function arrangeNativePublication() {
   });
   const changelogUrl = 'https://releases.example.org/beszel/0.21.2';
   const check = vi.fn().mockResolvedValue({
-    status: 'incomplete',
+    status: checked ? 'checked' : 'incomplete',
     url: changelogUrl,
     signals: [],
-    detail: 'Missing release range.',
+    detail: checked ? '' : 'Missing release range.',
   });
   const read = vi.fn().mockResolvedValue([
     {
@@ -331,7 +331,7 @@ async function arrangeNativePublication() {
       repository: 'index.docker.io/henrygd/beszel',
       installedTag: '0.21.0',
       installedDigest: null,
-      checkedAt: null,
+      checkedAt: checked ? new Date().toISOString() : null,
       available: true,
       failed: false,
       candidateTag: '0.21.2',
@@ -341,6 +341,7 @@ async function arrangeNativePublication() {
   const { container, workspace, user, stacks, cookie, baseSha, server, dataDir } = await arrange(
     {
       ...beszelFiles,
+      [markdownPath]: markdown,
       'docs/wud-update-groups.json': '{"version":1,"groups":[]}\n',
       'docs/container-changelogs.json': JSON.stringify({
         sources: { 'henrygd/beszel': { displayUrl: 'https://releases.example.org/beszel/{target_tag}' } },
@@ -499,6 +500,21 @@ describe('native Gitea image update publication', () => {
     expect(replay.status).toBe(200);
     expect(replay.json).toEqual(published.json);
     expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it('publishes a reviewable update when the Markdown version is free text', async () => {
+    const markdown = beszelFiles[markdownPath].replace('henrygd/beszel:0.21.0', 'see dashboard for version');
+    const { preview, publish, create, remoteGit, openPulls } = await arrangeNativePublication({
+      markdown,
+      checked: true,
+    });
+    expect(preview.changes[0]?.status).toBe('ready');
+    expect(preview.reason).toContain('Check the beszel entry in docs/TechStack.md');
+    expect(preview.proposal?.map(({ path }) => path)).toEqual([inventoryPath, beszelPath]);
+    expect((await publish(false)).status).toBe(409);
+    expect((await publish()).status).toBe(200);
+    expect(create.mock.calls[0]?.[0].body).toContain(preview.reason);
+    expect(await remoteGit('show', openPulls[0]!.headSha + ':' + markdownPath)).toBe(markdown);
   });
 
   it.each(['moved main', 'an open legacy update pull request'])(

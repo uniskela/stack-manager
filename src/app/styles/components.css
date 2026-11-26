@@ -55,6 +55,11 @@
 }
 
 .breadcrumbs a {
+  display: inline-grid;
+  align-content: center;
+  min-block-size: 28px;
+  min-inline-size: 24px;
+  overflow-wrap: anywhere;
   color: var(--text-muted);
   text-decoration: none;
 }
@@ -423,7 +428,17 @@ input[aria-invalid='true'] {
   border-color: var(--danger);
 }
 
+.update-candidate {
+  max-inline-size: 38rem;
+  inline-size: 100%;
+}
+
+.planner-status:empty {
+  position: absolute;
+}
+
 fieldset {
+  min-inline-size: 0;
   border: 0;
   padding: 0;
   margin: 0;

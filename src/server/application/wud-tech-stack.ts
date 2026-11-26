@@ -1,7 +1,7 @@
 import { fromMarkdown } from 'mdast-util-from-markdown';
 import { isMap, isScalar, isSeq, parseDocument } from 'yaml';
 import { ValidationError } from '@/server/domain/errors';
-import { imageReference } from '@/shared/image-updates';
+import { imageReference, isImageTag } from '@/shared/image-updates';
 import { normalizeRepoPath } from '@/shared/source/paths';
 
 type Files = { markdown: string; json: string };
@@ -12,11 +12,6 @@ type Pin = { repository: string; tag: string };
 function taggedImage(image: string): Pin | null {
   const ref = imageReference(image);
   return ref?.explicitTag && !ref.digest && ref.tag ? { repository: ref.repository, tag: ref.tag } : null;
-}
-
-function matchesPin(image: string, pin: Pin): boolean {
-  const ref = taggedImage(image);
-  return ref?.repository === pin.repository && ref.tag === pin.tag;
 }
 
 function requireOne<T>(matches: readonly T[], file: string): T {
@@ -46,7 +41,7 @@ function markdownEdit(
   composeDir: string | undefined,
   oldPin: Pin,
   newTag: string,
-): Edit {
+): Edit | null {
   const file = 'docs/TechStack.md';
   const sectionIndices: number[] = [];
   for (const [index, node] of body.entries()) {
@@ -92,17 +87,27 @@ function markdownEdit(
   const { text, start } = requireOne(entries, file);
   const ref = /^(?:`([^`]+)`|([^\s`,;)]+))(?=$|[ \t,;)])/.exec(text);
   const image = ref?.[1] ?? ref?.[2];
-  let tagEnd = 0;
-  if (image && matchesPin(image, oldPin)) {
-    tagEnd = start + (ref?.[1] ? 1 : 0) + image.length;
-  } else {
-    const abbreviated = /^(\S+)[ \t]+`([^`]+)`(?=$|[ \t,;)])/d.exec(text);
-    if (abbreviated?.[1] === service && abbreviated[2] === oldPin.tag) {
-      tagEnd = start + (abbreviated.indices?.[2]?.[1] ?? 0);
-    }
+  const documented = image ? taggedImage(image) : null;
+  if (image && documented?.repository === oldPin.repository) {
+    const end = start + (ref?.[1] ? 1 : 0) + image.length;
+    return { start: end - documented.tag.length, end, value: newTag };
   }
-  if (!tagEnd) throw new ValidationError(`${file} service image differs from the committed pin.`);
-  return { start: tagEnd - oldPin.tag.length, end: tagEnd, value: newTag };
+  // The JSON service entry independently identifies the image behind a shorthand version.
+  if (
+    image &&
+    (ref?.[1] || text.trimEnd() === image) &&
+    /^v?\d+(?:\.\d+)+[\w.-]*$/.test(image) &&
+    isImageTag(image)
+  ) {
+    const offset = start + (ref?.[1] ? 1 : 0);
+    return { start: offset, end: offset + image.length, value: newTag };
+  }
+  const abbreviated = /^(\S+)[ \t]+`([^`]+)`(?=$|[ \t,;)])/d.exec(text);
+  const range = abbreviated?.indices?.[2];
+  if (range && abbreviated?.[1] === service && isImageTag(abbreviated[2]!)) {
+    return { start: start + range[0], end: start + range[1], value: newTag };
+  }
+  return null;
 }
 
 function parseInventory(source: string) {
@@ -147,9 +152,11 @@ function jsonEdit(
     !isScalar(image) ||
     typeof image.value !== 'string' ||
     !image.range ||
-    !matchesPin(image.value, oldPin)
+    taggedImage(image.value)?.repository !== oldPin.repository
   ) {
-    throw new ValidationError(`${file} service image differs from the committed pin.`);
+    throw new ValidationError(
+      `${file} must identify the same tagged image as Compose for ${service}. Check the inventory entry and preview again.`,
+    );
   }
   const [start, end] = image.range;
   // Locate the tag in the original scalar, including any JSON escapes in the separator or tag.
@@ -159,11 +166,15 @@ function jsonEdit(
   return { start: tagEnd - rawTag.length, end: tagEnd, value: newTag };
 }
 
-export function editWudTechStack(files: Files, updates: readonly Update[]): Files {
+export function editWudTechStack(
+  files: Files,
+  updates: readonly Update[],
+): Files & { reviewNotes?: string[] } {
   if (updates.length === 0) return files;
   const { markdown, json } = files;
   const body = fromMarkdown(markdown).children;
   const stacks = parseInventory(json);
+  const reviewNotes: string[] = [];
   const markdownEdits: Edit[] = [];
   const jsonEdits: Edit[] = [];
 
@@ -184,11 +195,17 @@ export function editWudTechStack(files: Files, updates: readonly Update[]): File
       throw new ValidationError('TechStack update requires two explicit tags for the same image repository.');
     }
     const composeDir = parts.at(-2);
-    markdownEdits.push(markdownEdit(markdown, body, stack, service, composeDir, oldPin, newPin.tag));
+    const edit = markdownEdit(markdown, body, stack, service, composeDir, oldPin, newPin.tag);
+    if (edit) markdownEdits.push(edit);
+    else
+      reviewNotes.push(
+        `Check the ${service} entry in docs/TechStack.md before merging. Its version could not be updated automatically.`,
+      );
     jsonEdits.push(jsonEdit(json, stacks, stack, service, composeDir, oldPin, newPin.tag));
   }
 
   return {
+    ...(reviewNotes.length ? { reviewNotes } : {}),
     markdown: applyEdits(markdown, markdownEdits, 'docs/TechStack.md'),
     json: applyEdits(json, jsonEdits, 'docs/TechStack.json'),
   };

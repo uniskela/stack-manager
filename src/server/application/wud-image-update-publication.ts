@@ -21,6 +21,7 @@ interface Publication {
   commitSha: string;
   changes: readonly WudRepositoryChange[];
   review: boolean;
+  reviewNotes: readonly string[];
   signal?: AbortSignal;
 }
 
@@ -104,6 +105,7 @@ export class WudImageUpdatePublication {
             review
               ? 'Review the compatibility or release evidence before marking this pull request ready.'
               : '',
+            ...plan.reviewNotes,
             '',
             ...changes.map(({ path }) => '- ' + path.replace(/[\x60<>]/g, '')),
           ]

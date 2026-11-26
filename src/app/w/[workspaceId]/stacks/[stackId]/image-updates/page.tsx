@@ -50,11 +50,6 @@ export default async function StackImageUpdatesPage({
       ) : (
         <p className="muted">{emptySourceMessages[sourceStatus]}</p>
       )}
-      {connected || binding ? (
-        <Section id="wud-mapping" title="Match this stack to WUD">
-          <StackWudMatch workspaceId={workspaceId} stackId={stackId} binding={binding} />
-        </Section>
-      ) : null}
       {images.length > 0 ? (
         <Section id="plan-image-updates" title="Plan image updates">
           <ImageUpdatePlanner
@@ -64,6 +59,11 @@ export default async function StackImageUpdatesPage({
             initialStackId={stackId}
             repositoryWorkflow={repositoryWorkflow}
           />
+        </Section>
+      ) : null}
+      {connected || binding ? (
+        <Section id="wud-mapping" title="Match this stack to WUD">
+          <StackWudMatch workspaceId={workspaceId} stackId={stackId} binding={binding} />
         </Section>
       ) : null}
     </div>

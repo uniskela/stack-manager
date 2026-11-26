@@ -27,13 +27,12 @@
 }
 
 .tabs {
-  /* Keep the visually hidden draft label inside the horizontal scroller. */
+  /* Keep the draft count label inside the navigation landmark. */
   position: relative;
   display: flex;
   gap: var(--space-1);
-  overflow-x: auto;
+  flex-wrap: wrap;
   border-bottom: 1px solid var(--border);
-  scrollbar-width: thin;
 }
 
 .tabs a {
@@ -47,14 +46,16 @@
   font-weight: 500;
   white-space: nowrap;
   border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
 }
 
 .tabs a:hover {
+  background: var(--surface-2);
   color: var(--text);
 }
 
 .tabs a[aria-current='page'] {
+  background: var(--accent-soft);
   color: var(--text);
   border-bottom-color: var(--accent);
 }

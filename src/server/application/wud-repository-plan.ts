@@ -25,7 +25,7 @@ export async function planWudRepositoryUpdate(
   commitSha: string,
   groups: WudUpdateGroupPolicy,
   selected: readonly WudGroupImageChange[],
-): Promise<WudRepositoryChange[]> {
+) {
   const paths = [
     ...new Set([
       ...selected.map(({ path }) => path),
@@ -64,17 +64,21 @@ export async function planWudRepositoryUpdate(
     documented.add(key);
     return true;
   });
-  const { markdown, json } = editWudTechStack(
+  const {
+    markdown,
+    json,
+    reviewNotes = [],
+  } = editWudTechStack(
     {
-      markdown: files.get(MARKDOWN)!.before,
-      json: files.get(INVENTORY)!.before,
+      markdown: plan.files.get(MARKDOWN) ?? files.get(MARKDOWN)!.before,
+      json: plan.files.get(INVENTORY) ?? files.get(INVENTORY)!.before,
     },
     updates,
   );
   plan.files.set(MARKDOWN, markdown);
   plan.files.set(INVENTORY, json);
 
-  return [...plan.files]
+  const changes = [...plan.files]
     .sort(([left], [right]) => left.localeCompare(right))
     .flatMap(([path, content]) => {
       const file = files.get(path)!;
@@ -87,6 +91,7 @@ export async function planWudRepositoryUpdate(
       }
       return [{ path, content, ...file }];
     });
+  return { changes, reviewNotes };
 }
 
 export function wudRepositoryPlanHash(changes: readonly WudRepositoryChange[]): string {

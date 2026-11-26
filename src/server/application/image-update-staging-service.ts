@@ -221,7 +221,7 @@ export class ImageUpdateStagingService {
     const { stack, file } = await this.#publishContext(approval);
     const { policy, externalPolicy, groupsText } = await this.#loadPolicy(stack, approval.commitSha);
     if (!externalPolicy) throw invalidPreview();
-    const changes = await this.#repositoryPlan(stack, file, approval.edits, groupsText);
+    const { changes, reviewNotes } = await this.#repositoryPlan(stack, file, approval.edits, groupsText);
     if (wudRepositoryPlanHash(changes) !== approval.nextContentHash) throw invalidPreview();
     const automation = policy.automation;
     if (approval.actorUserId === null && (automation?.mode !== 'publish' || approval.review))
@@ -233,6 +233,7 @@ export class ImageUpdateStagingService {
         commitSha: approval.commitSha,
         changes,
         review: approval.review,
+        reviewNotes,
         signal,
       },
       approval.actorUserId,
@@ -330,8 +331,8 @@ export class ImageUpdateStagingService {
     const { content, failures } = editComposeImages(committed, edits);
     if (failures.length) return blockedFile(summary, 'Could not prepare the selected edits.', rows);
 
-    const review = rows.some((row) => row.status === 'review');
     const proposal = externalPolicy ? await this.#repositoryPlan(stack, file, edits, groupsText) : null;
+    const review = rows.some((row) => row.status === 'review') || Boolean(proposal?.reviewNotes.length);
     const token = this.#sign({
       workspaceId: stack.workspaceId,
       actorUserId,
@@ -339,7 +340,7 @@ export class ImageUpdateStagingService {
       path: stack.composePath,
       commitSha: file.commitSha,
       blobSha: file.blobSha,
-      nextContentHash: proposal ? wudRepositoryPlanHash(proposal) : hash(content),
+      nextContentHash: proposal ? wudRepositoryPlanHash(proposal.changes) : hash(content),
       edits,
       review,
       ...(proposal ? { proposal: true } : {}),
@@ -348,10 +349,10 @@ export class ImageUpdateStagingService {
     return {
       ...summary,
       status: review ? 'review' : 'ready',
-      reason: null,
+      reason: proposal?.reviewNotes.join(' ') || null,
       changes: rows,
       token,
-      ...(proposal ? { proposal: wudRepositoryDiff(proposal) } : {}),
+      ...(proposal ? { proposal: wudRepositoryDiff(proposal.changes) } : {}),
     };
   }
 

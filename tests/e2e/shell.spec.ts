@@ -110,6 +110,10 @@ test('sign in and sign out', async ({ page }) => {
   await expect(page).toHaveURL(/\/w\//);
 
   const nav = await openNav(page);
+  await page.route('**/api/auth/logout', (route) => route.fulfill({ status: 503 }), { times: 1 });
+  await nav.getByRole('button', { name: 'Sign out' }).click();
+  await expect(nav.getByRole('alert')).toContainText('Sign-out could not be confirmed');
+  await expect(page).toHaveURL(/\/w\//);
   await nav.getByRole('button', { name: 'Sign out' }).click();
   await expect(page).toHaveURL(/\/login/);
 });

@@ -90,16 +90,33 @@ describe('WUD TechStack edits', () => {
   });
 
   it.each([
+    ['`bellamy/wallos:4.9`', '`bellamy/wallos:5.11.3`'],
+    ['wallos `4.9`', 'wallos `5.11.3`'],
+    ['`5.10.0`', '`5.11.3`'],
+    ['docker.io/bellamy/wallos:5.11.3', 'docker.io/bellamy/wallos:5.11.3'],
+  ])('reconciles the Wallos inventory entry %s against Compose', (row, expected) => {
+    const update = {
+      path: '104-finances/wallos/docker-compose.yml',
+      service: 'wallos',
+      before: 'docker.io/bellamy/wallos:5.11.2',
+      after: 'docker.io/bellamy/wallos:5.11.3',
+    };
+    const markdown = '104-finances\r\n- wallos: ' + row + ' (finance app)\r\n';
+    const json =
+      '{"stacks":[{"stack":"104-finances","services":[{"name":"wallos","image":"bellamy/wallos:4.10"}]}]}';
+    expect(editWudTechStack({ markdown, json }, [update])).toEqual({
+      markdown: markdown.replace(row, expected),
+      json: json.replace(':4.10', ':5.11.3'),
+    });
+  });
+
+  it.each([
     [
       'a missing Markdown stack',
       { ...files, markdown: files.markdown.replace('flowvps (previously oracle-vps)', 'other') },
     ],
     ['a Markdown example in a code fence', { ...files, markdown: '```md\r\n' + files.markdown + '```' }],
     ['a missing Markdown service', { ...files, markdown: files.markdown.replace('- beszel:', '- other:') }],
-    [
-      'a mismatched Markdown pin',
-      { ...files, markdown: files.markdown.replace('henrygd/beszel:0.21.0', 'henrygd/beszel:0.21.01') },
-    ],
     [
       'a duplicate Markdown service with a conflicting pin',
       { ...files, markdown: files.markdown.replace('- beszel-agent:', '- beszel:') },
