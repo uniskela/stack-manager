@@ -143,11 +143,10 @@ An entered link takes precedence over the service or image link in Git, followed
 
 ### Drafts
 
-Drafts are stored in stack-manager's database and stay on the server until you discard them, even after they are
-committed and pushed. Once you've checked the pushed result, discard the drafts you no longer need. If the file changes in
-Git after you start a draft, the editor marks it **Changed upstream** and it can't be committed. That way you can't
-overwrite someone else's change by accident. Saving again doesn't fix this: copy what you need, discard the draft and
-make the edit again on the current version.
+Drafts are stored in stack-manager's database. After a fetch, drafts whose contents match the fetched files are
+cleared. If a fetched file has changed since you started a draft and the draft still differs from the file, the
+editor marks it **Changed upstream** and blocks committing it. To keep your edit, copy what you need, discard the
+outdated draft and apply your edit to the current version.
 
 ## 5. Commit and push
 
@@ -160,7 +159,8 @@ make the edit again on the current version.
 5. Write a commit message, then choose **Commit**, or **Commit & Push** to send it to your Git server straight away.
    Pushing needs a token with write access.
 6. After pushing, Stack Manager queues a background fetch. Once it finishes, the commit appears on the stack's
-   **History** tab. You can still choose **Fetch now** to retry. Discard the drafts you no longer need.
+   **History** tab and drafts that match the fetched files clear from **Changes**. Choose **Fetch now** to retry
+   or clear matching drafts left over from an earlier version.
 
 Stack Manager pushes only to the repository's tracked branch and **never force pushes**. If someone else pushed
 first, you'll see *"The remote branch changed since your copy was last updated."* Nothing is overwritten, and your

@@ -100,10 +100,12 @@ export interface GitRepositoryConnectionRepository {
       >
     > & { updatedAt: Date },
   ): Promise<void>;
+  /** Publish the fetched head and remove matching draft snapshots in the same transaction. */
   completeSync(
     id: string,
     expectedBranch: string,
     patch: { headSha: string; lastFetchedAt: Date; lastHeadChangedAt: Date | null; updatedAt: Date },
+    appliedDrafts: readonly Pick<SourceDraft, 'id' | 'content'>[],
   ): Promise<boolean>;
   /** Compare-and-swap protects signing configuration against concurrent saves/disables. */
   setWebhookCredential(

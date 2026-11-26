@@ -323,9 +323,10 @@ class SqliteGitRepositoryConnectionRepository implements GitRepositoryConnection
     id: string,
     expectedBranch: string,
     patch: Parameters<GitRepositoryConnectionRepository['completeSync']>[2],
+    appliedDrafts: Parameters<GitRepositoryConnectionRepository['completeSync']>[3],
   ) {
-    return (
-      this.db
+    return this.db.transaction((tx) => {
+      const updated = tx
         .update(gitRepositoryConnections)
         .set({ ...patch, syncStatus: 'ready', lastSyncError: null })
         .where(
@@ -334,8 +335,20 @@ class SqliteGitRepositoryConnectionRepository implements GitRepositoryConnection
             eq(gitRepositoryConnections.defaultBranch, expectedBranch),
           ),
         )
-        .run().changes === 1
-    );
+        .run();
+      if (updated.changes !== 1) return false;
+      for (const draft of appliedDrafts) {
+        const condition = and(eq(sourceDrafts.repositoryId, id), eq(sourceDrafts.id, draft.id));
+        const current = tx
+          .select({ content: sourceDrafts.content })
+          .from(sourceDrafts)
+          .where(condition)
+          .get();
+        // A save since the tree comparison may have replaced the draft with newer work.
+        if (current?.content === draft.content) tx.delete(sourceDrafts).where(condition).run();
+      }
+      return true;
+    });
   }
   async setWebhookCredential(id: string, expectedId: string | null, nextId: string | null, updatedAt: Date) {
     return (

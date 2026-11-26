@@ -315,16 +315,23 @@ test('remote-changed push keeps work and offers fetch', async ({ page }) => {
   await page.unroute(`**/repositories/${repositoryId}/git/commit`);
 });
 
-test('mocked push success shows branch confirmation', async ({ page }) => {
+test('push confirmation remains visible when fetch clears the last draft', async ({ page }) => {
   test.skip(isMobile(page), 'Push success message runs once on desktop.');
   await setGitIdentity(page);
   const marker = `push-ok-${Date.now()}`;
-  const { repositoryId } = sample();
+  const { repositoryId, workspaceId, stackId } = sample();
   await openChangesWithDraft(page, marker);
 
   const sha = 'd'.repeat(40);
   await page.route(`**/repositories/${repositoryId}/git/commit`, async (route) => {
     if (route.request().method() !== 'POST') return route.continue();
+    const { paths } = route.request().postDataJSON() as { paths: string[] };
+    // The browser fixture is read-only on GitHub. Simulate the post-push fetch clearing its draft.
+    const cleared = await page.request.delete(
+      `/api/workspaces/${workspaceId}/stacks/${stackId}/drafts?path=${encodeURIComponent(paths[0]!)}`,
+      { headers: { Origin: new URL(page.url()).origin } },
+    );
+    expect(cleared.ok()).toBe(true);
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -351,8 +358,8 @@ test('mocked push success shows branch confirmation', async ({ page }) => {
 
   await page.getByLabel('Commit message').fill(`e2e: ${marker}`);
   await page.getByRole('button', { name: 'Commit & Push' }).click();
+  await expect(page.getByRole('heading', { name: 'No draft changes' })).toBeVisible();
   await expect(page.getByRole('status').filter({ hasText: /Pushed ddddddd to main/ })).toBeVisible();
-  await expectWorkPreserved(page);
   await expect(page).toHaveTitle(/Changes/);
   await expectAccessible(page);
   await page.unroute(`**/repositories/${repositoryId}/git/commit`);

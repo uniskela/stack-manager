@@ -127,7 +127,6 @@ export class GitWorkflowService {
         await this.#audit('git.commit_validation_overridden', workspaceId, actorUserId, result, {
           warningCount,
         });
-      // ponytail: keep every draft, including committed ones; add atomic snapshot reconciliation when automatic cleanup is needed.
       if (request.push)
         await this.#push(
           provider,
@@ -240,8 +239,7 @@ export class GitWorkflowService {
       else if (result.operation === 'commit')
         await this.#audit('git.commit', workspaceId, actorUserId, result, { reason });
     }
-    // The provider lock has been released. Never treat a refresh queue failure as
-    // a Git push failure or clear any retained drafts/commits.
+    // The provider lock has been released. The fetch reconciles drafts once their contents are upstream.
     if (result.status === 'push_succeeded') {
       await this.repositories.schedulePostPushRefresh(repositoryId);
     }

@@ -109,6 +109,8 @@ describe('Git workflow journeys', () => {
   it('draft → commit → push → fetch shows the commit in the stack history it touched, and only there', async () => {
     const edited = COMPOSE.replace('nginx:1.27', 'nginx:1.28');
     await save('apps/wiki/compose.yaml', edited);
+    const notesContent = COMPOSE + '# unselected\n';
+    await save('apps/notes/compose.yaml', notesContent);
     const committed = await commit({ paths: ['apps/wiki/compose.yaml'], message: 'Bump wiki\n\nWhy: patch' });
     expect(committed.json.status).toBe('commit_succeeded');
     const sha: string = committed.json.commitSha;
@@ -118,6 +120,7 @@ describe('Git workflow journeys', () => {
 
     expect((await push(sha, committed.json.expectedRemoteSha)).json.status).toBe('push_succeeded');
     expect((await history(wikiId)).commits.map((c) => c.sha)).not.toContain(sha);
+    expect((await drafts()).map((d) => d.path)).toContain('apps/wiki/compose.yaml');
     await h.container.repositories.sync(repositoryId);
 
     const wiki = await history(wikiId);
@@ -147,8 +150,9 @@ describe('Git workflow journeys', () => {
     expect(JSON.stringify(audit)).not.toContain('Bump wiki');
     expect(JSON.stringify(audit)).not.toContain(AUTHOR.email);
 
-    // Drafts are kept after a successful push; once fetched, the committed draft can be reviewed/discarded.
-    expect((await drafts()).map((d) => d.path)).toEqual(['apps/wiki/compose.yaml']);
+    expect(await h.container.source.changes(workspaceId, repositoryId, 'apps/wiki')).toEqual([]);
+    expect(await h.container.source.listOutdatedDraftSummaries(workspaceId)).toEqual([]);
+    expect(await drafts()).toMatchObject([{ path: 'apps/notes/compose.yaml', content: notesContent }]);
   });
 
   it('a push refused for bad credentials keeps the commit and drafts, leaks no token, and retries', async () => {

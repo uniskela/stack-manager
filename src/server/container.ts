@@ -173,8 +173,11 @@ export function createContainer(config: AppConfig, overrides: ContainerOverrides
       clock,
       newId,
     );
+    const reader = new GitSourceReader(git);
     const repositories = new GitRepositoryService(
       repos.gitRepositories,
+      repos.drafts,
+      reader,
       credentials,
       gitProviders,
       jobs,
@@ -191,7 +194,6 @@ export function createContainer(config: AppConfig, overrides: ContainerOverrides
       },
     );
 
-    const reader = new GitSourceReader(git);
     const stacks = new StackService(repos.stacks, repositories, reader, audit, clock, newId);
     const source = new SourceService(repositories, reader, repos.drafts, repos.stacks, audit, clock, newId);
     const imageUpdates = new ImageUpdateService(
