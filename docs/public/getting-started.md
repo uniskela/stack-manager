@@ -158,9 +158,9 @@ outdated draft and apply your edit to the current version.
    that looks like a hard-coded secret, review them and tick **Commit despite warnings**.
 5. Write a commit message, then choose **Commit**, or **Commit & Push** to send it to your Git server straight away.
    Pushing needs a token with write access.
-6. After pushing, Stack Manager queues a background fetch. Once it finishes, the commit appears on the stack's
-   **History** tab and drafts that match the fetched files clear from **Changes**. Choose **Fetch now** to retry
-   or clear matching drafts left over from an earlier version.
+6. After pushing, Stack Manager queues a background fetch. When it finishes, the open **Changes** tab refreshes
+   automatically and clears drafts that match the fetched files. The commit appears on the stack's **History**
+   tab. Choose **Fetch now** to retry or clear matching drafts left over from an earlier version.
 
 Stack Manager pushes only to the repository's tracked branch and **never force pushes**. If someone else pushed
 first, you'll see *"The remote branch changed since your copy was last updated."* Nothing is overwritten, and your

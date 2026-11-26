@@ -315,55 +315,102 @@ test('remote-changed push keeps work and offers fetch', async ({ page }) => {
   await page.unroute(`**/repositories/${repositoryId}/git/commit`);
 });
 
-test('push confirmation remains visible when fetch clears the last draft', async ({ page }) => {
-  test.skip(isMobile(page), 'Push success message runs once on desktop.');
-  await setGitIdentity(page);
-  const marker = `push-ok-${Date.now()}`;
-  const { repositoryId, workspaceId, stackId } = sample();
-  await openChangesWithDraft(page, marker);
+for (const { title, keepExcludedDraft } of [
+  { title: 'Changes refreshes after a transient sync status failure', keepExcludedDraft: false },
+  { title: 'an excluded draft stays unchecked after the pushed draft clears', keepExcludedDraft: true },
+]) {
+  test(title, async ({ page }) => {
+    await setGitIdentity(page);
+    const marker = `push-ok-${Date.now()}`;
+    const { repositoryId, workspaceId, stackId } = sample();
+    await openChangesWithDraft(page, marker);
 
-  const sha = 'd'.repeat(40);
-  await page.route(`**/repositories/${repositoryId}/git/commit`, async (route) => {
-    if (route.request().method() !== 'POST') return route.continue();
-    const { paths } = route.request().postDataJSON() as { paths: string[] };
-    // The browser fixture is read-only on GitHub. Simulate the post-push fetch clearing its draft.
-    const cleared = await page.request.delete(
-      `/api/workspaces/${workspaceId}/stacks/${stackId}/drafts?path=${encodeURIComponent(paths[0]!)}`,
-      { headers: { Origin: new URL(page.url()).origin } },
-    );
-    expect(cleared.ok()).toBe(true);
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        status: 'push_succeeded',
-        repositoryId,
-        branch: 'main',
-        operation: 'push',
-        commitSha: sha,
-        expectedRemoteSha: 'e'.repeat(40),
-        state: {
-          branch: 'main',
-          localHeadSha: sha,
-          remoteHeadSha: sha,
-          ahead: 0,
-          behind: 0,
-        },
-        problems: [],
-        outdatedPaths: [],
-        draftsPreserved: true,
-      }),
-    });
+    const repository = `/api/workspaces/${workspaceId}/repositories/${repositoryId}`;
+    const drafts = `/api/workspaces/${workspaceId}/stacks/${stackId}/drafts`;
+    const headers = { Origin: new URL(page.url()).origin };
+    const excludedPath = SAMPLE_ROOT ? `${SAMPLE_ROOT}/review-notes.md` : 'review-notes.md';
+    const excluded = page.getByRole('checkbox', { name: 'Include review-notes.md in commit' });
+    const clearDraft = async (path: string) => {
+      const cleared = await page.request.delete(`${drafts}?path=${encodeURIComponent(path)}`, { headers });
+      expect(cleared.ok()).toBe(true);
+    };
+
+    if (keepExcludedDraft) {
+      const added = await page.request.put(drafts, {
+        headers,
+        data: { path: excludedPath, content: '# Review later\n', baseBlobSha: null },
+      });
+      expect(added.ok()).toBe(true);
+      await page.reload();
+      await excluded.press('Space');
+      await expect(excluded).not.toBeChecked();
+    }
+
+    try {
+      let fetchFinished = keepExcludedDraft;
+      let publishedPath = '';
+      let runningChecks = 0;
+      let failNextCheck = !keepExcludedDraft;
+      await page.route(`**${repository}`, (route) => {
+        if (failNextCheck) {
+          failNextCheck = false;
+          return route.fulfill({ status: 503, json: { error: { message: 'Temporarily unavailable' } } });
+        }
+        if (!fetchFinished) runningChecks++;
+        return route.fulfill({
+          json: { repository: { sync: { status: fetchFinished ? 'succeeded' : 'running' } } },
+        });
+      });
+      await page.route(`**${repository}/git/commit`, async (route) => {
+        const { paths } = route.request().postDataJSON() as { paths: string[] };
+        expect(paths).toHaveLength(1);
+        publishedPath = paths[0]!;
+        // The sample remote is read-only. Simulate fetch clearing the published draft.
+        if (keepExcludedDraft) await clearDraft(publishedPath);
+        const sha = 'd'.repeat(40);
+        await route.fulfill({
+          json: {
+            status: 'push_succeeded',
+            repositoryId,
+            branch: 'main',
+            operation: 'push',
+            commitSha: sha,
+            expectedRemoteSha: 'e'.repeat(40),
+            state: { branch: 'main', localHeadSha: sha, remoteHeadSha: sha, ahead: 0, behind: 0 },
+            problems: [],
+            outdatedPaths: [],
+            draftsPreserved: true,
+          },
+        });
+      });
+
+      await page.getByLabel('Commit message').fill(`e2e: ${marker}`);
+      const firstRefresh = page.waitForResponse(
+        (response) => response.url().includes(changesUrl()) && response.request().headers().rsc === '1',
+      );
+      await page.getByRole('button', { name: 'Commit & Push' }).click();
+      await (await firstRefresh).finished();
+      const confirmation = page.getByRole('status').filter({ hasText: /Pushed ddddddd to main/ });
+      await expect(confirmation).toBeVisible();
+
+      if (keepExcludedDraft) {
+        await expect(page.getByRole('checkbox', { name: /^Include .* in commit$/ })).toHaveCount(1);
+        await expect(excluded).not.toBeChecked();
+      } else {
+        await expect(page.locator('.diff').first()).toBeVisible();
+        await expect.poll(() => runningChecks, { timeout: 10_000 }).toBeGreaterThan(0);
+        await clearDraft(publishedPath);
+        fetchFinished = true;
+        await expect(page.getByRole('heading', { name: 'No draft changes' })).toBeVisible();
+      }
+      await expect(confirmation).toBeVisible();
+      await expect(page).toHaveTitle(/Changes/);
+      await expectAccessible(page);
+    } finally {
+      if (keepExcludedDraft) await clearDraft(excludedPath);
+    }
   });
-
-  await page.getByLabel('Commit message').fill(`e2e: ${marker}`);
-  await page.getByRole('button', { name: 'Commit & Push' }).click();
-  await expect(page.getByRole('heading', { name: 'No draft changes' })).toBeVisible();
-  await expect(page.getByRole('status').filter({ hasText: /Pushed ddddddd to main/ })).toBeVisible();
-  await expect(page).toHaveTitle(/Changes/);
-  await expectAccessible(page);
-  await page.unroute(`**/repositories/${repositoryId}/git/commit`);
-});
+}
 
 test('an unpushed commit from an earlier visit can still be pushed', async ({ page }) => {
   test.skip(isMobile(page), 'Retained push recovery runs once on desktop.');

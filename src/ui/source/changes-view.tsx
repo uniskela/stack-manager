@@ -237,13 +237,15 @@ export function ChangesView(props: {
   const [discardPath, setDiscardPath] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<GitWorkflowResult | null>(null);
+  const [pendingPushRefresh, setPendingPushRefresh] = useState<string | null>(null);
   const [retained, setRetained] = useState<{
     commitSha: string;
     expectedRemoteSha: string;
     branch: string;
   } | null>(null);
 
-  const gitBase = `/api/workspaces/${props.workspaceId}/repositories/${props.repositoryId}/git`;
+  const repositoryApi = `/api/workspaces/${props.workspaceId}/repositories/${props.repositoryId}`;
+  const gitBase = `${repositoryApi}/git`;
   const repositoryHref = `/w/${props.workspaceId}/repositories/${props.repositoryId}`;
   const identityHref = `/w/${props.workspaceId}/settings/account#ws-account-git-identity`;
 
@@ -251,13 +253,47 @@ export function ChangesView(props: {
     if (result || error) alertRef.current?.focus();
   }, [result, error]);
 
-  // Empty `selected` means the user cleared the selection. Non-empty but all-stale means refresh.
-  const selectedChanges = useMemo(() => {
-    const picked = props.changes.filter((c) => selected.has(c.path));
-    if (picked.length > 0 || selected.size === 0) return picked;
-    return props.changes;
-  }, [props.changes, selected]);
-  const selectedPaths = useMemo(() => new Set(selectedChanges.map((c) => c.path)), [selectedChanges]);
+  useEffect(() => {
+    if (!pendingPushRefresh) return;
+    const pollInterval = 2_000;
+    let cancelled = false;
+    let retryDelay = pollInterval;
+    let timer = window.setTimeout(checkSync, pollInterval);
+
+    async function checkSync() {
+      try {
+        const { repository } = await api<{ repository: { sync: { status: string } | null } }>(repositoryApi);
+        if (cancelled) return;
+        retryDelay = pollInterval;
+        const status = repository.sync?.status;
+        if (status === 'pending' || status === 'running') {
+          timer = window.setTimeout(checkSync, pollInterval);
+          return;
+        }
+      } catch (error) {
+        if (cancelled) return;
+        const retryable =
+          !(error instanceof ApiError) || error.status === 408 || error.status === 429 || error.status >= 500;
+        if (retryable) {
+          timer = window.setTimeout(checkSync, retryDelay);
+          retryDelay = Math.min(retryDelay * 2, 30_000);
+          return;
+        }
+      }
+      setPendingPushRefresh(null);
+      router.refresh();
+    }
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [pendingPushRefresh, repositoryApi, router]);
+
+  const selectedChanges = useMemo(
+    () => props.changes.filter((c) => selected.has(c.path)),
+    [props.changes, selected],
+  );
   const selectionScope = useMemo(
     () =>
       selectedChanges
@@ -299,8 +335,7 @@ export function ChangesView(props: {
 
   const toggle = (path: string) => {
     setSelected((prev) => {
-      const hasCurrent = props.changes.some((c) => prev.has(c.path));
-      const next = !hasCurrent && prev.size > 0 ? new Set(props.changes.map((c) => c.path)) : new Set(prev);
+      const next = new Set(prev);
       if (next.has(path)) next.delete(path);
       else next.add(path);
       return next;
@@ -323,7 +358,10 @@ export function ChangesView(props: {
         branch: next.state.branch,
       });
     }
-    if (next.status === 'push_succeeded') setRetained(null);
+    if (next.status === 'push_succeeded') {
+      setRetained(null);
+      setPendingPushRefresh(next.commitSha);
+    }
     if (next.status === 'warnings_unacknowledged') setWarningAckScope(null);
   };
 
@@ -640,7 +678,7 @@ export function ChangesView(props: {
 
       {props.changes.map((c) => {
         const rel = relativeTo(props.rootPath, c.path) || c.path;
-        const checked = selectedPaths.has(c.path);
+        const checked = selected.has(c.path);
         return (
           <section key={c.path} className="card flush" aria-label={`Changes to ${rel}`}>
             <div className="change-head">
