@@ -24,7 +24,15 @@ describe('loadDashboardDraftCounts', () => {
   it('uses one metadata query for every stack and repository, with path-boundary checks', async () => {
     const query = vi.fn(async () => rows);
     const result = await loadDashboardDraftCounts(stacks, repositories, query, vi.fn());
-    expect(result).toEqual({ stackCounts: [2, 1], openDrafts: 4, failedCounts: 0 });
+    expect(result).toEqual({
+      stackCounts: [2, 1],
+      openDrafts: 4,
+      failedCounts: 0,
+      repositoryDrafts: [
+        { repositoryId: 'r1', drafts: 3, outsideStacks: 1 },
+        { repositoryId: 'r2', drafts: 1, outsideStacks: 0 },
+      ],
+    });
     expect(query).toHaveBeenCalledExactlyOnceWith(['r1', 'r2']);
   });
 
@@ -36,7 +44,13 @@ describe('loadDashboardDraftCounts', () => {
       return rows.filter((row) => row.repositoryId === ids[0]);
     });
     const result = await loadDashboardDraftCounts(stacks, repositories, query, onFailure);
-    expect(result).toEqual({ stackCounts: [2, 0], openDrafts: null, failedCounts: 1 });
+    expect(result).toEqual({
+      stackCounts: [2, 0],
+      openDrafts: null,
+      failedCounts: 1,
+      // The failed repository reports nothing rather than a false zero.
+      repositoryDrafts: [{ repositoryId: 'r1', drafts: 3, outsideStacks: 1 }],
+    });
     expect(query).toHaveBeenCalledTimes(3);
     expect(onFailure).toHaveBeenCalledWith(expect.objectContaining({ scope: 'batch' }));
     expect(onFailure).toHaveBeenCalledWith(
@@ -50,7 +64,15 @@ describe('loadDashboardDraftCounts', () => {
       return rows.filter((row) => row.repositoryId === ids[0]);
     });
     const result = await loadDashboardDraftCounts(stacks, repositories, query, vi.fn());
-    expect(result).toEqual({ stackCounts: [2, 1], openDrafts: 4, failedCounts: 0 });
+    expect(result).toEqual({
+      stackCounts: [2, 1],
+      openDrafts: 4,
+      failedCounts: 0,
+      repositoryDrafts: [
+        { repositoryId: 'r1', drafts: 3, outsideStacks: 1 },
+        { repositoryId: 'r2', drafts: 1, outsideStacks: 0 },
+      ],
+    });
   });
 
   it('does not count drafts from unknown or unfetched repositories', async () => {
@@ -65,7 +87,15 @@ describe('loadDashboardDraftCounts', () => {
       query,
       vi.fn(),
     );
-    expect(result).toEqual({ stackCounts: [2, 1], openDrafts: 4, failedCounts: 0 });
+    expect(result).toEqual({
+      stackCounts: [2, 1],
+      openDrafts: 4,
+      failedCounts: 0,
+      repositoryDrafts: [
+        { repositoryId: 'r1', drafts: 3, outsideStacks: 1 },
+        { repositoryId: 'r2', drafts: 1, outsideStacks: 0 },
+      ],
+    });
     expect(query).toHaveBeenCalledExactlyOnceWith(['r1', 'r2']);
   });
 
@@ -77,7 +107,7 @@ describe('loadDashboardDraftCounts', () => {
       query,
       vi.fn(),
     );
-    expect(result).toEqual({ stackCounts: [0], openDrafts: 0, failedCounts: 0 });
+    expect(result).toEqual({ stackCounts: [0], openDrafts: 0, failedCounts: 0, repositoryDrafts: [] });
     expect(query).not.toHaveBeenCalled();
   });
 
@@ -92,6 +122,26 @@ describe('loadDashboardDraftCounts', () => {
       async () => rows.filter((row) => row.repositoryId === 'r1'),
       vi.fn(),
     );
-    expect(result).toEqual({ stackCounts: [3, 3, 2], openDrafts: 3, failedCounts: 0 });
+    expect(result).toEqual({
+      stackCounts: [3, 3, 2],
+      openDrafts: 3,
+      failedCounts: 0,
+      // Overlapping stacks count a path more than once; outside-stack drafts never do.
+      repositoryDrafts: [{ repositoryId: 'r1', drafts: 3, outsideStacks: 0 }],
+    });
+  });
+
+  it('counts drafts that no stack folder contains, such as repository-level docs', async () => {
+    const result = await loadDashboardDraftCounts(
+      stacks,
+      repositories,
+      async () => [
+        { repositoryId: 'r2', path: 'docs/TechStack.md' },
+        { repositoryId: 'r2', path: 'apps/two/compose.yml' },
+      ],
+      vi.fn(),
+    );
+    expect(result.stackCounts).toEqual([0, 1]);
+    expect(result.repositoryDrafts).toEqual([{ repositoryId: 'r2', drafts: 2, outsideStacks: 1 }]);
   });
 });

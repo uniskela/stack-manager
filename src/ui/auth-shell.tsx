@@ -21,7 +21,7 @@ const POINTS = [
 ];
 
 /** Signed-out and first-run pages: what the app is on the ink panel, the form on paper beside it. */
-export function AuthShell({ children }: { children: ReactNode }) {
+export function AuthShell({ children }: Readonly<{ children: ReactNode }>) {
   return (
     <div className="auth-shell">
       <section className="auth-intro" aria-label="About stack-manager">

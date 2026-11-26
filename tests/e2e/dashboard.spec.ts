@@ -16,7 +16,12 @@ test('dashboard stays focused, accessible and responsive with a connected reposi
   await expect(page.getByRole('heading', { level: 1, name: WORKSPACE_NAME })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Workspace summary' })).toBeVisible();
   await expect(page.getByText('Git source states, not container health', { exact: false })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Needs attention' })).toBeVisible();
+  // The summary always opens with one next step. Other specs may leave drafts, so its wording is not pinned here.
+  await expect(
+    page.getByRole('region', { name: 'Workspace summary' }).getByRole('heading', { level: 2 }),
+  ).toHaveCount(1);
+  // The sample repository has no failures or outdated drafts, so the empty attention list is hidden.
+  await expect(page.getByRole('heading', { name: 'Needs attention' })).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Recent activity' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'View all activity' })).toHaveAttribute(
     'href',

@@ -147,7 +147,10 @@ export default async function RepositoryPage({
 const VISIBLE_BRANCHES = 12;
 
 /** Default branch first; long lists (bot branches pile up quickly) fold behind a native disclosure. */
-function BranchList({ branches, defaultBranch }: { branches: string[]; defaultBranch: string | null }) {
+function BranchList({
+  branches,
+  defaultBranch,
+}: Readonly<{ branches: string[]; defaultBranch: string | null }>) {
   const ordered =
     defaultBranch && branches.includes(defaultBranch)
       ? [defaultBranch, ...branches.filter((b) => b !== defaultBranch)]
