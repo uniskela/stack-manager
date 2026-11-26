@@ -198,7 +198,8 @@ export class GiteaImageUpdatePulls {
       validateBranchName(base, 'base') !== base ||
       !title.trim() ||
       title.length > 255 ||
-      /[\r\n\u0000]/.test(title) ||
+      /[\r\n]/.test(title) ||
+      title.includes('\0') ||
       Buffer.byteLength(body) > 128 * 1024
     ) {
       throw new ValidationError('Invalid Gitea pull request head, base, title or body.');

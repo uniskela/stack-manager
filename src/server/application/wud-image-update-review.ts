@@ -106,8 +106,7 @@ export class WudImageUpdateReview {
     await this.withForge(connection, signal, async (forge) => {
       const pull = await this.pulls.get({ ...forge, number });
       if (
-        !pull ||
-        pull.number !== number ||
+        pull?.number !== number ||
         pull.headSha !== headSha ||
         !isProposal(pull, connection.defaultBranch)
       ) {

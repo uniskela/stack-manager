@@ -261,9 +261,11 @@ export class GitMutations {
       );
       const { stdout } = await this.git.run(['rev-parse', '--verify', 'HEAD'], { cwd: worktree });
       commit = await this.getCommit(dir, stdout.trim());
-    } finally {
-      await this.cleanup(dir, worktree, parent);
+    } catch (error) {
+      await this.cleanup(dir, worktree, parent).catch(() => undefined);
+      throw error;
     }
+    await this.cleanup(dir, worktree, parent);
     return commit;
   }
 

@@ -25,7 +25,12 @@ import type { ImageUpdateService } from './image-update-service';
 import type { StackRepository } from './ports';
 import type { SourceService } from './source-service';
 import type { WudImageUpdatePublication } from './wud-image-update-publication';
-import { planWudRepositoryUpdate, wudRepositoryDiff, wudRepositoryPlanHash } from './wud-repository-plan';
+import {
+  planWudRepositoryUpdate,
+  wudRepositoryDiff,
+  wudRepositoryPlanHash,
+  WUD_TECH_STACK_PATHS,
+} from './wud-repository-plan';
 import { parseWudUpdateGroups, WUD_UPDATE_GROUPS_PATH } from './wud-update-groups';
 import {
   readWudChangelogCatalog,
@@ -73,7 +78,7 @@ export class ImageUpdateStagingService {
     const stack = await this.stacks.findById(workspaceId, stackId);
     if (!stack) return false;
     const policy = await this.#read(stack, '', WUD_UPDATE_GROUPS_PATH);
-    return Boolean(policy?.blobSha) && !(await this.publication.available(workspaceId, stack.repositoryId));
+    return policy?.blobSha ? !(await this.#canPlanNativeProposal(stack, policy.commitSha)) : false;
   }
 
   async repositoryWorkflowGuide(workspaceId: string, stackId: string) {
@@ -81,7 +86,7 @@ export class ImageUpdateStagingService {
     if (!stack) return null;
     const policy = await this.#read(stack, '', WUD_UPDATE_GROUPS_PATH);
     if (!policy?.blobSha) return null;
-    const native = await this.publication.available(workspaceId, stack.repositoryId);
+    const native = await this.#canPlanNativeProposal(stack, policy.commitSha);
     const skill = await this.#read(stack, '', PORTAINER_WUD_SKILL_PATH);
     const skillPath =
       skill?.commitSha === policy.commitSha && !skill.locked && skill.content
@@ -201,7 +206,7 @@ export class ImageUpdateStagingService {
 
   async #publishContext(approval: FileApproval) {
     const stack = await this.stacks.findById(approval.workspaceId, approval.stackId);
-    if (!stack || stack.composePath !== approval.path) throw invalidPreview();
+    if (stack?.composePath !== approval.path) throw invalidPreview();
     const file = await this.#read(stack, stack.rootPath, approval.path);
     if (!file?.content || file.commitSha !== approval.commitSha || file.blobSha !== approval.blobSha) {
       throw new ConflictError('The Compose file changed. Preview the update again.');
@@ -299,7 +304,7 @@ export class ImageUpdateStagingService {
       policy,
       legacyChangelogs,
     });
-    if (externalPolicy && !(await this.publication.available(stack.workspaceId, stack.repositoryId))) {
+    if (externalPolicy && !(await this.#canPlanNativeProposal(stack, file.commitSha))) {
       return {
         ...blockedFile(
           summary,
@@ -348,6 +353,14 @@ export class ImageUpdateStagingService {
       token,
       ...(proposal ? { proposal: wudRepositoryDiff(proposal) } : {}),
     };
+  }
+
+  async #canPlanNativeProposal(stack: Stack, commitSha: string): Promise<boolean> {
+    if (!(await this.publication.available(stack.workspaceId, stack.repositoryId))) return false;
+    const documents = await Promise.all(WUD_TECH_STACK_PATHS.map((path) => this.#read(stack, '', path)));
+    return documents.every(
+      (file) => file?.commitSha === commitSha && !!file.blobSha && !file.locked && file.content !== null,
+    );
   }
 
   async #repositoryPlan(stack: Stack, file: FileView, edits: StageEdit[], groupsText: string | null) {

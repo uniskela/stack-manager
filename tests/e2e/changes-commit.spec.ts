@@ -531,6 +531,7 @@ test('mobile: changes commit layout and accessibility', async ({ page }) => {
   const marker = `mobile-${Date.now()}`;
   await openChangesWithDraft(page, marker);
 
+  await expect(page.locator('html')).toHaveJSProperty('scrollWidth', page.viewportSize()?.width);
   await expect(page.getByRole('region', { name: 'Commit changes' })).toBeVisible();
   await expect(page.getByLabel('Commit message')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Commit', exact: true })).toBeVisible();

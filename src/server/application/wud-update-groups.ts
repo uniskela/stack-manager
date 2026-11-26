@@ -172,8 +172,7 @@ function applyPatches(text: string, patches: Patch[]): string {
   let previous: Patch | undefined;
   for (const patch of patches.toSorted((a, b) => a.start - b.start)) {
     if (
-      previous &&
-      patch.start === previous.start &&
+      patch.start === previous?.start &&
       patch.end === previous.end &&
       patch.replacement === previous.replacement
     )

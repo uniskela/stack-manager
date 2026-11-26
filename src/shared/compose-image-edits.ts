@@ -141,11 +141,11 @@ export function editComposeImages(
 }
 
 function referenceOffset(value: string, before: string, assignment: boolean): number {
-  const prefix = assignment ? /^[a-zA-Z_][a-zA-Z0-9_]*=/.exec(value)?.[0] : '';
+  const prefix = assignment ? /^[a-zA-Z_]\w*=/.exec(value)?.[0] : '';
   if (prefix === undefined) return -1;
   const reference = value.slice(prefix.length);
   if (reference === before) return prefix.length;
-  const fallback = /^\$\{[a-zA-Z_][a-zA-Z0-9_]*:?-([^{}]+)\}$/.exec(reference);
+  const fallback = /^\$\{[a-zA-Z_]\w*:?-([^{}]+)\}$/.exec(reference);
   return fallback?.[1] === before ? value.length - before.length - 1 : -1;
 }
 
@@ -153,11 +153,8 @@ export function planComposeImageReferenceEdit(text: string, service: string, bef
   const node = directService(directServices(text), service);
   const environment = node.get('environment', true);
   const assignments = isSeq(environment) && !environment.anchor && !environment.tag;
-  const envValues = assignments
-    ? environment.items
-    : isDirectMap(environment)
-      ? environment.items.map(({ value }) => value)
-      : [];
+  const mappedValues = isDirectMap(environment) ? environment.items.map(({ value }) => value) : [];
+  const envValues = assignments ? environment.items : mappedValues;
   const candidates = [node.get('image', true), ...envValues];
   const matches = candidates.flatMap((candidate, index) => {
     if (!isScalar(candidate) || typeof candidate.value !== 'string') return [];

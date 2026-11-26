@@ -20,6 +20,9 @@ const MAX_SIGNALS = 8;
 const MAX_EXCERPT_LENGTH = 240;
 const GITHUB_RELEASE_PAGE_SIZE = 20;
 const MAX_GITHUB_RELEASE_PAGES = 3;
+const MAX_CACHED_GITHUB_RESPONSES = 64;
+const GITHUB_RELEASE_TTL_MS = 30 * 60_000;
+const GITHUB_NOT_FOUND_TTL_MS = 5 * 60_000;
 const githubRelease = z.object({
   tag_name: z.string(),
   draft: z.literal(false),
@@ -409,6 +412,11 @@ async function inspectGitHubRelease(
 }
 
 export class ChangelogReader {
+  private readonly githubResponses = new Map<
+    string,
+    { response: ReturnType<ReadGitHub>; expiresAt: number }
+  >();
+
   constructor(private readonly options: { read?: typeof readHttps } = {}) {}
 
   async check(rawUrl: string, currentTag: string, targetTag: string): Promise<ChangelogEvidence> {
@@ -428,17 +436,15 @@ export class ChangelogReader {
         request.origin === 'https://github.com' &&
         /^\/([\da-z-]+\/[\da-z_.-]+)\/releases\/tag\/(.+?)\/?$/i.exec(request.pathname);
       if (github) {
-        const [, repo, tag] = github;
+        const repo = github[1]!;
+        const tag = github[2]!;
+        const api = `https://api.github.com/repos/${repo.toLowerCase()}/releases`;
         return await inspectGitHubRelease(
-          (path) =>
-            read(new URL(`https://api.github.com/repos/${repo}/releases${path}`), {
-              ...options,
-              headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'Stack-Manager' },
-            }),
+          (path) => this.readGitHub(new URL(api + path), options.signal),
           `https://github.com/${repo}/releases/tag/`,
           currentTag,
           targetTag,
-          decodeURIComponent(tag!),
+          decodeURIComponent(tag),
         );
       }
 
@@ -452,5 +458,41 @@ export class ChangelogReader {
     } catch {
       return unavailable(url, 'Unable to read the public changelog.');
     }
+  }
+
+  private readGitHub(url: URL, signal: AbortSignal): ReturnType<ReadGitHub> {
+    const key = url.href;
+    const cached = this.githubResponses.get(key);
+    this.githubResponses.delete(key);
+    if (cached && cached.expiresAt > Date.now()) {
+      this.githubResponses.set(key, cached);
+      return cached.response;
+    }
+
+    const read = this.options.read ?? readHttps;
+    const entry = {
+      expiresAt: Date.now() + REQUEST_TIMEOUT_MS,
+      response: read(url, {
+        allowPrivateNetworks: false,
+        maxBytes: MAX_RESPONSE_BYTES,
+        signal,
+        headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'Stack-Manager' },
+      }),
+    };
+    this.githubResponses.set(key, entry);
+    if (this.githubResponses.size > MAX_CACHED_GITHUB_RESPONSES) {
+      this.githubResponses.delete(this.githubResponses.keys().next().value!);
+    }
+    const forget = () => {
+      if (this.githubResponses.get(key) === entry) this.githubResponses.delete(key);
+    };
+    void entry.response.then(({ status }) => {
+      if (status === 200 || status === 404) {
+        entry.expiresAt = Date.now() + (status === 200 ? GITHUB_RELEASE_TTL_MS : GITHUB_NOT_FOUND_TTL_MS);
+      } else {
+        forget();
+      }
+    }, forget);
+    return entry.response;
   }
 }

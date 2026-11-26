@@ -70,7 +70,7 @@ function markdownEdit(
     const offset = item.position?.start.offset;
     if (offset === undefined) continue;
     const itemText = source.slice(offset, item.position?.end.offset);
-    const row = /^[-*+][ \t]+([^:\r\n]+):[ \t]*([^\r\n]*)/d.exec(itemText);
+    const row = /^[-*+][ \t]+([^: \t\r\n][^:\r\n]*):[ \t]*([^\r\n]*)/d.exec(itemText);
     const text = row?.[2];
     const start = row?.indices?.[2]?.[0];
     if (text === undefined || start === undefined) continue;

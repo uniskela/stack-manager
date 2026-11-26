@@ -285,6 +285,32 @@ Breaking change: remove the legacy configuration.
     expect(options.allowPrivateNetworks).toBe(false);
   });
 
+  it('shares in-flight GitHub lookups and reuses the release responses on later checks', async () => {
+    const { read, reader } = githubFixture({
+      [githubReleases + '/tags/v0.21.0']: release('v0.21.0', 'Earlier release.'),
+      [githubReleases + '/tags/v0.21.1']: release('v0.21.1', 'New release.'),
+    });
+    const check = () => reader.check(github + '0.21.1', '0.21.0', '0.21.1');
+    await expect(Promise.all([check(), check()])).resolves.toEqual([
+      expect.objectContaining({ status: 'checked' }),
+      expect.objectContaining({ status: 'checked' }),
+    ]);
+    expect(read).toHaveBeenCalledTimes(4);
+    await expect(check()).resolves.toMatchObject({ status: 'checked' });
+    expect(read).toHaveBeenCalledTimes(4);
+  });
+
+  it('retries a transient GitHub API failure on the next check', async () => {
+    const { read, reader } = githubFixture({
+      [githubReleases + '/tags/v0.21.0']: release('v0.21.0', 'Earlier release.'),
+      [githubReleases + '/tags/v0.21.1']: release('v0.21.1', 'New release.'),
+    });
+    read.mockResolvedValueOnce({ status: 429, body: Buffer.alloc(0) });
+    const check = () => reader.check(github + 'v0.21.1', 'v0.21.0', 'v0.21.1');
+    await expect(check()).resolves.toMatchObject({ status: 'unavailable' });
+    await expect(check()).resolves.toMatchObject({ status: 'checked' });
+  });
+
   it.each([302, 403, 429, 503])(
     'does not substitute a GitHub tag when its lookup returns %s',
     async (status) => {

@@ -365,6 +365,19 @@ describe('isolated Git commits', () => {
     await assertCleanedUp();
   });
 
+  it('preserves the original commit error when worktree cleanup also fails', async () => {
+    const operationError = new GitOperationError('unknown', 'Injected commit failure.');
+    git.beforeRun = (args) => {
+      if (args.includes('commit')) throw operationError;
+      if (args[0] === 'worktree' && args[1] !== 'add') {
+        throw new GitOperationError('unknown', 'Injected worktree cleanup failure.');
+      }
+    };
+    await expect(provider.commit(commitInput())).rejects.toBe(operationError);
+    expect(git.calls.some(([command, action]) => command === 'worktree' && action === 'remove')).toBe(true);
+    await assertCloneUsable();
+  });
+
   it('recovers from a failed first worktree removal without leaving registrations or draft files', async () => {
     git.beforeRun = (args) => {
       if (args.includes('worktree') && args.includes('remove')) {

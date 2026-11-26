@@ -200,42 +200,46 @@ describe('image update draft staging', () => {
     expect((await attempt(token, true)).json.files[0].status).toBe('draft_exists');
   });
 
-  it('uses the published legacy changelog links without staging around linked-file policies', async () => {
-    const url = 'https://releases.example.org/nginx/1.28';
-    const check = vi
-      .fn()
-      .mockResolvedValue({ status: 'incomplete', url, signals: [], detail: 'Missing release range.' });
-    const { container, workspace, user, main } = await arrange(
-      {
-        'docs/wud-update-groups.json': JSON.stringify({ groups: [] }),
-        '.opencode/skills/portainer-wud-updates/SKILL.md': '# Repository WUD guide\n',
-        'docs/container-changelogs.json': JSON.stringify({
-          sources: { nginx: { displayUrl: 'https://releases.example.org/nginx/{target_tag}' } },
-        }),
-      },
-      { changelog: { check } },
-    );
-    await expect(container.imageUpdateStaging.usesRepositoryWorkflow(workspace.id, main.id)).resolves.toBe(
-      true,
-    );
-    await expect(
-      container.imageUpdateStaging.repositoryWorkflowGuide(workspace.id, main.id),
-    ).resolves.toEqual({
-      policyPath: 'docs/wud-update-groups.json',
-      skillPath: '.opencode/skills/portainer-wud-updates/SKILL.md',
-      native: false,
-    });
-    const { files } = await container.imageUpdateStaging.preview(workspace.id, user.id, [
-      { stackId: main.id, service: 'app', source: 'manual', targetTag: '1.28' },
-    ]);
-    expect(check).toHaveBeenCalledWith(url, '1.27', '1.28');
-    expect(files[0]).toMatchObject({
-      status: 'blocked',
-      repositoryWorkflow: true,
-      token: null,
-      changes: [{ changelogUrl: url, status: 'review' }],
-    });
-  });
+  it.each(['anonymous', 'credentialed'])(
+    'keeps preview-only and legacy changelog links when TechStack is missing (%s)',
+    async (access) => {
+      const url = 'https://releases.example.org/nginx/1.28';
+      const check = vi
+        .fn()
+        .mockResolvedValue({ status: 'incomplete', url, signals: [], detail: 'Missing release range.' });
+      const { container, workspace, user, main } = await arrange(
+        {
+          'docs/wud-update-groups.json': JSON.stringify({ groups: [] }),
+          '.opencode/skills/portainer-wud-updates/SKILL.md': '# Repository WUD guide\n',
+          'docs/container-changelogs.json': JSON.stringify({
+            sources: { nginx: { displayUrl: 'https://releases.example.org/nginx/{target_tag}' } },
+          }),
+        },
+        { changelog: { check } },
+        access === 'credentialed' ? 'fixture-write-token' : undefined,
+      );
+      await expect(container.imageUpdateStaging.usesRepositoryWorkflow(workspace.id, main.id)).resolves.toBe(
+        true,
+      );
+      await expect(
+        container.imageUpdateStaging.repositoryWorkflowGuide(workspace.id, main.id),
+      ).resolves.toEqual({
+        policyPath: 'docs/wud-update-groups.json',
+        skillPath: '.opencode/skills/portainer-wud-updates/SKILL.md',
+        native: false,
+      });
+      const { files } = await container.imageUpdateStaging.preview(workspace.id, user.id, [
+        { stackId: main.id, service: 'app', source: 'manual', targetTag: '1.28' },
+      ]);
+      expect(check).toHaveBeenCalledWith(url, '1.27', '1.28');
+      expect(files[0]).toMatchObject({
+        status: 'blocked',
+        repositoryWorkflow: true,
+        token: null,
+        changes: [{ changelogUrl: url, status: 'review' }],
+      });
+    },
+  );
 
   it('rechecks a WUD candidate before staging its preview', async () => {
     const read = vi.fn();

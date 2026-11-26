@@ -88,7 +88,7 @@ export default async function WorkspaceImageUpdatesPage({
   );
 }
 
-async function OpenImageUpdatePullRequests({ workspaceId }: { workspaceId: string }) {
+async function OpenImageUpdatePullRequests({ workspaceId }: Readonly<{ workspaceId: string }>) {
   const { wudImageUpdateReview } = getContainer();
   const queue = await wudImageUpdateReview.list(workspaceId);
   if (!queue.pulls.length && !queue.unreadableRepositories) return null;

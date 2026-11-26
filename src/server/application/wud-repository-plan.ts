@@ -16,6 +16,7 @@ import {
 
 const MARKDOWN = 'docs/TechStack.md';
 const INVENTORY = 'docs/TechStack.json';
+export const WUD_TECH_STACK_PATHS = [MARKDOWN, INVENTORY] as const;
 
 export type WudRepositoryChange = GitFileChange & { content: string; before: string };
 
@@ -29,8 +30,7 @@ export async function planWudRepositoryUpdate(
     ...new Set([
       ...selected.map(({ path }) => path),
       ...wudGroupPaths(groups, selected),
-      MARKDOWN,
-      INVENTORY,
+      ...WUD_TECH_STACK_PATHS,
     ]),
   ];
   if (paths.length > 24) throw new ValidationError('This image update includes too many linked files.');

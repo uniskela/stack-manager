@@ -107,6 +107,17 @@ describe('Gitea image update pull requests', () => {
     });
   });
 
+  it.each(['\0', '\r', '\n'])(
+    'rejects %j in a pull request title before contacting Gitea',
+    async (character) => {
+      const { pulls, request } = adapter();
+      await expect(
+        pulls.create({ ...input, head, base, title: `${title}${character}extra`, body: '' }),
+      ).rejects.toMatchObject({ status: 400 });
+      expect(request).not.toHaveBeenCalled();
+    },
+  );
+
   it('gets and verifies the exact current PR with its draft and mergeable flags', async () => {
     const { pulls, request } = adapter();
     request.mockResolvedValueOnce(response({ ...pull(6), draft: true, mergeable: false }));

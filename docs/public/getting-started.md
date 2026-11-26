@@ -141,9 +141,9 @@ An entered link takes precedence over the service or image link in Git, followed
 
 #### Linked updates and automatic pull requests
 
-For a Gitea repository with a write-capable token and `docs/wud-update-groups.json`, Stack Manager reads the groups
-from Git and shows one diff for Compose, the linked files, and the matching entries in
-`docs/TechStack.md` and `docs/TechStack.json`. Select every member together when the policy requires it.
+For a Gitea repository with a write-capable token, `docs/wud-update-groups.json`, and both TechStack documents,
+Stack Manager reads the groups from Git and shows one diff for Compose, the linked files, and the matching
+entries in `docs/TechStack.md` and `docs/TechStack.json`. Select every member together when the policy requires it.
 Stack Manager puts the reviewed changes in one commit on a proposal branch. Git stays the source of truth
 and the tracked branch can keep its normal review and deployment rules.
 

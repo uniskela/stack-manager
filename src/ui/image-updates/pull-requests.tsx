@@ -19,10 +19,10 @@ const checkLabels = {
 export function ImageUpdatePullRequests({
   workspaceId,
   queue,
-}: {
+}: Readonly<{
   workspaceId: string;
   queue: ImageUpdatePullReviewList;
-}) {
+}>) {
   const router = useRouter();
   const [refreshing, refresh] = useTransition();
   const [merging, setMerging] = useState<string | null>(null);
