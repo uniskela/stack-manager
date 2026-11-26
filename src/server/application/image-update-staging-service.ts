@@ -357,10 +357,13 @@ export class ImageUpdateStagingService {
 
   async #canPlanNativeProposal(stack: Stack, commitSha: string): Promise<boolean> {
     if (!(await this.publication.available(stack.workspaceId, stack.repositoryId))) return false;
-    const documents = await Promise.all(WUD_TECH_STACK_PATHS.map((path) => this.#read(stack, '', path)));
-    return documents.every(
-      (file) => file?.commitSha === commitSha && !!file.blobSha && !file.locked && file.content !== null,
+    const documents = await Promise.allSettled(
+      WUD_TECH_STACK_PATHS.map((path) => this.#read(stack, '', path)),
     );
+    return documents.every((result) => {
+      const file = result.status === 'fulfilled' ? result.value : null;
+      return file?.commitSha === commitSha && !!file.blobSha && !file.locked && file.content !== null;
+    });
   }
 
   async #repositoryPlan(stack: Stack, file: FileView, edits: StageEdit[], groupsText: string | null) {

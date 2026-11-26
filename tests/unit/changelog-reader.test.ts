@@ -311,6 +311,21 @@ Breaking change: remove the legacy configuration.
     await expect(check()).resolves.toMatchObject({ status: 'checked' });
   });
 
+  it('retries a failed shared GitHub request under the waiting check’s own deadline', async () => {
+    const { read, reader } = githubFixture({
+      [githubReleases + '/tags/v0.21.0']: release('v0.21.0', 'Earlier release.'),
+      [githubReleases + '/tags/v0.21.1']: release('v0.21.1', 'New release.'),
+    });
+    read.mockRejectedValueOnce(new Error('First check timed out.'));
+    const check = () => reader.check(github + 'v0.21.1', 'v0.21.0', 'v0.21.1');
+    const first = check();
+    const waiting = check();
+    expect(read).toHaveBeenCalledOnce();
+    await expect(first).resolves.toMatchObject({ status: 'unavailable' });
+    await expect(waiting).resolves.toMatchObject({ status: 'checked' });
+    expect(read.mock.calls[1]?.[1].signal).not.toBe(read.mock.calls[0]?.[1].signal);
+  });
+
   it.each([302, 403, 429, 503])(
     'does not substitute a GitHub tag when its lookup returns %s',
     async (status) => {

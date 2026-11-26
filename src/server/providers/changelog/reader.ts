@@ -460,13 +460,22 @@ export class ChangelogReader {
     }
   }
 
-  private readGitHub(url: URL, signal: AbortSignal): ReturnType<ReadGitHub> {
+  private async readGitHub(url: URL, signal: AbortSignal): ReturnType<ReadGitHub> {
+    signal.throwIfAborted();
     const key = url.href;
     const cached = this.githubResponses.get(key);
     this.githubResponses.delete(key);
     if (cached && cached.expiresAt > Date.now()) {
       this.githubResponses.set(key, cached);
-      return cached.response;
+      let result: Awaited<ReturnType<ReadGitHub>>;
+      try {
+        result = await cached.response;
+      } catch {
+        // The originating check can time out before this check's deadline.
+        return this.readGitHub(url, signal);
+      }
+      signal.throwIfAborted();
+      return result;
     }
 
     const read = this.options.read ?? readHttps;

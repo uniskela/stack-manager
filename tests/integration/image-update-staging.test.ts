@@ -405,6 +405,28 @@ async function arrangeNativePublication() {
 }
 
 describe('native Gitea image update publication', () => {
+  it('keeps the repository workflow available if a required document read fails', async () => {
+    const { container, workspace, user, stacks } = await arrange(
+      { ...beszelFiles, 'docs/wud-update-groups.json': '{"version":1,"groups":[]}\n' },
+      {},
+      'fixture-write-token',
+    );
+    const stack = stacks.find(({ composePath }) => composePath === beszelPath)!;
+    const readFile = container.source.readFile.bind(container.source);
+    vi.spyOn(container.source, 'readFile').mockImplementation((...args) => {
+      if (args[3] === markdownPath) return Promise.reject(new Error('Git read failed.'));
+      return readFile(...args);
+    });
+
+    const { files } = await container.imageUpdateStaging.preview(workspace.id, user.id, [
+      { stackId: stack.id, service: 'beszel', source: 'manual', targetTag: '0.21.2' },
+    ]);
+    expect(files[0]).toMatchObject({ repositoryWorkflow: true, status: 'blocked', token: null });
+    await expect(container.imageUpdateStaging.usesRepositoryWorkflow(workspace.id, stack.id)).resolves.toBe(
+      true,
+    );
+  });
+
   it('publishes the reviewed WUD edits once on a proposal branch and leaves main unchanged', async () => {
     const {
       container,
