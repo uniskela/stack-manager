@@ -38,9 +38,9 @@ Deploying the stacks a commit touched, and watching the result, are later roadma
    - Informational notes never block.
 5. **Write a commit message** and choose **Commit**, or **Commit & Push** to do both in one step.
 
-A successful commit is kept on the server as a local commit on the tracked branch, ready to push. Your drafts
-**stay on the server** after a commit and after a push. Once you have checked the result, discard the drafts you no
-longer need from the Changes tab.
+A successful commit is kept on the server as a local commit on the tracked branch, ready to push. After a fetch
+confirms that the Git files contain the exact draft contents, those drafts clear from **Changes**. Drafts with
+different contents stay available for review.
 
 ### Outdated drafts
 
@@ -59,7 +59,8 @@ the rest.
   that your commit builds directly on it. Only then does it send an ordinary push.
 - It **never force pushes**, and there is no option to. If the remote has moved, the push is stopped before
   anything is sent.
-- After a successful push, Stack Manager queues a background fetch to refresh the editor and **History**.
+- After a successful push, Stack Manager queues a background fetch to clear matching drafts and refresh the editor
+  and **History**.
   If a fetch is already running, a durable follow-up fetch runs after it; repeated requests coalesce into one job.
   Use **Fetch now** if you need to retry or cannot wait for the background worker.
 
@@ -119,8 +120,8 @@ If a local commit can't be pushed because the remote moved, Stack Manager keeps 
 branch. This is deliberate: it never discards a commit on its own. An in-app way to drop the local commit is planned.
 Until then, an operator can remove it by hand.
 
-1. Make sure your drafts still hold the change. They are kept unless you discarded them. If not, note the commit
-   SHA shown in the Changes tab first.
+1. Make sure your drafts still hold the change. If the drafts are gone, note the commit SHA shown in the Changes
+   tab first.
 2. Find the repository id in the repository page's address (`/w/<workspace>/repositories/<repository-id>`).
 3. While no fetch, commit or push is running, remove the local commit reference:
 
@@ -141,7 +142,7 @@ The rest of this page describes how the workflow is implemented and the API the 
 - Edits are stored in SQLite `source_drafts`, keyed by repository and path. Database drafts remain the canonical uncommitted state; normal editing never dirties the Git clone.
 - Source reads use Git objects at the last synced commit. A draft is outdated when its `baseBlobSha` differs from the current tree entry (or a new path now exists).
 - The provider accepts only explicitly selected changes and never deletes or updates drafts. `GitWorkflowService` validates selected database snapshots and orchestrates commit and optional push. It checks draft base blobs against the retained local head, including earlier unpushed commits.
-- v0.5.0 preserves **all** drafts after success and failure, including edits saved concurrently with a commit. After a successful push, fetch the repository and review/discard committed drafts manually. An already committed draft can remain visible or be marked outdated; do not repeat the commit to retry a push. Automatic cleanup needs an atomic comparison against the exact committed draft snapshot and is deferred.
+- During a successful sync, Stack Manager compares draft contents with regular files at the fetched head. It saves the fetched head and removes matching drafts in the same transaction. If a draft's contents changed during the comparison, the newer edit is kept.
 - Saving a draft keeps its original `baseBlobSha`, so re-saving an outdated draft does not make it committable. The operator discards it and edits the current version. A guided "update draft to the current version" flow is deferred.
 - Unsaved browser buffers warn on navigation; PR #8 adds offline support.
 
@@ -175,7 +176,7 @@ The rest of this page describes how the workflow is implemented and the API the 
 ## Conflict protection
 
 - Detect remote ahead
-- v0.5.0 requires manual reconciliation outside the app. Fetch is available through the existing repository sync route; branch inspection also fetches remote refs without changing the source snapshot. Neither operation merges, rebases, moves the retained local head, or deletes drafts.
+- Diverged local commits require manual reconciliation outside the app. The repository sync route fetches the branch and updates the source snapshot. Branch inspection fetches remote refs without updating the source snapshot or clearing drafts. Both leave the retained local commit in place.
 - An **unpushed** retained commit behind a moved remote blocks further commits on that branch until it is removed by hand (see [Recovering an unpushed local commit](#recovering-an-unpushed-local-commit)). An in-app discard action is a planned follow-up.
 - Block when remote commits would be lost. No hard reset, force push, or automatic merge/rebase is implemented.
 

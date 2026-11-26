@@ -52,7 +52,7 @@ export interface GitWorkflowResult {
   state: GitWorkflowState | null;
   problems: GitWorkflowProblem[];
   outdatedPaths: string[];
-  /** Draft cleanup is deliberately manual in v0.5.0. */
+  /** This Git operation leaves drafts in place. A separate successful sync can clear matching drafts. */
   draftsPreserved: true;
   reason?:
     'auth' | 'not_found' | 'network' | 'timeout' | 'invalid' | 'conflict' | 'busy' | 'rejected' | 'unknown';

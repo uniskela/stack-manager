@@ -64,15 +64,15 @@ function WorkflowAlert(props: {
   if (result.status === 'push_succeeded' && result.commitSha) {
     return (
       <Alert tone="ok" role="status" title={`Pushed ${shortSha(result.commitSha)} to ${result.branch}.`}>
-        Your drafts are still on this server. Fetch the repository to see the commit in History, then discard
-        the drafts you no longer need.
+        After the next fetch, the commit appears in History and drafts that match the fetched files clear from
+        Changes.
       </Alert>
     );
   }
   if (result.status === 'commit_succeeded' && result.commitSha) {
     return (
       <Alert tone="ok" role="status" title={`Committed as ${shortSha(result.commitSha)}.`}>
-        It hasn&apos;t been pushed yet. Your drafts stay here until you discard them.
+        It&apos;s ready to push. Your drafts stay here until a fetch confirms their contents in Git.
       </Alert>
     );
   }
@@ -396,11 +396,28 @@ export function ChangesView(props: {
     }
   };
 
+  const workflowAlert = result ? (
+    <WorkflowAlert
+      result={result}
+      editorHref={props.editorHref}
+      rootPath={props.rootPath}
+      repositoryHref={repositoryHref}
+      identityHref={identityHref}
+    />
+  ) : null;
+
   if (props.changes.length === 0 && !retained) {
     return (
-      <EmptyState icon={GitCompareArrows} title="No draft changes">
-        Edits you save in the Editor or Docs appear here for review before they are committed.
-      </EmptyState>
+      <div className="stack changes-view">
+        {result?.status === 'push_succeeded' ? (
+          <div ref={alertRef} tabIndex={-1} className="focus-target">
+            {workflowAlert}
+          </div>
+        ) : null}
+        <EmptyState icon={GitCompareArrows} title="No draft changes">
+          Edits you save in the Editor or Docs appear here for review before they are committed.
+        </EmptyState>
+      </div>
     );
   }
 
@@ -465,15 +482,7 @@ export function ChangesView(props: {
             {error}
           </Alert>
         ) : null}
-        {result ? (
-          <WorkflowAlert
-            result={result}
-            editorHref={props.editorHref}
-            rootPath={props.rootPath}
-            repositoryHref={repositoryHref}
-            identityHref={identityHref}
-          />
-        ) : null}
+        {workflowAlert}
         {result?.commitSha &&
         result.status !== 'commit_succeeded' &&
         result.status !== 'push_succeeded' &&

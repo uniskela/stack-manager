@@ -200,7 +200,6 @@ describe('draft commit and safe push workflow', () => {
     async (state) => {
       await h.container.worker.runOnce();
       await save();
-      const before = await drafts();
       const committed = await commit();
       expect(committed.json.status).toBe('commit_succeeded');
       h.clock.advance(16 * 60_000);
@@ -218,6 +217,7 @@ describe('draft commit and safe push workflow', () => {
       );
       const result = await push(committed.json.commitSha);
       expect(result.json.status).toBe('push_succeeded');
+      expect(await drafts()).toHaveLength(1);
       const { dataDir, config } = h;
       await h.container.close();
       const restarted = await createHarness({ dataDir, config, overrides: gitServerOverrides(server) });
@@ -231,7 +231,7 @@ describe('draft commit and safe push workflow', () => {
         expect((await restarted.container.repositories.get(workspaceId, repositoryId)).headSha).toBe(
           result.json.commitSha,
         );
-        expect(await restarted.container.repos.drafts.list(repositoryId)).toEqual(before);
+        expect(await restarted.container.repos.drafts.list(repositoryId)).toEqual([]);
         expect(await restarted.container.worker.runOnce()).toBe(false);
       } finally {
         await restarted.cleanup();
@@ -288,7 +288,7 @@ describe('draft commit and safe push workflow', () => {
     expect(await h.container.worker.runOnce()).toBe(true);
     expect((await h.container.repositories.get(workspaceId, repositoryId)).headSha).toBe(pushedSha!);
     expect(await h.container.worker.runOnce()).toBe(false);
-    expect(await drafts()).toHaveLength(1);
+    expect(await drafts()).toEqual([]);
   });
 
   it('commits selected drafts with the configured identity and preserves unselected work', async () => {
@@ -341,6 +341,23 @@ describe('draft commit and safe push workflow', () => {
         .map((a) => a.action)
         .sort(),
     ).toEqual(['git.commit', 'git.push']);
+  });
+
+  it('clears drafts already at the fetched head when Fetch now sees no new commit', async () => {
+    await save('README.md', '# Published\n');
+    await save('notes.md', 'Already published 🚀\n');
+    const result = await commit({ paths: ['README.md', 'notes.md'], message: 'Publish drafts', push: true });
+    expect(result.json.status).toBe('push_succeeded');
+    // Simulate a fetch by an older version, which updated the head but kept the published drafts.
+    await h.container.repos.gitRepositories.update(repositoryId, {
+      headSha: result.json.commitSha,
+      updatedAt: h.clock.now(),
+    });
+    expect(await drafts()).toHaveLength(2);
+
+    await h.container.repositories.requestSync(workspaceId, repositoryId, actorUserId);
+    expect(await h.container.worker.runOnce()).toBe(true);
+    expect(await drafts()).toEqual([]);
   });
 
   it('pushes a retained local commit separately and permits a safe retry', async () => {
@@ -398,7 +415,27 @@ describe('draft commit and safe push workflow', () => {
     const result = await commit({ paths: ['compose.yaml'], message: 'Update', push: true });
     expect(result.json.status).toBe('push_succeeded');
     expect(await git(['show', `${result.json.commitSha}:compose.yaml`])).toBe(COMPOSE + '# draft\n');
+    await h.container.repositories.sync(repositoryId);
     expect((await drafts())[0]!.content).toBe(COMPOSE + '# newer saved work\n');
+  });
+
+  it('preserves a draft edited after fetch compared it with Git', async () => {
+    await save();
+    const result = await commit({ paths: ['compose.yaml'], message: 'Publish draft', push: true });
+    expect(result.json.status).toBe('push_succeeded');
+
+    const repositories = h.container.repos.gitRepositories;
+    const completeSync = repositories.completeSync.bind(repositories);
+    const newer = COMPOSE + '# more work saved during sync\n';
+    vi.spyOn(repositories, 'completeSync').mockImplementationOnce(async (...args) => {
+      await save('compose.yaml', newer);
+      return completeSync(...args);
+    });
+
+    await h.container.repositories.sync(repositoryId);
+    expect(await h.container.source.changes(workspaceId, repositoryId, '')).toMatchObject([
+      { path: 'compose.yaml', after: newer, outdated: true },
+    ]);
   });
 
   it('retains push context when resolving credentials fails before provider invocation', async () => {

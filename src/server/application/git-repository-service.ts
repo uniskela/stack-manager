@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { Clock } from '@/server/domain/clock';
@@ -24,15 +25,17 @@ import {
   type GitHttpAuth,
   type GitProvider,
   type RemoteProbe,
+  type SourceTreeReader,
 } from '@/server/providers/git/types';
 import { assertAllowedHost, type Resolver } from '@/server/security/network-policy';
 import { resolveRealWithin, resolveWithin } from '@/server/security/paths';
 import { safeErrorMessage } from '@/server/security/redact';
 import { DecryptionError } from '@/server/security/secret-box';
+import { isSecretPath } from '@/shared/source/paths';
 import type { AuditService } from './audit-service';
 import type { CredentialService } from './credential-service';
 import type { JobQueue } from './job-queue';
-import type { GitRepositoryConnectionRepository } from './ports';
+import type { GitRepositoryConnectionRepository, SourceDraftRepository } from './ports';
 
 export const REPOSITORY_SYNC_JOB = 'repository_sync';
 
@@ -84,6 +87,8 @@ export interface GitRepositoryServiceOptions {
 export class GitRepositoryService {
   constructor(
     private readonly repo: GitRepositoryConnectionRepository,
+    private readonly drafts: SourceDraftRepository,
+    private readonly reader: SourceTreeReader,
     private readonly credentials: CredentialService,
     private readonly providers: GitProviderRegistry,
     private readonly jobs: JobQueue,
@@ -447,15 +452,21 @@ export class GitRepositoryService {
         await fs.rm(targetDir, { recursive: true, force: true });
         throw new PermanentJobError('Repository connection was deleted during sync.');
       }
+      const appliedDrafts = await this.#findAppliedDrafts(conn.id, targetDir, result.headSha);
       const now = this.clock.now();
       signal?.throwIfAborted();
       if (
-        !(await this.repo.completeSync(conn.id, conn.defaultBranch, {
-          headSha: result.headSha,
-          lastFetchedAt: now,
-          lastHeadChangedAt: result.headSha !== conn.headSha ? now : conn.lastHeadChangedAt,
-          updatedAt: now,
-        }))
+        !(await this.repo.completeSync(
+          conn.id,
+          conn.defaultBranch,
+          {
+            headSha: result.headSha,
+            lastFetchedAt: now,
+            lastHeadChangedAt: result.headSha !== conn.headSha ? now : conn.lastHeadChangedAt,
+            updatedAt: now,
+          },
+          appliedDrafts,
+        ))
       )
         throw new GitOperationError(
           'conflict',
@@ -493,6 +504,32 @@ export class GitRepositoryService {
       if (permanent) throw new PermanentJobError(message);
       throw error;
     }
+  }
+
+  async #findAppliedDrafts(repositoryId: string, cloneDir: string, headSha: string) {
+    const drafts = await this.drafts.list(repositoryId);
+    if (drafts.length === 0) return [];
+    // Tree inspection is bounded by the source reader. A fetch can still succeed if inspection fails.
+    const entries = await this.reader.listTree(cloneDir, headSha).catch((error) => {
+      this.logger.warn('fetched drafts could not be reconciled', {
+        repositoryId,
+        error: safeErrorMessage(error),
+      });
+      return [];
+    });
+    const byPath = new Map(entries.map((entry) => [entry.path, entry]));
+    const algorithm = headSha.length === 64 ? 'sha256' : 'sha1';
+    return drafts.filter(({ path, content }) => {
+      const entry = byPath.get(path);
+      if (entry?.kind !== 'file' || isSecretPath(path)) return false;
+      const size = Buffer.byteLength(content, 'utf8');
+      if (size !== entry.size) return false;
+      // Git hashes the raw bytes with a blob header, without applying checkout or clean filters.
+      return (
+        createHash(algorithm).update(`blob ${size}\0`).update(content, 'utf8').digest('hex') ===
+        entry.objectSha
+      );
+    });
   }
 
   async #probe(
