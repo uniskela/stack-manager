@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Suspense } from 'react';
+import type { ImageUpdateService } from '@/server/application/image-update-service';
 import { getContainer } from '@/server/container';
 import { WudRefresh } from '@/ui/image-updates/forms';
 import { ImageUpdateTable } from '@/ui/image-updates/image-table';
@@ -80,33 +81,13 @@ export default async function WorkspaceImageUpdatesPage({
         <OpenImageUpdatePullRequests workspaceId={workspaceId} />
       </Suspense>
       {view === 'setup' ? (
-        <Section id="wud-matches" title="Match stacks to WUD">
-          {needsSetup.length ? (
-            <>
-              <ul className="list">
-                {needsSetup.map((stack) => (
-                  <li key={stack.id}>
-                    <Link className="list-row" href={`${base}/stacks/${stack.id}/image-updates/setup`}>
-                      <strong className="grow">{stack.name}</strong>
-                      <span>
-                        {stack.unmatched.length
-                          ? `Missing from WUD: ${stack.unmatched.join(', ')}`
-                          : connection
-                            ? 'Match WUD project'
-                            : 'Set up WUD'}
-                      </span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-              {connection && unboundCount > 0 ? (
-                <WudMappingDiscovery workspaceId={workspaceId} labelledBy="wud-matches" />
-              ) : null}
-            </>
-          ) : (
-            <p>{allStacks.length ? 'All stacks are linked to WUD.' : 'Add a stack to match it to WUD.'}</p>
-          )}
-        </Section>
+        <WudSetupList
+          workspaceId={workspaceId}
+          stacks={needsSetup}
+          hasStacks={allStacks.length > 0}
+          connected={Boolean(connection)}
+          unboundCount={unboundCount}
+        />
       ) : (
         <>
           {view === 'available' && connection && !available.length ? (
@@ -137,6 +118,46 @@ export default async function WorkspaceImageUpdatesPage({
         </>
       )}
     </div>
+  );
+}
+
+function WudSetupList({
+  workspaceId,
+  stacks,
+  hasStacks,
+  connected,
+  unboundCount,
+}: Readonly<{
+  workspaceId: string;
+  stacks: Awaited<ReturnType<ImageUpdateService['queue']>>['needsSetup'];
+  hasStacks: boolean;
+  connected: boolean;
+  unboundCount: number;
+}>) {
+  const setupLabel = connected ? 'Match WUD project' : 'Set up WUD';
+  const emptyMessage = hasStacks ? 'All stacks are linked to WUD.' : 'Add a stack to match it to WUD.';
+  return (
+    <Section id="wud-matches" title="Match stacks to WUD">
+      {stacks.length > 0 ? (
+        <ul className="list">
+          {stacks.map((stack) => (
+            <li key={stack.id}>
+              <Link className="list-row" href={`/w/${workspaceId}/stacks/${stack.id}/image-updates/setup`}>
+                <strong className="grow">{stack.name}</strong>
+                <span>
+                  {stack.unmatched.length ? `Missing from WUD: ${stack.unmatched.join(', ')}` : setupLabel}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p>{emptyMessage}</p>
+      )}
+      {connected && unboundCount > 0 ? (
+        <WudMappingDiscovery workspaceId={workspaceId} labelledBy="wud-matches" />
+      ) : null}
+    </Section>
   );
 }
 

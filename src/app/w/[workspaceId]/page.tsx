@@ -264,7 +264,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ work
   );
 }
 
-async function DashboardImageUpdates({ workspaceId }: { workspaceId: string }) {
+async function DashboardImageUpdates({ workspaceId }: Readonly<{ workspaceId: string }>) {
   const { imageUpdates } = getContainer();
   const base = `/w/${workspaceId}`;
   const queue = await imageUpdates.queue(workspaceId).catch(() => null);

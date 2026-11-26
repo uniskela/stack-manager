@@ -24,6 +24,7 @@ import {
 } from './image-update-policy';
 import type { ImageUpdateService } from './image-update-service';
 import type { StackRepository } from './ports';
+import { readConcurrently } from './read-concurrently';
 import type { SourceService } from './source-service';
 import type { WudImageUpdatePublication } from './wud-image-update-publication';
 import {
@@ -133,17 +134,16 @@ export class ImageUpdateStagingService {
         groups.set(entry.stack.repositoryId, group);
       } else previews.push(entry);
     }
-    for (const sources of groups.values()) {
-      const summary = proposalSummary(sources);
-      try {
-        previews.push(await this.#proposalPreview(actorUserId, sources));
-      } catch (error) {
-        previews.push(
-          blockedFile(summary, isAppError(error) ? error.message : 'Could not plan this pull request.'),
-        );
-      }
-    }
-    return { files: previews };
+    // Each repository preview can read up to 24 linked files.
+    const proposals = await readConcurrently([...groups.values()], 2, (sources) =>
+      this.#proposalPreview(actorUserId, sources).catch((error) =>
+        blockedFile(
+          proposalSummary(sources),
+          isAppError(error) ? error.message : 'Could not plan this pull request.',
+        ),
+      ),
+    );
+    return { files: [...previews, ...proposals] };
   }
 
   async stage(
