@@ -41,8 +41,7 @@ function markdownEdit(
   composeDir: string | undefined,
   oldPin: Pin,
   newTag: string,
-): Edit | null {
-  const file = 'docs/TechStack.md';
+): Edit | string {
   const sectionIndices: number[] = [];
   for (const [index, node] of body.entries()) {
     if (node.type !== 'paragraph' || !node.position) continue;
@@ -56,9 +55,10 @@ function markdownEdit(
     }
   }
 
-  const list = body[requireOne(sectionIndices, file) + 1];
+  if (sectionIndices.length !== 1) return 'Expected one matching stack section.';
+  const list = body[sectionIndices[0]! + 1];
   if (list?.type !== 'list' || list.ordered) {
-    throw new ValidationError(`${file} stack must be followed by a service list.`);
+    return 'The stack section needs a service list.';
   }
   const entries: Array<{ start: number; text: string }> = [];
   for (const item of list.children) {
@@ -84,7 +84,8 @@ function markdownEdit(
     }
   }
 
-  const { text, start } = requireOne(entries, file);
+  if (entries.length !== 1) return 'Expected one matching service entry.';
+  const { text, start } = entries[0]!;
   const ref = /^(?:`([^`]+)`|([^\s`,;)]+))(?=$|[ \t,;)])/.exec(text);
   const image = ref?.[1] ?? ref?.[2];
   const documented = image ? taggedImage(image) : null;
@@ -107,7 +108,7 @@ function markdownEdit(
   if (range && abbreviated?.[1] === service && isImageTag(abbreviated[2]!)) {
     return { start: start + range[0], end: start + range[1], value: newTag };
   }
-  return null;
+  return 'Its version could not be updated automatically.';
 }
 
 function parseInventory(source: string) {
@@ -196,11 +197,11 @@ export function editWudTechStack(
     }
     const composeDir = parts.at(-2);
     const edit = markdownEdit(markdown, body, stack, service, composeDir, oldPin, newPin.tag);
-    if (edit) markdownEdits.push(edit);
-    else
-      reviewNotes.push(
-        `Check the ${service} entry in docs/TechStack.md before merging. Its version could not be updated automatically.`,
-      );
+    if (typeof edit === 'string') {
+      reviewNotes.push(`Check the ${service} entry in docs/TechStack.md before merging. ${edit}`);
+    } else {
+      markdownEdits.push(edit);
+    }
     jsonEdits.push(jsonEdit(json, stacks, stack, service, composeDir, oldPin, newPin.tag));
   }
 

@@ -115,6 +115,7 @@ describe('WUD TechStack edits', () => {
       'a missing Markdown stack',
       { ...files, markdown: files.markdown.replace('flowvps (previously oracle-vps)', 'other') },
     ],
+    ['a Markdown stack without a service list', { ...files, markdown: 'flowvps\n\n## Services' }],
     ['a Markdown example in a code fence', { ...files, markdown: '```md\r\n' + files.markdown + '```' }],
     ['a missing Markdown service', { ...files, markdown: files.markdown.replace('- beszel:', '- other:') }],
     [
@@ -132,6 +133,41 @@ describe('WUD TechStack edits', () => {
       'a duplicate Markdown stack',
       { ...files, markdown: files.markdown.replace('\r\noracle-vps\r\n', '\r\nflowvps\r\n') },
     ],
+  ])('flags %s for manual review and preserves the Markdown', (_, changedFiles) => {
+    const result = editWudTechStack(changedFiles, [beszel]);
+    expect(result.markdown).toBe(changedFiles.markdown);
+    expect(result.json).toContain('"image" : "henrygd/beszel:0.21.2"');
+    expect(result.reviewNotes).toEqual([
+      expect.stringContaining('Check the beszel entry in docs/TechStack.md'),
+    ]);
+  });
+
+  it('keeps edits before and after a service with ambiguous Markdown', () => {
+    const markdown = files.markdown.replace('- beszel-agent:', '- beszel-agent: other:1\r\n- beszel-agent:');
+    const agent = {
+      ...beszel,
+      service: 'beszel-agent',
+      before: 'henrygd/beszel-agent:0.20.0',
+      after: 'henrygd/beszel-agent:0.20.1',
+    };
+    const result = editWudTechStack({ ...files, markdown }, [
+      beszel,
+      agent,
+      { ...beszel, path: 'oracle-vps/beszel/compose.yaml' },
+    ]);
+    expect(result.markdown).toBe(markdown.replaceAll('henrygd/beszel:0.21.0', 'henrygd/beszel:0.21.2'));
+    expect(result.json).toBe(
+      files.json
+        .replace('"image" : "henrygd/beszel:0.21.0"', '"image" : "henrygd/beszel:0.21.2"')
+        .replace('"image":"henrygd/beszel:0.21.0"', '"image":"henrygd/beszel:0.21.2"')
+        .replace(agent.before, agent.after),
+    );
+    expect(result.reviewNotes).toEqual([
+      expect.stringContaining('Check the beszel-agent entry in docs/TechStack.md'),
+    ]);
+  });
+
+  it.each([
     ['a missing JSON stack', { ...files, json: files.json.replace('"flowvps"', '"other"') }],
     ['a missing JSON service', { ...files, json: files.json.replace('"name": "beszel"', '"name": "other"') }],
     [

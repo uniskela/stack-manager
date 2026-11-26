@@ -144,7 +144,7 @@ An entered link takes precedence over the service or image link in Git, followed
 For a Gitea repository with a write-capable token, `docs/wud-update-groups.json`, and both TechStack documents,
 Stack Manager reads the groups from Git and shows one diff for Compose, the linked files, and the matching
 entries in `docs/TechStack.md` and `docs/TechStack.json`. Select every member together when the policy requires it.
-Stack Manager brings stale documentation tags up to date when it can identify the service and image. If a matched Markdown entry uses free text, the preview and draft pull request identify the entry to check before merging.
+Stack Manager brings stale documentation tags up to date when it can identify the service and image. If a Markdown section or service entry is missing, ambiguous, or uses free text for the version, the preview and draft pull request name the service to check before merging. Other matched entries in the batch still update.
 Stack Manager puts the reviewed changes in one commit on a proposal branch. Git stays the source of truth
 and the tracked branch can keep its normal review and deployment rules.
 
