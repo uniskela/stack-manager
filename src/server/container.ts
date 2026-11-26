@@ -91,7 +91,7 @@ export interface ContainerOverrides {
   migrationsFolder?: string;
   wudClient?: Pick<WudClient, 'read'>;
   changelog?: Pick<ChangelogReader, 'check'>;
-  imageUpdatePulls?: Pick<GiteaImageUpdatePulls, 'list' | 'create'>;
+  imageUpdatePulls?: Pick<GiteaImageUpdatePulls, 'list' | 'create' | 'get' | 'close'>;
 }
 
 /** Ensures the data directory layout exists with owner-only permissions. */

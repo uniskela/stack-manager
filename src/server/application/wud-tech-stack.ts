@@ -25,7 +25,11 @@ function requireOne<T>(matches: readonly T[], file: string): T {
 function applyEdits(source: string, edits: Edit[], file: string): string {
   let end = source.length;
   let result = '';
+  let previous: Edit | undefined;
   for (const edit of edits.sort((left, right) => right.start - left.start)) {
+    if (previous?.start === edit.start && previous.end === edit.end && previous.value === edit.value)
+      continue;
+    previous = edit;
     if (edit.end > end) throw new ValidationError(`${file} has overlapping image updates.`);
     result = edit.value + source.slice(edit.end, end) + result;
     end = edit.start;

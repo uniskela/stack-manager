@@ -10,7 +10,7 @@ export async function readHttps(
     resolver?: Resolver;
     signal: AbortSignal;
     maxBytes: number;
-    method?: 'GET' | 'POST';
+    method?: 'GET' | 'POST' | 'PATCH';
     body?: string;
   },
 ): Promise<{ status: number; body: Buffer }> {
@@ -48,7 +48,7 @@ export async function readHttps(
     request.end(options.body);
   });
   const status = response.statusCode ?? 0;
-  const success = options.method === 'POST' ? status >= 200 && status < 300 : status === 200;
+  const success = options.method && options.method !== 'GET' ? status >= 200 && status < 300 : status === 200;
   if (!success) {
     response.destroy();
     return { status, body: Buffer.alloc(0) };

@@ -4,6 +4,7 @@ import {
   MAX_IMAGE_UPDATE_CANDIDATES,
   type ImageUpdateIntent,
   type ImageUpdatePublication,
+  type ImageUpdatePredecessor,
   type ImageUpdatePreview,
   type ImageUpdateReviewRow,
   type ImageUpdateStageResult,
@@ -23,6 +24,7 @@ import {
 } from './image-update-policy';
 import type { ImageUpdateService } from './image-update-service';
 import type { StackRepository } from './ports';
+import { readConcurrently } from './read-concurrently';
 import type { SourceService } from './source-service';
 import type { WudImageUpdatePublication } from './wud-image-update-publication';
 import {
@@ -44,22 +46,28 @@ type StageEdit = Pick<ImageUpdateIntent, 'service' | 'source' | 'targetTag'> & {
 type SelectedImage = NonNullable<ReturnType<typeof inspectStackImages>>[number];
 type ChangelogCatalog = ReturnType<typeof readWudChangelogCatalog>;
 type StageRequest = { token: string; acknowledgeReview: boolean };
+type ApprovalSource = { stackId: string; path: string; blobSha: string; edits: StageEdit[] };
+type ProposalSource = {
+  stack: Stack;
+  file: FileView & { content: string; blobSha: string };
+  groupsText: string | null;
+  edits: StageEdit[];
+  rows: ImageUpdateReviewRow[];
+};
 type ProposedEdit = { after: string } | { reason: string };
 const PORTAINER_WUD_SKILL_PATH = '.opencode/skills/portainer-wud-updates/SKILL.md';
 const PREVIEW_TTL_MS = 20 * 60_000;
 const hash = (text: string) => createHash('sha256').update(text).digest('hex');
 
-interface FileApproval {
+interface FileApproval extends ApprovalSource {
   workspaceId: string;
   actorUserId: string | null;
-  stackId: string;
-  path: string;
   commitSha: string;
-  blobSha: string;
   nextContentHash: string;
-  edits: StageEdit[];
   review: boolean;
   proposal?: true;
+  repositoryId?: string;
+  additionalSources?: ApprovalSource[];
   expiresAt: number;
 }
 
@@ -99,6 +107,7 @@ export class ImageUpdateStagingService {
     workspaceId: string,
     actorUserId: string,
     candidates: ImageUpdateIntent[],
+    preferPull = false,
   ): Promise<ImageUpdatePreview> {
     if (!candidates.length || candidates.length > MAX_IMAGE_UPDATE_CANDIDATES)
       throw new ValidationError(`Select between 1 and ${MAX_IMAGE_UPDATE_CANDIDATES} image updates.`);
@@ -111,12 +120,30 @@ export class ImageUpdateStagingService {
 
     const files = await Promise.all(
       [...byStack].map(([stackId, items]) =>
-        this.#previewFile(workspaceId, actorUserId, stackId, items).catch(() =>
+        this.#previewFile(workspaceId, actorUserId, stackId, items, preferPull).catch(() =>
           blockedFile({ stackId, stackName: 'Stack unavailable', path: '' }, 'Could not load this stack.'),
         ),
       ),
     );
-    return { files };
+    const previews: PreviewFile[] = [];
+    const groups = new Map<string, ProposalSource[]>();
+    for (const entry of files) {
+      if ('stack' in entry) {
+        const group = groups.get(entry.stack.repositoryId) ?? [];
+        group.push(entry);
+        groups.set(entry.stack.repositoryId, group);
+      } else previews.push(entry);
+    }
+    // Each repository preview can read up to 24 linked files.
+    const proposals = await readConcurrently([...groups.values()], 2, (sources) =>
+      this.#proposalPreview(actorUserId, sources).catch((error) =>
+        blockedFile(
+          proposalSummary(sources),
+          isAppError(error) ? error.message : 'Could not plan this pull request.',
+        ),
+      ),
+    );
+    return { files: [...previews, ...proposals] };
   }
 
   async stage(
@@ -156,14 +183,14 @@ export class ImageUpdateStagingService {
   async publish(
     workspaceId: string,
     actorUserId: string,
-    { token, acknowledgeReview }: StageRequest,
+    { token, acknowledgeReview, supersede }: StageRequest & { supersede?: ImageUpdatePredecessor },
   ): Promise<ImageUpdatePublication> {
     const approval = this.#verify(token, workspaceId, actorUserId);
     if (!approval.proposal) throw invalidPreview();
     if (approval.review && !acknowledgeReview) {
       throw new ConflictError('Acknowledge the review notes before creating a draft pull request.');
     }
-    return this.#publishApproval(approval);
+    return this.#publishApproval(approval, undefined, supersede);
   }
 
   async runAutomatic(
@@ -186,11 +213,12 @@ export class ImageUpdateStagingService {
     if (!policyFile?.content) return 'skipped';
     const automation = parseImageUpdatePolicy(policyFile.content).automation;
     if (!automation) return 'skipped';
-    const preview = await this.#planFile(stack, null, candidates, {
+    const planned = await this.#planFile(stack, null, candidates, {
       stackId,
       stackName: stack.name,
       path: stack.composePath,
     });
+    const preview = 'stack' in planned ? await this.#proposalPreview(null, [planned]) : planned;
     if (preview.status !== 'ready' || !preview.proposal || !preview.token) return 'review';
     const approval = this.#verify(preview.token, workspaceId, null);
     if (approval.commitSha !== policyFile.commitSha) return 'skipped';
@@ -204,24 +232,42 @@ export class ImageUpdateStagingService {
     return 'published';
   }
 
-  async #publishContext(approval: FileApproval) {
-    const stack = await this.stacks.findById(approval.workspaceId, approval.stackId);
-    if (stack?.composePath !== approval.path) throw invalidPreview();
-    const file = await this.#read(stack, stack.rootPath, approval.path);
-    if (!file?.content || file.commitSha !== approval.commitSha || file.blobSha !== approval.blobSha) {
+  async #publishContext(approval: FileApproval, source: ApprovalSource) {
+    const stack = await this.stacks.findById(approval.workspaceId, source.stackId);
+    if (
+      stack?.composePath !== source.path ||
+      (approval.repositoryId && stack.repositoryId !== approval.repositoryId)
+    )
+      throw invalidPreview();
+    const file = await this.#read(stack, stack.rootPath, source.path);
+    if (
+      !file?.content ||
+      file.commitSha !== approval.commitSha ||
+      file.blobSha !== source.blobSha ||
+      file.draft
+    ) {
       throw new ConflictError('The Compose file changed. Preview the update again.');
     }
-    if (!(await this.#currentCandidates(stack, approval.edits))) {
+    if (!(await this.#currentCandidates(stack, source.edits))) {
       throw new ConflictError('WUD no longer reports the reviewed tags. Preview the update again.');
     }
-    return { stack, file };
+    return { stack, file, edits: source.edits };
   }
 
-  async #publishApproval(approval: FileApproval, signal?: AbortSignal): Promise<ImageUpdatePublication> {
-    const { stack, file } = await this.#publishContext(approval);
-    const { policy, externalPolicy, groupsText } = await this.#loadPolicy(stack, approval.commitSha);
-    if (!externalPolicy) throw invalidPreview();
-    const { changes, reviewNotes } = await this.#repositoryPlan(stack, file, approval.edits, groupsText);
+  async #publishApproval(
+    approval: FileApproval,
+    signal?: AbortSignal,
+    supersede?: ImageUpdatePredecessor,
+  ): Promise<ImageUpdatePublication> {
+    const sources = await Promise.all(
+      [approval, ...(approval.additionalSources ?? [])].map((source) =>
+        this.#publishContext(approval, source),
+      ),
+    );
+    const { stack } = sources[0]!;
+    const { policy, groupsText, externalPolicy } = await this.#loadPolicy(stack, approval.commitSha);
+    if (externalPolicy && groupsText === null) throw invalidPreview();
+    const { changes, reviewNotes } = await this.#repositoryPlan(sources, groupsText);
     if (wudRepositoryPlanHash(changes) !== approval.nextContentHash) throw invalidPreview();
     const automation = policy.automation;
     if (approval.actorUserId === null && (automation?.mode !== 'publish' || approval.review))
@@ -232,6 +278,7 @@ export class ImageUpdateStagingService {
         repositoryId: stack.repositoryId,
         commitSha: approval.commitSha,
         changes,
+        supersede,
         review: approval.review,
         reviewNotes,
         signal,
@@ -265,7 +312,8 @@ export class ImageUpdateStagingService {
     actorUserId: string,
     stackId: string,
     items: ImageUpdateIntent[],
-  ): Promise<PreviewFile> {
+    preferPull: boolean,
+  ): Promise<PreviewFile | ProposalSource> {
     const stack = await this.stacks.findById(workspaceId, stackId);
     const summary = {
       stackId,
@@ -277,7 +325,7 @@ export class ImageUpdateStagingService {
     if (!stack) return blocked('This stack is unavailable in the workspace.');
 
     try {
-      return await this.#planFile(stack, actorUserId, items, summary);
+      return await this.#planFile(stack, actorUserId, items, summary, preferPull);
     } catch (error) {
       return blocked(isAppError(error) ? error.message : 'Could not review this Compose file.');
     }
@@ -288,7 +336,8 @@ export class ImageUpdateStagingService {
     actorUserId: string | null,
     items: ImageUpdateIntent[],
     summary: Pick<PreviewFile, 'stackId' | 'stackName' | 'path'>,
-  ): Promise<PreviewFile> {
+    preferPull = false,
+  ): Promise<PreviewFile | ProposalSource> {
     const file = await this.#read(stack, stack.rootPath, stack.composePath);
     if (!file?.content || !file.blobSha || file.locked)
       return blockedFile(summary, 'The committed Compose file is unavailable.');
@@ -331,8 +380,15 @@ export class ImageUpdateStagingService {
     const { content, failures } = editComposeImages(committed, edits);
     if (failures.length) return blockedFile(summary, 'Could not prepare the selected edits.', rows);
 
-    const proposal = externalPolicy ? await this.#repositoryPlan(stack, file, edits, groupsText) : null;
-    const review = rows.some((row) => row.status === 'review') || Boolean(proposal?.reviewNotes.length);
+    const composePullAvailable =
+      !externalPolicy &&
+      actorUserId !== null &&
+      (await this.publication.available(stack.workspaceId, stack.repositoryId));
+    if (externalPolicy || (preferPull && composePullAvailable)) {
+      if (externalPolicy && groupsText === null) throw invalidPreview();
+      return { stack, file: { ...file, content: committed, blobSha: file.blobSha }, groupsText, edits, rows };
+    }
+    const review = rows.some((row) => row.status === 'review');
     const token = this.#sign({
       workspaceId: stack.workspaceId,
       actorUserId,
@@ -340,19 +396,52 @@ export class ImageUpdateStagingService {
       path: stack.composePath,
       commitSha: file.commitSha,
       blobSha: file.blobSha,
-      nextContentHash: proposal ? wudRepositoryPlanHash(proposal.changes) : hash(content),
+      nextContentHash: hash(content),
       edits,
       review,
-      ...(proposal ? { proposal: true } : {}),
       expiresAt: this.clock.now().getTime() + PREVIEW_TTL_MS,
     });
     return {
       ...summary,
       status: review ? 'review' : 'ready',
-      reason: proposal?.reviewNotes.join(' ') || null,
+      reason: null,
+      ...(composePullAvailable ? { composePullAvailable: true as const } : {}),
       changes: rows,
       token,
-      ...(proposal ? { proposal: wudRepositoryDiff(proposal.changes) } : {}),
+    };
+  }
+
+  async #proposalPreview(actorUserId: string | null, sources: ProposalSource[]): Promise<PreviewFile> {
+    const { stack, file, groupsText } = sources[0]!;
+    const { changes, reviewNotes } = await this.#repositoryPlan(sources, groupsText);
+    const rows = sources.flatMap((source) =>
+      source.rows.map((row) => (sources.length === 1 ? row : { ...row, stackName: source.stack.name })),
+    );
+    const review = rows.some((row) => row.status === 'review') || reviewNotes.length > 0;
+    const [first, ...additionalSources] = sources.map(({ stack, file, edits }) => ({
+      stackId: stack.id,
+      path: stack.composePath,
+      blobSha: file.blobSha,
+      edits,
+    }));
+    return {
+      ...proposalSummary(sources),
+      changes: rows,
+      status: review ? 'review' : 'ready',
+      reason: reviewNotes.join(' ') || null,
+      proposal: wudRepositoryDiff(changes),
+      token: this.#sign({
+        ...first!,
+        additionalSources,
+        workspaceId: stack.workspaceId,
+        repositoryId: stack.repositoryId,
+        actorUserId,
+        commitSha: file.commitSha,
+        proposal: true,
+        review,
+        nextContentHash: wudRepositoryPlanHash(changes),
+        expiresAt: this.clock.now().getTime() + PREVIEW_TTL_MS,
+      }),
     };
   }
 
@@ -367,17 +456,23 @@ export class ImageUpdateStagingService {
     });
   }
 
-  async #repositoryPlan(stack: Stack, file: FileView, edits: StageEdit[], groupsText: string | null) {
-    if (groupsText === null || file.content === null) {
-      throw new ConflictError('The repository update group policy or Compose file is unreadable.');
-    }
-    const { changes, failures } = editComposeImages(file.content, edits);
-    if (failures.length) throw new ConflictError('The reviewed Compose changes no longer apply.');
+  async #repositoryPlan(
+    sources: { stack: Stack; file: FileView; edits: StageEdit[] }[],
+    groupsText: string | null,
+  ) {
+    const { stack, file: first } = sources[0]!;
+    const selected = sources.flatMap(({ file, edits }) => {
+      if (file.content === null || file.commitSha !== first.commitSha) throw invalidPreview();
+      const { changes, failures } = editComposeImages(file.content, edits);
+      if (failures.length) throw new ConflictError('The reviewed Compose changes no longer apply.');
+      return changes.map(({ service, before, after }) => ({ path: file.path, service, before, after }));
+    });
+    const files = new Map(sources.map(({ file }) => [file.path, file]));
     return planWudRepositoryUpdate(
-      (path) => (path === file.path ? Promise.resolve(file) : this.#read(stack, '', path)),
-      file.commitSha,
-      parseWudUpdateGroups(groupsText),
-      changes.map(({ service, before, after }) => ({ path: file.path, service, before, after })),
+      async (path) => files.get(path) ?? this.#read(stack, '', path),
+      first.commitSha,
+      groupsText === null ? null : parseWudUpdateGroups(groupsText),
+      selected,
     );
   }
 
@@ -563,6 +658,15 @@ export class ImageUpdateStagingService {
       throw invalidPreview();
     return approval;
   }
+}
+
+function proposalSummary(sources: ProposalSource[]) {
+  const { stack } = sources[0]!;
+  return {
+    stackId: stack.id,
+    stackName: sources.length === 1 ? stack.name : sources.map((source) => source.stack.name).join(', '),
+    path: sources.length === 1 ? stack.composePath : `${sources.length} stacks · one pull request`,
+  };
 }
 
 const invalidPreview = () =>

@@ -3,6 +3,7 @@ import { MAX_IMAGE_UPDATE_CANDIDATES } from '@/shared/image-update-planning';
 import { defineRoute } from '@/server/http/route';
 
 const request = z.strictObject({
+  preferPull: z.boolean().optional(),
   candidates: z
     .array(
       z.strictObject({
@@ -24,5 +25,10 @@ const request = z.strictObject({
 export const POST = defineRoute<{ workspaceId: string }, z.infer<typeof request>>(
   { auth: 'user', body: request },
   async ({ params, container, body, session }) =>
-    container.imageUpdateStaging.preview(params.workspaceId, session.user.id, body.candidates),
+    container.imageUpdateStaging.preview(
+      params.workspaceId,
+      session.user.id,
+      body.candidates,
+      body.preferPull,
+    ),
 );

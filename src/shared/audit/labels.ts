@@ -35,6 +35,8 @@ const LABELS: Record<string, string> = {
   'wud.stack_binding_updated': 'Stack WUD mapping updated',
   'wud.pull_request_created': 'Image update pull request created',
   'wud.pull_request_merged': 'Image update pull request merged',
+  'wud.pull_request_rebased': 'Image update pull request rebased',
+  'wud.pull_request_superseded': 'Image update pull request superseded',
   'wud.image_update_checked': 'Scheduled image update checked',
   'deployment.binding_updated': 'Deployment webhook updated',
   'deployment.binding_disabled': 'Deployment webhook disabled',

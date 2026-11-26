@@ -4,6 +4,8 @@ export type AuditAction =
   | 'wud.stack_binding_updated'
   | 'wud.pull_request_created'
   | 'wud.pull_request_merged'
+  | 'wud.pull_request_rebased'
+  | 'wud.pull_request_superseded'
   | 'wud.image_update_checked'
   | 'deployment.routing_evaluated'
   | 'deployment.stack_skipped'

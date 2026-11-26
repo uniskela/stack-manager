@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { Suspense } from 'react';
 import { getContainer } from '@/server/container';
 import { loadDashboardDraftCounts } from '@/server/application/dashboard-draft-counts';
 import { safeErrorMessage } from '@/server/security/redact';
@@ -18,7 +19,7 @@ import { LocalTime } from '@/ui/local-time';
 import { ButtonLink } from '@/ui/primitives/button';
 import { EmptyState } from '@/ui/primitives/empty-state';
 import { PageHeader } from '@/ui/primitives/page-header';
-import { SectionTitle } from '@/ui/primitives/section';
+import { Section, SectionTitle } from '@/ui/primitives/section';
 import { CircleAlert, CircleCheck, FilePen, FolderGit2, GitPullRequestArrow } from 'lucide-react';
 
 export const metadata: Metadata = { title: 'Dashboard' };
@@ -149,6 +150,16 @@ export default async function DashboardPage({ params }: { params: Promise<{ work
         ) : null}
       </section>
 
+      <Section
+        id="dashboard-image-updates"
+        title="Image updates"
+        actions={<ButtonLink href={`${base}/stacks/image-updates`}>Review image updates</ButtonLink>}
+      >
+        <Suspense fallback={<p className="muted">Checking WUD coverage…</p>}>
+          <DashboardImageUpdates workspaceId={workspaceId} />
+        </Suspense>
+      </Section>
+
       {/* Hidden when empty: the next-step panel above already says nothing needs action. */}
       {work.attention.length > 0 ? (
         <>
@@ -250,6 +261,31 @@ export default async function DashboardPage({ params }: { params: Promise<{ work
         </ol>
       )}
     </>
+  );
+}
+
+async function DashboardImageUpdates({ workspaceId }: Readonly<{ workspaceId: string }>) {
+  const { imageUpdates } = getContainer();
+  const base = `/w/${workspaceId}`;
+  const queue = await imageUpdates.queue(workspaceId).catch(() => null);
+  if (!queue) return <p className="muted">Could not load the WUD update counts.</p>;
+  if (!queue.connected)
+    return (
+      <p>
+        <Link href={`${base}/settings/wud`}>Connect WUD</Link> to see available image tags.
+      </p>
+    );
+  const count = queue.inventory.reduce(
+    (sum, stack) => sum + stack.images.filter((image) => image.status === 'available').length,
+    0,
+  );
+  return (
+    <p>
+      {count} {count === 1 ? 'update' : 'updates'} available ·{' '}
+      <Link href={`${base}/stacks/image-updates?view=setup`}>
+        {queue.needsSetup.length} {queue.needsSetup.length === 1 ? 'stack needs' : 'stacks need'} setup
+      </Link>
+    </p>
   );
 }
 

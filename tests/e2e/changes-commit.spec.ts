@@ -77,7 +77,9 @@ async function openChangesWithDraft(page: Page, marker: string) {
   await expect(page.locator('.diff').first()).toBeVisible();
 }
 
-test('opens a WUD suggestion directly in review and clears the preview when edited', async ({ page }) => {
+test('reviews a selected WUD suggestion, confirms a replacement PR and clears an edited preview', async ({
+  page,
+}) => {
   const { workspaceId, stackId } = sample();
   const endpoint = `**/api/workspaces/${workspaceId}`;
   await page.route(`${endpoint}/stacks/*/image-updates`, (route) =>
@@ -86,6 +88,7 @@ test('opens a WUD suggestion directly in review and clears the preview when edit
         stackId,
         stackName: 'Sample',
         images: [
+          { name: 'cache', image: 'redis:7.2', status: 'available', candidateTag: '7.4' },
           { name: 'wallos', image: 'bellamy/wallos:5.11.2', status: 'available', candidateTag: '5.11.3' },
         ],
       },
@@ -112,17 +115,52 @@ test('opens a WUD suggestion directly in review and clears the preview when edit
     });
   });
   await page.goto(`/w/${workspaceId}/stacks/image-updates`);
+  await page.getByText('Choose WUD suggestions (2 selected)').click();
+  await page.getByRole('checkbox', { name: /cache/ }).uncheck();
   await page.getByRole('button', { name: 'Review 1 WUD suggestion' }).click();
   await expect(page.getByRole('heading', { name: 'Review image updates', exact: true })).toBeFocused();
   expect(requested).toEqual({
     candidates: [{ stackId, service: 'wallos', source: 'wud', targetTag: '5.11.3' }],
   });
-  await expect(page.getByRole('button', { name: 'Create draft pull request' })).toBeVisible();
+  const predecessor = { number: 19, headSha: 'a'.repeat(40) };
+  const publications: unknown[] = [];
+  await page.route(`${endpoint}/image-updates/publish`, (route) => {
+    publications.push(route.request().postDataJSON());
+    if (publications.length === 1)
+      return route.fulfill({
+        status: 409,
+        json: {
+          error: {
+            code: 'image_update_pull_open',
+            message: 'Review PR #19.',
+            fields: {
+              number: '19',
+              headSha: predecessor.headSha,
+              url: 'https://forge.example.org/org/repo/pulls/19',
+            },
+          },
+        },
+      });
+    return route.fulfill({
+      json: {
+        number: 20,
+        repositoryId: 'repo',
+        headSha: 'b'.repeat(40),
+        url: 'https://forge.example.org/org/repo/pulls/20',
+      },
+    });
+  });
+  await page.getByRole('button', { name: 'Create draft pull request' }).click();
+  await page.getByRole('button', { name: 'Supersede PR #19' }).click();
+  expect(publications).toHaveLength(1);
+  await page.getByRole('button', { name: 'Create replacement and close old PR' }).click();
+  await expect(page.getByRole('link', { name: 'Review pull request #20 in Stack Manager' })).toBeVisible();
+  expect(publications[1]).toEqual({ token: 'review-token', acknowledgeReview: true, supersede: predecessor });
   await page.getByText('Edit selected tags (1)', { exact: true }).click();
   const plan = page.getByRole('form', { name: 'Preview image updates' });
   await expect(plan.getByLabel('Release notes link')).toBeHidden();
   await plan.getByLabel('New image tag').fill('5.11.4');
-  await expect(page.getByRole('button', { name: 'Create draft pull request' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Review pull request #20 in Stack Manager' })).toHaveCount(0);
 });
 
 test('plans and stages a manual image update without WUD', async ({ page }) => {

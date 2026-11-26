@@ -83,6 +83,7 @@ function setup(connections = [repository()]) {
     list: vi.fn<GiteaImageUpdatePulls['list']>().mockResolvedValue([row]),
     get: vi.fn<GiteaImageUpdatePulls['get']>().mockResolvedValue(row),
     checks: vi.fn<GiteaImageUpdatePulls['checks']>().mockResolvedValue('success'),
+    rebase: vi.fn<GiteaImageUpdatePulls['rebase']>().mockResolvedValue(undefined),
     merge: vi.fn<GiteaImageUpdatePulls['merge']>().mockResolvedValue(undefined),
   };
   return {
@@ -144,9 +145,23 @@ describe('WUD pull request review', () => {
     });
   });
 
+  it('rebases a conflicted proposal only while its confirmed head still matches', async () => {
+    const { service, pulls, audit } = setup();
+    const action = { ...challenge, action: 'rebase' as const };
+    pulls.get.mockResolvedValue({ ...row, mergeable: false });
+    await expect(service.update(workspaceId, actorUserId, action)).resolves.toEqual({ rebased: true });
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'wud.pull_request_rebased' }),
+    );
+    pulls.get.mockResolvedValue({ ...row, headSha: 'f'.repeat(40) });
+    await expect(service.update(workspaceId, actorUserId, action)).rejects.toMatchObject({ status: 409 });
+    expect(pulls.rebase).toHaveBeenCalledOnce();
+    expect(pulls.merge).not.toHaveBeenCalled();
+  });
+
   it('merges and audits the exact confirmed PR after verifying its current state', async () => {
     const { service, pulls, audit } = setup();
-    await expect(service.merge(workspaceId, actorUserId, challenge)).resolves.toEqual({ merged: true });
+    await expect(service.update(workspaceId, actorUserId, challenge)).resolves.toEqual({ merged: true });
     expect(pulls.get).toHaveBeenCalledWith(expect.objectContaining({ number }));
     expect(pulls.checks).toHaveBeenCalledWith(expect.objectContaining({ headSha }));
     expect(pulls.merge).toHaveBeenCalledWith(expect.objectContaining({ number, headSha }));
@@ -171,7 +186,7 @@ describe('WUD pull request review', () => {
   ] as const)('refuses %s without a forge merge', async (_, changes) => {
     const { service, pulls, audit } = setup();
     pulls.get.mockResolvedValue({ ...row, ...changes });
-    await expect(service.merge(workspaceId, actorUserId, challenge)).rejects.toMatchObject({ status: 409 });
+    await expect(service.update(workspaceId, actorUserId, challenge)).rejects.toMatchObject({ status: 409 });
     expect(pulls.merge).not.toHaveBeenCalled();
     expect(audit.record).not.toHaveBeenCalled();
   });
@@ -179,13 +194,13 @@ describe('WUD pull request review', () => {
   it.each(['failure', 'pending', 'missing'] as const)('blocks a merge with %s checks', async (state) => {
     const { service, pulls } = setup();
     pulls.checks.mockResolvedValue(state);
-    await expect(service.merge(workspaceId, actorUserId, challenge)).rejects.toMatchObject({ status: 409 });
+    await expect(service.update(workspaceId, actorUserId, challenge)).rejects.toMatchObject({ status: 409 });
     expect(pulls.merge).not.toHaveBeenCalled();
   });
 
   it('rejects a repository from another workspace before making forge requests', async () => {
     const { service, pulls } = setup();
-    await expect(service.merge('other-workspace', actorUserId, challenge)).rejects.toMatchObject({
+    await expect(service.update('other-workspace', actorUserId, challenge)).rejects.toMatchObject({
       status: 404,
     });
     expect(pulls.get).not.toHaveBeenCalled();

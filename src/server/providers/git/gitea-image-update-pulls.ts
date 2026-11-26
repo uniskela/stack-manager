@@ -61,6 +61,11 @@ const combinedStatus = z.object({
 
 type HttpsResponse = Awaited<ReturnType<typeof readHttps>>;
 
+function validatePullNumber(number: number) {
+  if (!Number.isSafeInteger(number) || number <= 0)
+    throw new ValidationError('Provide the pull request number.');
+}
+
 function invalidResponse() {
   return new AppError(502, 'forge_invalid_response', 'Gitea returned an invalid API response.');
 }
@@ -149,9 +154,7 @@ export class GiteaImageUpdatePulls {
 
   async get(input: GiteaGetImageUpdatePullInput): Promise<GiteaImageUpdatePull | null> {
     const { api, web } = repositoryUrls(input.remoteUrl);
-    if (!Number.isSafeInteger(input.number) || input.number <= 0) {
-      throw new ValidationError('Provide the pull request number.');
-    }
+    validatePullNumber(input.number);
     const response = await this.request(
       new URL(`${api}/pulls/${input.number}`),
       input.token,
@@ -284,11 +287,43 @@ export class GiteaImageUpdatePulls {
     if (response.status !== 200 && response.status !== 204) throw rejectedRequest();
   }
 
+  async close(input: GiteaGetImageUpdatePullInput): Promise<void> {
+    validatePullNumber(input.number);
+    const { api } = repositoryUrls(input.remoteUrl);
+    const response = await this.request(
+      new URL(`${api}/pulls/${input.number}`),
+      input.token,
+      requestSignal(input.signal),
+      JSON.stringify({ state: 'closed' }),
+      'PATCH',
+    );
+    const closed = pullState.safeParse(readJson(response));
+    if (!closed.success || closed.data.state !== 'closed' || closed.data.number !== input.number)
+      throw invalidResponse();
+  }
+
+  async rebase(input: GiteaGetImageUpdatePullInput): Promise<void> {
+    validatePullNumber(input.number);
+    const { api } = repositoryUrls(input.remoteUrl);
+    const response = await this.request(
+      new URL(`${api}/pulls/${input.number}/update?style=rebase`),
+      input.token,
+      requestSignal(input.signal),
+      '',
+    );
+    if ([409, 422].includes(response.status))
+      throw new ConflictError(
+        'Gitea could not rebase these edits automatically. Fetch the latest repository, preview the desired tags again and supersede this PR, or resolve the conflict in Gitea.',
+      );
+    if (response.status !== 200 && response.status !== 204) throw rejectedRequest();
+  }
+
   private async request(
     url: URL,
     token: string,
     signal: AbortSignal,
     payload?: string,
+    method: 'POST' | 'PATCH' = 'POST',
   ): Promise<HttpsResponse> {
     if (!/^[\x21-\x7e]{1,4096}$/.test(token)) throw new ValidationError('Invalid Gitea token.');
     const request = this.options.request ?? readHttps;
@@ -305,7 +340,7 @@ export class GiteaImageUpdatePulls {
         signal,
         maxBytes: MAX_RESPONSE_BYTES,
         headers,
-        ...(payload === undefined ? {} : { method: 'POST', body: payload }),
+        ...(payload === undefined ? {} : { method, body: payload }),
       });
     } catch {
       throw new AppError(502, 'forge_unavailable', 'Unable to contact the Gitea pull request API.');

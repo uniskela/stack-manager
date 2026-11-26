@@ -9,6 +9,7 @@ export interface ImageUpdateIntent {
 }
 
 export interface ImageUpdateReviewRow {
+  stackName?: string;
   service: string;
   source: ImageUpdateIntent['source'];
   before: string | null;
@@ -26,6 +27,7 @@ export interface ImageUpdatePreview {
     status: 'ready' | 'review' | 'blocked';
     reason: string | null;
     repositoryWorkflow?: true;
+    composePullAvailable?: true;
     proposal?: Array<{
       path: string;
       hunks: Array<{
@@ -57,3 +59,5 @@ export interface ImageUpdateStageResult {
     status: 'staged' | 'draft_exists' | 'source_changed' | 'candidate_changed' | 'review_required' | 'failed';
   }>;
 }
+
+export type ImageUpdatePredecessor = Pick<ImageUpdatePublication, 'number' | 'headSha'>;

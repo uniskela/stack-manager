@@ -307,9 +307,17 @@ const beszelFiles = {
     'Portainer Stacks (from repo)\nflowvps (previously oracle-vps)\n- beszel: henrygd/beszel:0.21.0\n',
 };
 
-async function arrangeNativePublication({ markdown = beszelFiles[markdownPath], checked = false } = {}) {
+async function arrangeNativePublication({
+  markdown = beszelFiles[markdownPath],
+  checked = false,
+  extraFiles = {},
+} = {}) {
   const pullUrl = 'https://git.test/acme/image-updates/pulls/12';
   const openPulls: GiteaImageUpdatePull[] = [];
+  const close = vi.fn(async ({ number }: { number: number }) => {
+    const index = openPulls.findIndex((pull) => pull.number === number);
+    if (index >= 0) openPulls.splice(index, 1);
+  });
   const create = vi.fn(async ({ head, base, title }: GiteaCreateImageUpdatePullInput) => {
     const headSha = (await remoteGit('rev-parse', 'refs/heads/' + head)).trimEnd();
     const pull = { title, head, base, headSha, sameRepository: true, number: 12, url: pullUrl };
@@ -342,13 +350,19 @@ async function arrangeNativePublication({ markdown = beszelFiles[markdownPath], 
     {
       ...beszelFiles,
       [markdownPath]: markdown,
+      ...extraFiles,
       'docs/wud-update-groups.json': '{"version":1,"groups":[]}\n',
       'docs/container-changelogs.json': JSON.stringify({
         sources: { 'henrygd/beszel': { displayUrl: 'https://releases.example.org/beszel/{target_tag}' } },
       }),
     },
     {
-      imageUpdatePulls: { list: async () => [...openPulls], create },
+      imageUpdatePulls: {
+        list: async () => [...openPulls],
+        create,
+        get: async ({ number }) => openPulls.find((pull) => pull.number === number) ?? null,
+        close,
+      },
       changelog: { check },
       wudClient: { read },
     },
@@ -390,6 +404,7 @@ async function arrangeNativePublication({ markdown = beszelFiles[markdownPath], 
   return {
     container,
     stack,
+    stacks,
     request,
     preview,
     token,
@@ -399,6 +414,7 @@ async function arrangeNativePublication({ markdown = beszelFiles[markdownPath], 
     openPulls,
     server,
     create,
+    close,
     changelogUrl,
     check,
     pullUrl,
@@ -500,6 +516,90 @@ describe('native Gitea image update publication', () => {
     expect(replay.status).toBe(200);
     expect(replay.json).toEqual(published.json);
     expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it('publishes selected stacks together and updates their shared documents in one commit', async () => {
+    const { stacks, stack, request, remoteGit, create } = await arrangeNativePublication({
+      extraFiles: {
+        [inventoryPath]:
+          '{"stacks":[{"stack":"flowvps","services":[{"name":"beszel","image":"henrygd/beszel:0.21.0"}]},{"stack":"second","services":[{"name":"cache","image":"redis:7.2"}]}]}',
+        [markdownPath]: beszelFiles[markdownPath] + '\nsecond\n- cache: redis:7.2\n',
+      },
+    });
+    const second = stacks.find((item) => item.composePath === 'second/compose.yaml')!;
+    const preview = await call(previewRoute.POST, {
+      ...request,
+      body: {
+        candidates: [
+          { stackId: stack.id, service: 'beszel', source: 'wud', targetTag: '0.21.2' },
+          { stackId: second.id, service: 'cache', source: 'manual', targetTag: '7.4' },
+        ],
+      },
+    });
+    expect(preview.json.files).toHaveLength(1);
+    const [file] = preview.json.files;
+    expect(file.proposal).toHaveLength(4);
+    const published = await call(publishRoute.POST, {
+      ...request,
+      body: { token: file.token, acknowledgeReview: true },
+    });
+    expect(published.status).toBe(200);
+    expect(create).toHaveBeenCalledOnce();
+    for (const path of [markdownPath, inventoryPath]) {
+      const contents = await remoteGit('show', published.json.headSha + ':' + path);
+      expect(contents).toContain('henrygd/beszel:0.21.2');
+      expect(contents).toContain('redis:7.4');
+    }
+  });
+
+  it('offers Compose-only stacks a grouped PR while retaining the draft workflow', async () => {
+    const { workspace, main, second, cookie } = await arrange({}, {}, 'fixture-write-token');
+    const request = { method: 'POST', cookie, params: { workspaceId: workspace.id } };
+    const candidates = [
+      { stackId: main.id, service: 'app', source: 'manual', targetTag: '1.28' },
+      { stackId: second.id, service: 'cache', source: 'manual', targetTag: '7.4' },
+    ];
+    const drafts = await call(previewRoute.POST, { ...request, body: { candidates } });
+    expect(drafts.json.files).toHaveLength(2);
+    expect(drafts.json.files[0].composePullAvailable).toBe(true);
+    const grouped = await call(previewRoute.POST, { ...request, body: { candidates, preferPull: true } });
+    expect(grouped.json.files).toHaveLength(1);
+    expect(grouped.json.files[0].proposal.map((item: { path: string }) => item.path)).toEqual([
+      'compose.yaml',
+      'second/compose.yaml',
+    ]);
+  });
+
+  it('closes only the confirmed predecessor after the replacement exists and safely replays', async () => {
+    const { publish, openPulls, request, token, baseSha, create, close } = await arrangeNativePublication();
+    const previous = {
+      number: 2,
+      url: 'https://git.test/acme/image-updates/pulls/2',
+      head: 'chore/wud-updates-old',
+      sameRepository: true,
+      title: 'Old proposal',
+      base: 'main',
+      headSha: baseSha,
+    };
+    openPulls.push(previous);
+    const blocked = await publish();
+    expect(blocked.json.error.fields.number).toBe('2');
+    const replace = (headSha: string) =>
+      call(publishRoute.POST, {
+        ...request,
+        body: { token, acknowledgeReview: true, supersede: { number: 2, headSha } },
+      });
+    expect((await replace('f'.repeat(40))).status).toBe(409);
+    create.mockRejectedValueOnce(new Error('forge unavailable'));
+    expect((await replace(baseSha)).status).toBeGreaterThanOrEqual(400);
+    expect(openPulls).toEqual([previous]);
+    close.mockRejectedValueOnce(new Error('Gitea unavailable'));
+    expect((await replace(baseSha)).status).toBe(409);
+    expect(openPulls.map((pull) => pull.number)).toEqual([2, 12]);
+    expect((await publish()).json.error.fields.number).toBe('2');
+    expect((await replace(baseSha)).status).toBe(200);
+    expect(openPulls.map((pull) => pull.number)).toEqual([12]);
+    expect((await replace(baseSha)).status).toBe(200);
   });
 
   it('publishes a reviewable update when the Markdown version is free text', async () => {

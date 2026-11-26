@@ -73,8 +73,14 @@ test.describe('signed in', () => {
 
   test('opens image updates and finds the WUD connection setup', async ({ page }) => {
     await page.goto('/');
-    const home = new URL(page.url()).pathname;
-    await page.goto(`${home}/stacks/image-updates`);
+    const nav = await openNav(page);
+    await nav.getByRole('link', { name: 'Image updates' }).click();
+    await expect(page.getByRole('link', { name: /Updates available/ })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    await page.getByRole('link', { name: /Stacks needing setup/ }).click();
+    await expect(page.getByRole('heading', { name: 'Match stacks to WUD' })).toBeVisible();
     await expect(page.getByRole('heading', { level: 1, name: 'Image updates' })).toBeVisible();
     await expectAccessible(page);
 

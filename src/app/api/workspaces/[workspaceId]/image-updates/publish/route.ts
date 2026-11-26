@@ -2,7 +2,13 @@ import { z } from 'zod';
 import { defineRoute } from '@/server/http/route';
 
 const request = z.strictObject({
-  token: z.string().min(1).max(24_576),
+  token: z.string().min(1).max(60_000),
+  supersede: z
+    .strictObject({
+      number: z.number().int().positive(),
+      headSha: z.string().regex(/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/),
+    })
+    .optional(),
   acknowledgeReview: z.boolean(),
 });
 

@@ -17,6 +17,7 @@ import type { AuditService } from './audit-service';
 import type { CredentialService } from './credential-service';
 import type { JobQueue } from './job-queue';
 import type { StackRepository, WorkspaceRepository } from './ports';
+import { readConcurrently } from './read-concurrently';
 import type { SourceService } from './source-service';
 import type { WudConnection, WudRepository } from './wud-ports';
 
@@ -273,7 +274,7 @@ export class ImageUpdateService {
     requireFreshMappingSnapshot(connection, now);
     const linked = new Set(bindings.map(({ stackId }) => stackId));
     const unbound = stacks.filter(({ id }) => !linked.has(id));
-    const sources = await readStacks(unbound, async (stack) => ({
+    const sources = await readConcurrently(unbound, 8, async (stack) => ({
       stack,
       file: await this.#readImages(stack).catch(() => null),
     }));
@@ -293,10 +294,10 @@ export class ImageUpdateService {
       this.stacks.list(workspaceId),
     ]);
     const byStackId = new Map(bindings.map((binding) => [binding.stackId, binding]));
-    const bound = stacks.filter((stack) => byStackId.has(stack.id));
-    const inventory = await readStacks(bound, (stack) => {
+    const bound = connection ? stacks.filter((stack) => byStackId.has(stack.id)) : [];
+    const inventory = await readConcurrently(bound, 8, (stack) => {
       const binding = byStackId.get(stack.id) ?? null;
-      return this.#inventory(stack, binding, connection).catch(() => ({
+      return this.#inventory(stack, binding, connection).catch((): StackInventory => ({
         stackId: stack.id,
         stackName: stack.name,
         binding: bindingView(binding),
@@ -304,7 +305,23 @@ export class ImageUpdateService {
         images: [],
       }));
     });
-    return { inventory, unboundCount: stacks.length - bound.length };
+    const inventoryByStack = new Map(inventory.map((entry) => [entry.stackId, entry]));
+    const allStacks = stacks.map(({ id, name }) => ({ id, name }));
+    const needsSetup = allStacks.flatMap((stack) => {
+      const entry = inventoryByStack.get(stack.id);
+      const unmatched =
+        entry?.images.filter((image) => image.status === 'unmatched').map((image) => image.name) ?? [];
+      if (entry?.sourceStatus === 'ready' && !unmatched.length) return [];
+      const sourceIssue = entry && entry.sourceStatus !== 'ready' ? entry.sourceStatus : null;
+      return [{ ...stack, unmatched, sourceIssue }];
+    });
+    return {
+      connected: Boolean(connection),
+      inventory,
+      allStacks,
+      needsSetup,
+      unboundCount: stacks.length - bound.length,
+    };
   }
 
   async #inventory(
@@ -406,18 +423,4 @@ function requireFreshMappingSnapshot(
     throw new ConflictError('The last refresh could not read WUD.', 'wud_unavailable');
   if (isStaleSnapshot(connection, now))
     throw new ConflictError('The saved WUD data is out of date.', 'wud_snapshot_stale');
-}
-
-async function readStacks<T>(stacks: readonly Stack[], read: (stack: Stack) => Promise<T>): Promise<T[]> {
-  const results: T[] = [];
-  let next = 0;
-  async function readNext(): Promise<void> {
-    const index = next++;
-    const stack = stacks[index];
-    if (!stack) return;
-    results[index] = await read(stack);
-    return readNext();
-  }
-  await Promise.all(Array.from({ length: Math.min(stacks.length, 8) }, readNext));
-  return results;
 }

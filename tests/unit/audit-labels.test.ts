@@ -10,6 +10,8 @@ const ALL_ACTIONS: Record<AuditAction, true> = {
   'wud.stack_binding_updated': true,
   'wud.pull_request_created': true,
   'wud.pull_request_merged': true,
+  'wud.pull_request_rebased': true,
+  'wud.pull_request_superseded': true,
   'wud.image_update_checked': true,
   'deployment.routing_evaluated': true,
   'deployment.stack_skipped': true,
