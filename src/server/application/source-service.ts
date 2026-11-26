@@ -121,8 +121,7 @@ export class SourceService {
       throw new ValidationError('Invalid request.', { baseBlobSha: 'Not an object id.' });
     }
 
-    let baseBlobSha = input.baseBlobSha;
-    for (let attempt = 0; attempt < 2; attempt++) {
+    const trySave = async (baseBlobSha: string | null | undefined) => {
       const snap = await this.#snapshot(workspaceId, repositoryId);
       const entry = snap.byPath.get(path);
       if (entry && entry.kind !== 'file') {
@@ -135,8 +134,7 @@ export class SourceService {
       if (entry && committed === null) {
         throw new ValidationError('This file cannot be edited.', { path: 'Binary or larger than 1 MiB.' });
       }
-      // Remember the first base when retrying the save against a concurrently fetched revision.
-      if (attempt === 0) baseBlobSha ??= entry?.objectSha ?? null;
+      const originalBase = baseBlobSha === undefined ? (entry?.objectSha ?? null) : baseBlobSha;
 
       const now = this.clock.now();
       const result = await this.drafts.saveAtHead(
@@ -146,7 +144,7 @@ export class SourceService {
           repositoryId,
           path,
           content: input.content,
-          baseBlobSha,
+          baseBlobSha: originalBase,
           baseCommitSha: snap.commitSha,
           createdByUserId: actorUserId,
           updatedByUserId: actorUserId,
@@ -155,22 +153,29 @@ export class SourceService {
         },
         committed === input.content,
       );
-      if (result.status === 'source_changed') continue;
-      if (result.status === 'saved') {
-        await this.#auditDraft('draft.save', workspaceId, repositoryId, path, actorUserId, {
-          bytes,
-          isNew: !entry,
-        });
-        return (await this.#fileView(snap, path, result.draft))!;
-      }
-      if (result.discarded) {
-        await this.#auditDraft('draft.discard', workspaceId, repositoryId, path, actorUserId, {
-          reverted: true,
-        });
-      }
-      return (await this.#fileView(snap, path, null))!;
+      return { snap, entry, result, originalBase };
+    };
+
+    const first = await trySave(input.baseBlobSha ?? undefined);
+    // Only retry after a fetch invalidates the first attempt. Keep the original file base for conflict checks.
+    const { snap, entry, result } =
+      first.result.status === 'source_changed' ? await trySave(first.originalBase) : first;
+    if (result.status === 'source_changed') {
+      throw new ConflictError('The repository changed while saving. Try saving again.', 'source_changed');
     }
-    throw new ConflictError('The repository changed while saving. Try saving again.', 'source_changed');
+    if (result.status === 'saved') {
+      await this.#auditDraft('draft.save', workspaceId, repositoryId, path, actorUserId, {
+        bytes,
+        isNew: !entry,
+      });
+      return (await this.#fileView(snap, path, result.draft))!;
+    }
+    if (result.discarded) {
+      await this.#auditDraft('draft.discard', workspaceId, repositoryId, path, actorUserId, {
+        reverted: true,
+      });
+    }
+    return (await this.#fileView(snap, path, null))!;
   }
 
   /** Stage an already-reviewed change against the exact fetched file, preserving existing drafts. */
