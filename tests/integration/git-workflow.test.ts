@@ -438,6 +438,32 @@ describe('draft commit and safe push workflow', () => {
     ]);
   });
 
+  it.each([
+    { text: COMPOSE + '# draft\n', expected: null, description: 'drops already published text' },
+    {
+      text: COMPOSE + '# more work\n',
+      expected: { content: COMPOSE + '# more work\n', outdated: true },
+      description: 'preserves newer text and its original base',
+    },
+  ])('$description when a save resumes after fetch', async ({ text, expected }) => {
+    await save();
+    const published = await commit({ paths: ['compose.yaml'], message: 'Publish draft', push: true });
+    expect(published.json.status).toBe('push_succeeded');
+
+    const repository = h.container.repos.drafts;
+    const saveAtHead = repository.saveAtHead.bind(repository);
+    vi.spyOn(repository, 'saveAtHead').mockImplementationOnce(async (...args) => {
+      await h.container.repositories.sync(repositoryId);
+      expect(await drafts()).toEqual([]);
+      return saveAtHead(...args);
+    });
+
+    const saved = await save('compose.yaml', text);
+    expect(saved).toMatchObject({ commitSha: published.json.commitSha, draft: expected });
+    const file = await h.container.source.readFile(workspaceId, repositoryId, '', 'compose.yaml');
+    expect(file).toMatchObject({ draft: expected });
+  });
+
   it('retains push context when resolving credentials fails before provider invocation', async () => {
     await save();
     const committed = await commit();

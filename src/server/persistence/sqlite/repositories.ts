@@ -703,50 +703,41 @@ class SqliteSourceDraftRepository implements SourceDraftRepository {
     return rootPath ? rows.filter((r) => r.path === rootPath || r.path.startsWith(`${rootPath}/`)) : rows;
   }
 
-  async upsert(draft: SourceDraft) {
-    return this.db.transaction((tx) => {
-      const existing = tx
-        .select()
-        .from(sourceDrafts)
-        .where(and(eq(sourceDrafts.repositoryId, draft.repositoryId), eq(sourceDrafts.path, draft.path)))
-        .get();
-      if (!existing) {
-        tx.insert(sourceDrafts).values(draft).run();
-        return draft;
-      }
-      const next: SourceDraft = {
-        ...existing,
-        content: draft.content,
-        baseBlobSha: draft.baseBlobSha,
-        updatedByUserId: draft.updatedByUserId,
-        updatedAt: draft.updatedAt,
-      };
-      tx.update(sourceDrafts)
-        .set({
-          content: next.content,
-          baseBlobSha: next.baseBlobSha,
-          updatedByUserId: next.updatedByUserId,
-          updatedAt: next.updatedAt,
-        })
-        .where(eq(sourceDrafts.id, existing.id))
-        .run();
-      return next;
-    });
+  async saveAtHead(
+    draft: SourceDraft,
+    matchesCommitted: boolean,
+  ): ReturnType<SourceDraftRepository['saveAtHead']> {
+    return this.db.transaction(
+      (tx) => {
+        if (!this.#hasHead(tx, draft)) return { status: 'source_changed' };
+        const condition = and(
+          eq(sourceDrafts.repositoryId, draft.repositoryId),
+          eq(sourceDrafts.path, draft.path),
+        );
+        if (matchesCommitted) {
+          const result = tx.delete(sourceDrafts).where(condition).run();
+          return { status: 'unchanged', discarded: result.changes > 0 };
+        }
+        const existing = tx.select().from(sourceDrafts).where(condition).get();
+        if (!existing) {
+          tx.insert(sourceDrafts).values(draft).run();
+          return { status: 'saved', draft };
+        }
+        const patch = {
+          content: draft.content,
+          updatedByUserId: draft.updatedByUserId,
+          updatedAt: draft.updatedAt,
+        };
+        tx.update(sourceDrafts).set(patch).where(condition).run();
+        return { status: 'saved', draft: { ...existing, ...patch } };
+      },
+      { behavior: 'immediate' },
+    );
   }
 
   async insertAtHead(draft: SourceDraft, stackId: string) {
     return this.db.transaction((tx) => {
-      const repo = tx
-        .select({ headSha: gitRepositoryConnections.headSha })
-        .from(gitRepositoryConnections)
-        .where(
-          and(
-            eq(gitRepositoryConnections.id, draft.repositoryId),
-            eq(gitRepositoryConnections.workspaceId, draft.workspaceId),
-          ),
-        )
-        .get();
-      if (repo?.headSha !== draft.baseCommitSha) return 'source_changed';
+      if (!this.#hasHead(tx, draft)) return 'source_changed';
       const stack = tx
         .select({ id: stacks.id })
         .from(stacks)
@@ -767,6 +758,20 @@ class SqliteSourceDraftRepository implements SourceDraftRepository {
         .run();
       return result.changes ? 'staged' : 'draft_exists';
     });
+  }
+
+  #hasHead(db: Pick<SqliteDb, 'select'>, draft: SourceDraft) {
+    const repo = db
+      .select({ headSha: gitRepositoryConnections.headSha })
+      .from(gitRepositoryConnections)
+      .where(
+        and(
+          eq(gitRepositoryConnections.id, draft.repositoryId),
+          eq(gitRepositoryConnections.workspaceId, draft.workspaceId),
+        ),
+      )
+      .get();
+    return repo?.headSha === draft.baseCommitSha;
   }
 
   async delete(repositoryId: string, path: string) {

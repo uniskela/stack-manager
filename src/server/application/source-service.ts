@@ -121,51 +121,61 @@ export class SourceService {
       throw new ValidationError('Invalid request.', { baseBlobSha: 'Not an object id.' });
     }
 
-    const snap = await this.#snapshot(workspaceId, repositoryId);
-    const entry = snap.byPath.get(path);
-    if (entry && entry.kind !== 'file') {
-      throw new ValidationError('This entry cannot be edited.', {
-        path: `${entry.kind} entries are read-only.`,
-      });
-    }
-    if (!entry) this.#assertCreatable(snap, path);
-    const committed = entry ? await this.#readCommitted(snap, entry) : null;
-    if (entry && committed === null) {
-      throw new ValidationError('This file cannot be edited.', { path: 'Binary or larger than 1 MiB.' });
-    }
-
-    const existing = await this.drafts.find(repositoryId, path);
-    // Saving the committed content back is "no change": drop the draft instead of storing a copy.
-    if (committed !== null && committed === input.content) {
-      if (existing) {
-        await this.drafts.delete(repositoryId, path);
-        await this.#auditDraft('draft.discard', workspaceId, repositoryId, path, actorUserId, {
-          reverted: true,
+    const trySave = async (baseBlobSha: string | null | undefined) => {
+      const snap = await this.#snapshot(workspaceId, repositoryId);
+      const entry = snap.byPath.get(path);
+      if (entry && entry.kind !== 'file') {
+        throw new ValidationError('This entry cannot be edited.', {
+          path: `${entry.kind} entries are read-only.`,
         });
       }
-      return (await this.#fileView(snap, path, null))!;
-    }
+      if (!entry) this.#assertCreatable(snap, path);
+      const committed = entry ? await this.#readCommitted(snap, entry) : null;
+      if (entry && committed === null) {
+        throw new ValidationError('This file cannot be edited.', { path: 'Binary or larger than 1 MiB.' });
+      }
+      const originalBase = baseBlobSha === undefined ? (entry?.objectSha ?? null) : baseBlobSha;
 
-    const now = this.clock.now();
-    const draft = await this.drafts.upsert({
-      id: existing?.id ?? this.newId(),
-      workspaceId,
-      repositoryId,
-      path,
-      content: input.content,
-      // Keep the base the draft was started from; later saves only change the content.
-      baseBlobSha: existing ? existing.baseBlobSha : (input.baseBlobSha ?? entry?.objectSha ?? null),
-      baseCommitSha: existing?.baseCommitSha ?? snap.commitSha,
-      createdByUserId: existing?.createdByUserId ?? actorUserId,
-      updatedByUserId: actorUserId,
-      createdAt: existing?.createdAt ?? now,
-      updatedAt: now,
-    });
-    await this.#auditDraft('draft.save', workspaceId, repositoryId, path, actorUserId, {
-      bytes,
-      isNew: !entry,
-    });
-    return (await this.#fileView(snap, path, draft))!;
+      const now = this.clock.now();
+      const result = await this.drafts.saveAtHead(
+        {
+          id: this.newId(),
+          workspaceId,
+          repositoryId,
+          path,
+          content: input.content,
+          baseBlobSha: originalBase,
+          baseCommitSha: snap.commitSha,
+          createdByUserId: actorUserId,
+          updatedByUserId: actorUserId,
+          createdAt: now,
+          updatedAt: now,
+        },
+        committed === input.content,
+      );
+      return { snap, entry, result, originalBase };
+    };
+
+    const first = await trySave(input.baseBlobSha ?? undefined);
+    // Only retry after a fetch invalidates the first attempt. Keep the original file base for conflict checks.
+    const { snap, entry, result } =
+      first.result.status === 'source_changed' ? await trySave(first.originalBase) : first;
+    if (result.status === 'source_changed') {
+      throw new ConflictError('The repository changed while saving. Try saving again.', 'source_changed');
+    }
+    if (result.status === 'saved') {
+      await this.#auditDraft('draft.save', workspaceId, repositoryId, path, actorUserId, {
+        bytes,
+        isNew: !entry,
+      });
+      return (await this.#fileView(snap, path, result.draft))!;
+    }
+    if (result.discarded) {
+      await this.#auditDraft('draft.discard', workspaceId, repositoryId, path, actorUserId, {
+        reverted: true,
+      });
+    }
+    return (await this.#fileView(snap, path, null))!;
   }
 
   /** Stage an already-reviewed change against the exact fetched file, preserving existing drafts. */
