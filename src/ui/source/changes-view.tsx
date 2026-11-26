@@ -255,18 +255,30 @@ export function ChangesView(props: {
 
   useEffect(() => {
     if (!pendingPushRefresh) return;
+    const pollInterval = 2_000;
     let cancelled = false;
-    let timer = window.setTimeout(checkSync, 2000);
+    let retryDelay = pollInterval;
+    let timer = window.setTimeout(checkSync, pollInterval);
 
     async function checkSync() {
-      const response = await api<{ repository: { sync: { status: string } | null } }>(repositoryApi).catch(
-        () => null,
-      );
-      if (cancelled) return;
-      const status = response?.repository.sync?.status;
-      if (status === 'pending' || status === 'running') {
-        timer = window.setTimeout(checkSync, 2000);
-        return;
+      try {
+        const { repository } = await api<{ repository: { sync: { status: string } | null } }>(repositoryApi);
+        if (cancelled) return;
+        retryDelay = pollInterval;
+        const status = repository.sync?.status;
+        if (status === 'pending' || status === 'running') {
+          timer = window.setTimeout(checkSync, pollInterval);
+          return;
+        }
+      } catch (error) {
+        if (cancelled) return;
+        const retryable =
+          !(error instanceof ApiError) || error.status === 408 || error.status === 429 || error.status >= 500;
+        if (retryable) {
+          timer = window.setTimeout(checkSync, retryDelay);
+          retryDelay = Math.min(retryDelay * 2, 30_000);
+          return;
+        }
       }
       setPendingPushRefresh(null);
       router.refresh();

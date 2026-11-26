@@ -316,11 +316,10 @@ test('remote-changed push keeps work and offers fetch', async ({ page }) => {
 });
 
 for (const { title, keepExcludedDraft } of [
-  { title: 'Changes refreshes when a delayed post-push fetch finishes', keepExcludedDraft: false },
+  { title: 'Changes refreshes after a transient sync status failure', keepExcludedDraft: false },
   { title: 'an excluded draft stays unchecked after the pushed draft clears', keepExcludedDraft: true },
 ]) {
   test(title, async ({ page }) => {
-    test.skip(isMobile(page), 'Push success runs once on desktop.');
     await setGitIdentity(page);
     const marker = `push-ok-${Date.now()}`;
     const { repositoryId, workspaceId, stackId } = sample();
@@ -350,7 +349,12 @@ for (const { title, keepExcludedDraft } of [
       let fetchFinished = keepExcludedDraft;
       let publishedPath = '';
       let runningChecks = 0;
+      let failNextCheck = !keepExcludedDraft;
       await page.route(`**${repository}`, (route) => {
+        if (failNextCheck) {
+          failNextCheck = false;
+          return route.fulfill({ status: 503, json: { error: { message: 'Temporarily unavailable' } } });
+        }
         if (!fetchFinished) runningChecks++;
         return route.fulfill({
           json: { repository: { sync: { status: fetchFinished ? 'succeeded' : 'running' } } },
@@ -393,7 +397,7 @@ for (const { title, keepExcludedDraft } of [
         await expect(excluded).not.toBeChecked();
       } else {
         await expect(page.locator('.diff').first()).toBeVisible();
-        await expect.poll(() => runningChecks).toBeGreaterThan(0);
+        await expect.poll(() => runningChecks, { timeout: 10_000 }).toBeGreaterThan(0);
         await clearDraft(publishedPath);
         fetchFinished = true;
         await expect(page.getByRole('heading', { name: 'No draft changes' })).toBeVisible();
