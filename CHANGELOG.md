@@ -10,6 +10,19 @@ check for null before processing HTTP codes and distinguish local rejection from
 Accepted results retain numeric HTTP statuses. No released deployment provider is affected because
 #54 is the first implementation; this note documents compatibility for integrations based on the plan.
 
+## [0.9.0](https://github.com/uniskela/stack-manager/compare/v0.8.0...v0.9.0) (2026-11-26)
+
+
+### Features
+
+* drafting-office redesign with folded-ribbon logo ([#92](https://github.com/uniskela/stack-manager/issues/92)) ([0694413](https://github.com/uniskela/stack-manager/commit/069441392925944d9e39ae80febc117ad5280dc9))
+
+
+### Bug Fixes
+
+* send dashboard draft step to Changes for drafts outside stacks ([#93](https://github.com/uniskela/stack-manager/issues/93)) ([481e1d7](https://github.com/uniskela/stack-manager/commit/481e1d73bb6ae39eead8f61deb76e9c58bb5433c))
+* unblock WUD image updates when TechStack tags drift ([#90](https://github.com/uniskela/stack-manager/issues/90)) ([49a9558](https://github.com/uniskela/stack-manager/commit/49a9558cf7ca6f365d8aef0ac3c3d2c62bfa49a6))
+
 ## [0.8.0](https://github.com/uniskela/stack-manager/compare/v0.7.2...v0.8.0) (2026-11-26)
 
 
