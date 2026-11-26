@@ -566,25 +566,15 @@ select {
   background: var(--surface);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
+  transition:
+    border-color var(--duration-fast),
+    box-shadow var(--duration-fast);
 }
 
 textarea {
   min-height: 5.5rem;
   resize: vertical;
   line-height: 1.45;
-}
-
-input[type='text'],
-input[type='password'],
-input[type='url'],
-input[type='email'],
-input[type='search'],
-input[type='number'],
-textarea,
-select {
-  transition:
-    border-color var(--duration-fast),
-    box-shadow var(--duration-fast);
 }
 
 :is(input, textarea, select):hover:not(:disabled, :focus) {

@@ -227,4 +227,57 @@ describe('dashboardNextStep', () => {
       dashboardNextStep({ attention: [], openDrafts: 0, draftsInProgress: [], stackCount: 3 }),
     ).toMatchObject({ tone: 'calm', title: 'Everything is committed' });
   });
+
+  it('sends drafts outside every stack to the repository Changes page, not an empty stack filter', () => {
+    const step = dashboardNextStep({
+      attention: [],
+      openDrafts: 1,
+      draftsInProgress: [],
+      draftRepositories: [{ id: 'r1', name: 'Infrastructure', drafts: 1, outsideStacks: 1 }],
+      stackCount: 4,
+    });
+    expect(step).toMatchObject({
+      title: '1 draft ready to review',
+      action: { label: 'Review changes', target: { type: 'repository-changes', id: 'r1' } },
+    });
+  });
+
+  it('prefers Changes when stack drafts and repository-level drafts are mixed', () => {
+    const step = dashboardNextStep({
+      attention: [],
+      openDrafts: 3,
+      draftsInProgress: [{ id: 's2', label: 'wallos', draftCount: 2 }],
+      draftRepositories: [{ id: 'r1', name: 'Infrastructure', drafts: 3, outsideStacks: 1 }],
+      stackCount: 4,
+    });
+    expect(step.action?.target).toEqual({ type: 'repository-changes', id: 'r1' });
+  });
+
+  it('names the repository when several have drafts', () => {
+    const step = dashboardNextStep({
+      attention: [],
+      openDrafts: 3,
+      draftsInProgress: [{ id: 's2', label: 'wallos', draftCount: 2 }],
+      draftRepositories: [
+        { id: 'r1', name: 'Infrastructure', drafts: 2, outsideStacks: 0 },
+        { id: 'r2', name: 'Backup', drafts: 1, outsideStacks: 1 },
+      ],
+      stackCount: 4,
+    });
+    expect(step.action).toEqual({
+      label: 'Review changes in Backup',
+      target: { type: 'repository-changes', id: 'r2' },
+    });
+  });
+
+  it('keeps the stack shortcut when every draft is inside that stack', () => {
+    const step = dashboardNextStep({
+      attention: [],
+      openDrafts: 2,
+      draftsInProgress: [{ id: 's2', label: 'wallos', draftCount: 2 }],
+      draftRepositories: [{ id: 'r1', name: 'Infrastructure', drafts: 2, outsideStacks: 0 }],
+      stackCount: 4,
+    });
+    expect(step.action).toEqual({ label: 'Open wallos', target: { type: 'stack', id: 's2' } });
+  });
 });

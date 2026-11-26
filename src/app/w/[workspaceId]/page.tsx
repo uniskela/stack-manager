@@ -63,6 +63,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ work
     stackCounts: draftCounts,
     openDrafts,
     failedCounts,
+    repositoryDrafts,
   } = await loadDashboardDraftCounts(
     stackList,
     repositories,
@@ -85,6 +86,12 @@ export default async function DashboardPage({ params }: { params: Promise<{ work
     attention: work.attention,
     openDrafts,
     draftsInProgress: work.draftsInProgress,
+    draftRepositories: repositoryDrafts.map((counts) => ({
+      id: counts.repositoryId,
+      name: repositories.find((repo) => repo.id === counts.repositoryId)?.name ?? 'Repository',
+      drafts: counts.drafts,
+      outsideStacks: counts.outsideStacks,
+    })),
     stackCount: stackList.length,
   });
 
@@ -142,15 +149,14 @@ export default async function DashboardPage({ params }: { params: Promise<{ work
         ) : null}
       </section>
 
-      <SectionTitle
-        id="dash-attention"
-        title="Needs attention"
-        aside={`${work.attention.length} ${work.attention.length === 1 ? 'item' : 'items'}`}
-      />
-      {work.attention.length === 0 ? (
-        <p className="muted">No sync failures or outdated drafts need action.</p>
-      ) : (
+      {/* Hidden when empty: the next-step panel above already says nothing needs action. */}
+      {work.attention.length > 0 ? (
         <>
+          <SectionTitle
+            id="dash-attention"
+            title="Needs attention"
+            aside={`${work.attention.length} ${work.attention.length === 1 ? 'item' : 'items'}`}
+          />
           <ul className="list dashboard-attention-list" aria-labelledby="dash-attention">
             {visibleAttention.map((item) => (
               <li key={item.key}>
@@ -185,7 +191,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ work
             </p>
           ) : null}
         </>
-      )}
+      ) : null}
 
       {work.draftsInProgress.length > 0 ? (
         <>
@@ -258,6 +264,8 @@ function nextStepHref(base: string, target: NonNullable<DashboardNextStep['actio
   switch (target.type) {
     case 'repository':
       return `${base}/repositories/${target.id}`;
+    case 'repository-changes':
+      return `${base}/repositories/${target.id}/changes`;
     case 'stack':
       return `${base}/stacks/${target.id}`;
     case 'stacks-with-drafts':
@@ -268,7 +276,7 @@ function nextStepHref(base: string, target: NonNullable<DashboardNextStep['actio
 }
 
 /** One plain-language "what now" for the workspace, so a newcomer never has to decode the metrics first. */
-function NextStepPanel({ step, base }: { step: DashboardNextStep; base: string }) {
+function NextStepPanel({ step, base }: Readonly<{ step: DashboardNextStep; base: string }>) {
   const Icon = NEXT_STEP_ICON[step.tone];
   return (
     <div className={`next-step next-step-${step.tone}`}>

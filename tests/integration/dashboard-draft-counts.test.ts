@@ -104,7 +104,15 @@ describe('dashboard draft metadata query', () => {
         throw new Error('The normal batch query should not fail.');
       },
     );
-    expect(counts).toEqual({ stackCounts: [1, 1], openDrafts: 3, failedCounts: 0 });
+    expect(counts).toEqual({
+      stackCounts: [1, 1],
+      openDrafts: 3,
+      failedCounts: 0,
+      repositoryDrafts: expect.arrayContaining([
+        { repositoryId: 'r1', drafts: 2, outsideStacks: 1 },
+        { repositoryId: 'r2', drafts: 1, outsideStacks: 0 },
+      ]),
+    });
     expect(await h.container.source.listDraftPaths([])).toEqual([]);
   });
 });

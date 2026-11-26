@@ -147,8 +147,19 @@ export interface DashboardNextStep {
   body: string;
   action?: {
     label: string;
-    target: { type: 'repository' | 'stack' | 'stacks-with-drafts' | 'stacks'; id?: string };
+    target: {
+      type: 'repository' | 'repository-changes' | 'stack' | 'stacks-with-drafts' | 'stacks';
+      id?: string;
+    };
   };
+}
+
+/** Drafts per repository; `outsideStacks` are drafts no stack folder contains (repo-level docs and the like). */
+export interface DashboardRepositoryDrafts {
+  id: string;
+  name: string;
+  drafts: number;
+  outsideStacks: number;
 }
 
 /**
@@ -160,6 +171,7 @@ export function dashboardNextStep(input: {
   attention: readonly DashboardAttention[];
   openDrafts: number | null;
   draftsInProgress: readonly DashboardDraftWork[];
+  draftRepositories?: readonly DashboardRepositoryDrafts[];
   stackCount: number;
 }): DashboardNextStep {
   const failures = input.attention.filter((item) => item.kind === 'sync-error');
@@ -200,14 +212,11 @@ export function dashboardNextStep(input: {
     };
   }
   if (input.openDrafts > 0) {
-    const only = input.draftsInProgress.length === 1 ? input.draftsInProgress[0] : undefined;
     return {
       tone: 'progress',
       title: `${plural(input.openDrafts, 'draft')} ready to review`,
       body: 'Drafts stay on this server until you commit them. Review the changes, then commit and push them to Git.',
-      action: only
-        ? { label: `Open ${only.label}`, target: { type: 'stack', id: only.id } }
-        : { label: 'Stacks with drafts', target: { type: 'stacks-with-drafts' } },
+      action: draftAction(input.draftsInProgress, input.draftRepositories ?? []),
     };
   }
   if (input.stackCount === 0) {
@@ -224,4 +233,27 @@ export function dashboardNextStep(input: {
     body: 'Open a stack to edit its Compose file, docs or environment. Your edits are saved as drafts until you commit them.',
     action: { label: 'Browse stacks', target: { type: 'stacks' } },
   };
+}
+
+/**
+ * Where "review drafts" should go. A stack filter cannot show drafts outside every stack folder, so those go to
+ * their repository's Changes page, which lists every draft and is where they are committed.
+ */
+function draftAction(
+  stacks: readonly DashboardDraftWork[],
+  repositories: readonly DashboardRepositoryDrafts[],
+): NonNullable<DashboardNextStep['action']> {
+  const withDrafts = repositories.filter((repo) => repo.drafts > 0);
+  const outside = withDrafts.find((repo) => repo.outsideStacks > 0);
+  const target = outside ?? (stacks.length === 0 ? withDrafts[0] : undefined);
+  if (target) {
+    return {
+      label: withDrafts.length === 1 ? 'Review changes' : `Review changes in ${target.name}`,
+      target: { type: 'repository-changes', id: target.id },
+    };
+  }
+  const onlyStack = stacks.length === 1 ? stacks[0] : undefined;
+  return onlyStack
+    ? { label: `Open ${onlyStack.label}`, target: { type: 'stack', id: onlyStack.id } }
+    : { label: 'Stacks with drafts', target: { type: 'stacks-with-drafts' } };
 }

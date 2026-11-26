@@ -17,6 +17,13 @@ export interface DashboardDraftRepository {
   headSha: string | null;
 }
 
+/** Per-repository draft totals; `outsideStacks` counts drafts that no stack folder contains. */
+export interface RepositoryDraftCount {
+  repositoryId: string;
+  drafts: number;
+  outsideStacks: number;
+}
+
 export type DraftCountFailure = {
   scope: 'repository' | 'batch';
   repositoryId?: string;
@@ -33,10 +40,15 @@ export async function loadDashboardDraftCounts(
   repositories: readonly DashboardDraftRepository[],
   loadDraftPaths: (repositoryIds: readonly string[]) => Promise<DashboardDraftPath[]>,
   onFailure: (failure: DraftCountFailure) => void,
-): Promise<{ stackCounts: number[]; openDrafts: number | null; failedCounts: number }> {
+): Promise<{
+  stackCounts: number[];
+  openDrafts: number | null;
+  failedCounts: number;
+  repositoryDrafts: RepositoryDraftCount[];
+}> {
   const fetchedRepositories = repositories.filter((repo) => repo.headSha !== null);
   if (fetchedRepositories.length === 0) {
-    return { stackCounts: stacks.map(() => 0), openDrafts: 0, failedCounts: 0 };
+    return { stackCounts: stacks.map(() => 0), openDrafts: 0, failedCounts: 0, repositoryDrafts: [] };
   }
 
   let rows: DashboardDraftPath[];
@@ -78,5 +90,15 @@ export async function loadDashboardDraftCounts(
       ? null
       : [...pathsByRepository.values()].reduce((total, paths) => total + paths.length, 0);
 
-  return { stackCounts, openDrafts, failedCounts: failed.size };
+  // Nested stacks can both contain one path, so "outside" is computed per path, never from summed stack counts.
+  const repositoryDrafts = [...pathsByRepository].map(([repositoryId, paths]) => {
+    const roots = stacks.filter((stack) => stack.repository.id === repositoryId).map((s) => s.rootPath);
+    return {
+      repositoryId,
+      drafts: paths.length,
+      outsideStacks: paths.filter((path) => !roots.some((root) => isWithin(root, path))).length,
+    };
+  });
+
+  return { stackCounts, openDrafts, failedCounts: failed.size, repositoryDrafts };
 }
