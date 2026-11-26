@@ -342,7 +342,8 @@ for (const { title, keepExcludedDraft } of [
       });
       expect(added.ok()).toBe(true);
       await page.reload();
-      await excluded.uncheck();
+      await excluded.press('Space');
+      await expect(excluded).not.toBeChecked();
     }
 
     try {
