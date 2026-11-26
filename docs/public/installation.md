@@ -76,7 +76,7 @@ docker compose ps   # wait for "healthy"
 The container listens on `127.0.0.1:3000` by default. Point your reverse proxy at it, or change `STACK_MANAGER_BIND`
 if the proxy runs on another host. Then open the app and continue with [Getting started](getting-started.md).
 
-If you use WUD, give Stack Manager access to its HTTPS API and a read-scoped token. Configure it in [Settings → WUD](getting-started.md#plan-image-updates). Stack Manager continues to run with its Git connection alone.
+If you use WUD, give Stack Manager access to its HTTPS API and a read-scoped token. Configure it under **Settings → WUD**, then open **Image updates → Stacks needing setup** to match your stacks. [Plan image updates](getting-started.md#plan-image-updates). Stack Manager continues to run with its Git connection alone.
 
 ## Image tags
 

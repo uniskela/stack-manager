@@ -226,6 +226,20 @@ describe('Gitea image update pull requests', () => {
     expect(request).toHaveBeenCalledOnce();
   });
 
+  it('uses the forge rebase operation and confirms a close response', async () => {
+    const { pulls, request } = adapter();
+    request
+      .mockResolvedValueOnce(response({}, 409))
+      .mockResolvedValueOnce(response({ number: 17, state: 'closed' }));
+    await expect(pulls.rebase({ ...input, number: 17 })).rejects.toMatchObject({ status: 409 });
+    await pulls.close({ ...input, number: 17 });
+    expect(request.mock.calls.map(([url, options]) => [url.href, options.method])).toEqual([
+      [origin + apiPath + '/17/update?style=rebase', 'POST'],
+      [origin + apiPath + '/17', 'PATCH'],
+    ]);
+    expect(JSON.parse(request.mock.calls[1]![1].body!)).toEqual({ state: 'closed' });
+  });
+
   it('does not report HTTP 201 as confirmation that the merge completed', async () => {
     const { pulls, request } = adapter();
     request.mockResolvedValueOnce(response({}, 201));

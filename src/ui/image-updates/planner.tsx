@@ -6,6 +6,7 @@ import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import {
   MAX_IMAGE_UPDATE_CANDIDATES,
   type ImageUpdateIntent,
+  type ImageUpdatePredecessor,
   type ImageUpdatePublication,
   type ImageUpdatePreview,
   type ImageUpdateStageResult,
@@ -15,6 +16,7 @@ import { api, ApiError } from '@/ui/api';
 import { Field, FormError } from '@/ui/form';
 import { Alert } from '@/ui/primitives/alert';
 import { Button } from '@/ui/primitives/button';
+import { ConfirmButton } from '@/ui/primitives/confirm-button';
 import { UnifiedDiff } from '@/ui/source/unified-diff';
 
 interface StackInventory {
@@ -85,6 +87,13 @@ export function ImageUpdatePlanner({
   const [service, setService] = useState('');
   const [manualTag, setManualTag] = useState('');
   const [loaded, setLoaded] = useState<Record<string, StackInventory | string>>({});
+  const [omitted, setOmitted] = useState<string[]>([]);
+  const [replacement, setReplacement] = useState<{
+    token: string;
+    acknowledgeReview: boolean;
+    previous: ImageUpdatePredecessor;
+    url: string;
+  } | null>(null);
   const [candidates, setCandidates] = useState<ImageUpdateIntent[]>([]);
   const [preview, setPreview] = useState<ImageUpdatePreview | null>(null);
   const [selected, setSelected] = useState<Record<string, FileSelection>>({});
@@ -138,7 +147,8 @@ export function ImageUpdatePlanner({
     }),
   );
   const remaining = MAX_IMAGE_UPDATE_CANDIDATES - candidates.length;
-  const suggestionCount = Math.min(remaining, suggestions.length);
+  const picked = suggestions.filter((item) => !omitted.includes(candidateKey(item)));
+  const suggestionCount = Math.min(remaining, picked.length);
   const showManualForm = stacks.length > 1 || candidates.length === 0 || services.length > 0;
   const stageFiles = (preview?.files ?? []).flatMap(({ token, status, proposal }) => {
     if (!token || status === 'blocked' || proposal) return [];
@@ -153,6 +163,7 @@ export function ImageUpdatePlanner({
     setPreview(null);
     setResults([]);
     setPublished({});
+    setReplacement(null);
     setError(null);
     setAnnouncement(message);
   }
@@ -174,7 +185,7 @@ export function ImageUpdatePlanner({
   }
 
   function addSuggestions() {
-    const additions = suggestions.slice(0, remaining);
+    const additions = picked.slice(0, remaining);
     const next = [...candidates, ...additions];
     changeCandidates(
       next,
@@ -187,7 +198,7 @@ export function ImageUpdatePlanner({
     }
   }
 
-  async function previewUpdates(batch: ImageUpdateIntent[]) {
+  async function previewUpdates(batch: ImageUpdateIntent[], preferPull = false) {
     const intents = batch.map((item): ImageUpdateIntent => ({
       ...item,
       targetTag: item.targetTag.trim(),
@@ -207,10 +218,11 @@ export function ImageUpdatePlanner({
     setPreview(null);
     setResults([]);
     setPublished({});
+    setReplacement(null);
     try {
       const data = await api<ImageUpdatePreview>(`${endpoint}/preview`, {
         method: 'POST',
-        body: { candidates: intents },
+        body: { candidates: intents, ...(preferPull ? { preferPull } : {}) },
       });
       setPreview(data);
       setSelected(
@@ -233,18 +245,38 @@ export function ImageUpdatePlanner({
     }
   }
 
-  async function publishUpdate(token: string, acknowledgeReview: boolean) {
+  async function publishUpdate(
+    token: string,
+    acknowledgeReview: boolean,
+    supersede?: ImageUpdatePredecessor,
+  ) {
     setBusy('publish');
+    setReplacement(null);
     setError(null);
     try {
       const pull = await api<ImageUpdatePublication>(`${endpoint}/publish`, {
         method: 'POST',
-        body: { token, acknowledgeReview },
+        body: { token, acknowledgeReview, supersede },
       });
       setPublished((current) => ({ ...current, [token]: pull }));
       setAnnouncement(`Update pull request #${pull.number} is available.`);
       router.refresh();
     } catch (error) {
+      if (
+        error instanceof ApiError &&
+        error.code === 'image_update_pull_open' &&
+        error.fields.headSha &&
+        error.fields.url
+      ) {
+        setReplacement({
+          token,
+          acknowledgeReview,
+          previous: { number: Number(error.fields.number), headSha: error.fields.headSha },
+          url: error.fields.url,
+        });
+      } else if (supersede) {
+        setReplacement({ token, acknowledgeReview, previous: supersede, url: replacement?.url ?? '' });
+      }
       setError(errorMessage(error));
     } finally {
       setBusy(null);
@@ -298,6 +330,43 @@ export function ImageUpdatePlanner({
           <strong>Preview only for this repository.</strong> You can see the proposed tag and release notes
           here. Use your repository’s WUD update workflow to apply changes to Compose and its related files.
         </Alert>
+      ) : null}
+      {suggestions.length > 1 || (suggestions.length > 0 && !picked.length) ? (
+        <details>
+          <summary>Choose WUD suggestions ({picked.length} selected)</summary>
+          <fieldset className="form" disabled={busy !== null}>
+            <legend>Updates to preview together</legend>
+            <div className="actions">
+              <Button size="sm" onClick={() => setOmitted([])}>
+                Select all
+              </Button>
+              <Button size="sm" onClick={() => setOmitted(suggestions.map(candidateKey))}>
+                Clear selection
+              </Button>
+            </div>
+            {suggestions.map((item) => {
+              const key = candidateKey(item);
+              return (
+                <label key={key} className="check-row">
+                  <input
+                    type="checkbox"
+                    checked={!omitted.includes(key)}
+                    onChange={(e) =>
+                      setOmitted(
+                        e.target.checked ? omitted.filter((value) => value !== key) : [...omitted, key],
+                      )
+                    }
+                  />
+                  {stacks.find((stack) => stack.id === item.stackId)?.name} / {item.service} →{' '}
+                  {item.targetTag}
+                </label>
+              );
+            })}
+          </fieldset>
+        </details>
+      ) : null}
+      {picked.length > remaining ? (
+        <p className="muted">This batch can include the first {remaining} selected updates.</p>
       ) : null}
       {suggestionCount > 0 ? (
         <div className="actions">
@@ -490,8 +559,31 @@ export function ImageUpdatePlanner({
         onSubmit={stageUpdates}
         onPublish={publishUpdate}
       />
+      {preview?.files.some((file) => file.composePullAvailable) ? (
+        <div className="actions">
+          <Button disabled={busy !== null} onClick={() => void previewUpdates(candidates, true)}>
+            Preview as one PR per repository
+          </Button>
+        </div>
+      ) : null}
       <output className="muted planner-status">{announcement}</output>
       <FormError message={error} />
+      {replacement ? (
+        <div className="stack">
+          <a href={replacement.url} target="_blank" rel="noreferrer">
+            Review existing PR #{replacement.previous.number}
+          </a>
+          <ConfirmButton
+            label={`Supersede PR #${replacement.previous.number}`}
+            confirmLabel="Create replacement and close old PR"
+            description="Only the changes in this preview will be included. The previous PR closes after its replacement opens."
+            disabled={busy !== null}
+            onConfirm={() =>
+              publishUpdate(replacement.token, replacement.acknowledgeReview, replacement.previous)
+            }
+          />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -649,8 +741,11 @@ function PreviewFileReview({
       {file.changes.length ? (
         <ul className="stack">
           {file.changes.map((change) => (
-            <li key={change.service}>
-              <strong>{change.service}</strong>{' '}
+            <li key={`${change.stackName ?? file.stackId}:${change.service}`}>
+              <strong>
+                {change.stackName ? `${change.stackName} / ` : ''}
+                {change.service}
+              </strong>{' '}
               <span className="muted">
                 {file.repositoryWorkflow && change.status === 'review'
                   ? 'Check before updating'

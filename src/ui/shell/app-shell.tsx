@@ -1,6 +1,16 @@
 'use client';
 
-import { ChevronsUpDown, FolderGit2, LayoutDashboard, Layers, LogOut, Menu, Settings, X } from 'lucide-react';
+import {
+  ArrowUpCircle,
+  ChevronsUpDown,
+  FolderGit2,
+  LayoutDashboard,
+  Layers,
+  LogOut,
+  Menu,
+  Settings,
+  X,
+} from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
@@ -84,6 +94,7 @@ function SidebarContent({
   onClose,
 }: ShellProps & { pathname: string; onClose?: () => void }) {
   const base = `/w/${workspace.id}`;
+  const updateQueue = `${base}/stacks/image-updates`;
   const items = [
     {
       href: base,
@@ -91,7 +102,13 @@ function SidebarContent({
       Icon: LayoutDashboard,
       active: pathname === base,
     },
-    { href: `${base}/stacks`, label: 'Stacks', Icon: Layers, active: pathname.startsWith(`${base}/stacks`) },
+    {
+      href: `${base}/stacks`,
+      label: 'Stacks',
+      Icon: Layers,
+      active: pathname !== updateQueue && pathname.startsWith(`${base}/stacks`),
+    },
+    { href: updateQueue, label: 'Image updates', Icon: ArrowUpCircle, active: pathname === updateQueue },
     {
       href: `${base}/repositories`,
       label: 'Repositories',

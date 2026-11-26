@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { ConflictError } from '@/server/domain/errors';
+import type { ImageUpdatePredecessor } from '@/shared/image-update-planning';
+import { AppError, ConflictError } from '@/server/domain/errors';
 import { gitAuthorIdentityOf } from '@/server/domain/user';
 import type {
   GiteaImageUpdatePull,
@@ -23,14 +24,17 @@ interface Publication {
   review: boolean;
   reviewNotes: readonly string[];
   signal?: AbortSignal;
+  supersede?: ImageUpdatePredecessor;
 }
 
 export class WudImageUpdatePublication {
+  private readonly publishing = new Set<string>();
+
   constructor(
     private readonly connections: GitRepositoryConnectionRepository,
     private readonly repositories: GitRepositoryService,
     private readonly users: UserRepository,
-    private readonly pulls: Pick<GiteaImageUpdatePulls, 'list' | 'create'>,
+    private readonly pulls: Pick<GiteaImageUpdatePulls, 'list' | 'create' | 'get' | 'close'>,
     private readonly audit: AuditService,
   ) {}
 
@@ -58,14 +62,20 @@ export class WudImageUpdatePublication {
     }
     const key = createHash('sha256').update(commitSha).update(wudRepositoryPlanHash(changes)).digest('hex');
     const proposalBranch = prefix + key.slice(0, 32);
+    if (this.publishing.has(repositoryId))
+      throw new ConflictError(
+        'Another update PR is being published for this repository. Retry when it finishes.',
+      );
+    this.publishing.add(repositoryId);
     try {
-      const result = await this.repositories.withGitAccess(
+      const pull = await this.repositories.withGitAccess(
         workspaceId,
         repositoryId,
         async (provider, input) => {
           if (
             !input.auth ||
             provider.descriptor.type !== 'gitea' ||
+            input.remoteUrl !== connection.remoteUrl ||
             input.branch !== connection.defaultBranch
           ) {
             throw new ConflictError('Refresh the Gitea repository connection and review the update again.');
@@ -75,17 +85,35 @@ export class WudImageUpdatePublication {
           const owned = (pull: GiteaImageUpdatePull) =>
             pull.sameRepository === true && pull.head === proposalBranch;
           const existing = trackedPulls.find(owned);
-          if (
-            !existing &&
-            trackedPulls.some(
-              ({ head }) =>
-                head.startsWith(prefix) || legacyPrefixes.some((legacy) => head.startsWith(legacy)),
-            )
-          ) {
-            throw new ConflictError(
-              'This repository already has an open image update pull request. Review it before creating another.',
-              'image_update_pull_open',
-            );
+          const others = trackedPulls.filter(
+            (pull) =>
+              !owned(pull) &&
+              (pull.head.startsWith(prefix) || legacyPrefixes.some((legacy) => pull.head.startsWith(legacy))),
+          );
+          const previous = others[0];
+          if (previous && (!existing || actorUserId !== null)) {
+            const eligible =
+              others.length === 1 &&
+              previous.sameRepository === true &&
+              actorUserId !== null &&
+              (/^stack-manager\/image-updates\/[a-f0-9]{32}$/.test(previous.head) ||
+                legacyPrefixes.some((legacy) => previous.head.startsWith(legacy)));
+            if (
+              !eligible ||
+              plan.supersede?.number !== previous.number ||
+              plan.supersede.headSha !== previous.headSha
+            ) {
+              throw new AppError(
+                409,
+                'image_update_pull_open',
+                `Review open image update PR #${previous.number} before creating another.`,
+                eligible
+                  ? { number: String(previous.number), headSha: previous.headSha, url: previous.url }
+                  : undefined,
+              );
+            }
+          } else if (plan.supersede && !existing) {
+            throw new ConflictError('The pull request to replace changed. Review the update again.');
           }
           const commit = await provider.pushProposal({
             ...input,
@@ -96,8 +124,7 @@ export class WudImageUpdatePublication {
             author: identity,
             message: subject + '\n\nStack-Manager-Image-Update: ' + key,
           });
-          if (existing?.headSha === commit.sha) return { pull: existing, created: false };
-          if (existing)
+          if (existing && existing.headSha !== commit.sha)
             throw new ConflictError('The existing update pull request changed. Review it in Gitea.');
           const title = review ? 'WIP: ' + subject : subject;
           const body = [
@@ -105,46 +132,82 @@ export class WudImageUpdatePublication {
             review
               ? 'Review the compatibility or release evidence before marking this pull request ready.'
               : '',
+            ...(plan.supersede ? [`Supersedes #${plan.supersede.number}.`] : []),
             ...plan.reviewNotes,
             '',
             ...changes.map(({ path }) => '- ' + path.replace(/[\x60<>]/g, '')),
           ]
             .filter(Boolean)
             .join('\n');
-          try {
-            const pull = await this.pulls.create({
-              ...forge,
-              base: input.branch,
-              head: proposalBranch,
-              title,
-              body,
-            });
-            if (pull.headSha !== commit.sha)
-              throw new ConflictError('The proposal branch changed. Review the pull request in Gitea.');
-            return { pull, created: true };
-          } catch (error) {
-            const recovered = (await this.pulls.list(forge).catch(() => [])).find(
-              (pull) => owned(pull) && pull.base === input.branch && pull.headSha === commit.sha,
-            );
-            if (recovered) return { pull: recovered, created: false };
-            throw error;
+          let pull = existing;
+          if (!pull) {
+            try {
+              pull = await this.pulls.create({
+                ...forge,
+                base: input.branch,
+                head: proposalBranch,
+                title,
+                body,
+              });
+              if (pull.headSha !== commit.sha)
+                throw new ConflictError('The proposal branch changed. Review the pull request in Gitea.');
+              await this.audit.record({
+                action: 'wud.pull_request_created',
+                workspaceId,
+                actorUserId,
+                entityType: 'repository',
+                entityId: repositoryId,
+                meta: { pullNumber: pull.number, fileCount: changes.length },
+              });
+            } catch (error) {
+              const recovered = (await this.pulls.list(forge).catch(() => [])).find(
+                (pull) => owned(pull) && pull.base === input.branch && pull.headSha === commit.sha,
+              );
+              if (!recovered) throw error;
+              pull = recovered;
+            }
           }
+          if (plan.supersede && previous) {
+            if (!owned(pull) || pull.base !== input.branch || pull.number === previous.number)
+              throw new ConflictError('Review the replacement in Gitea before closing the previous PR.');
+            const current = await this.pulls.get({ ...forge, number: previous.number });
+            if (current) {
+              if (
+                current.sameRepository !== true ||
+                current.base !== input.branch ||
+                current.head !== previous.head ||
+                current.headSha !== previous.headSha
+              ) {
+                throw new ConflictError(
+                  `Replacement #${pull.number} is open. PR #${previous.number} changed and needs review in Gitea.`,
+                );
+              }
+              try {
+                await this.pulls.close({ ...forge, number: previous.number });
+              } catch {
+                throw new ConflictError(
+                  `Replacement #${pull.number} is open. Check #${previous.number} in Gitea or retry superseding it.`,
+                );
+              }
+              await this.audit.record({
+                action: 'wud.pull_request_superseded',
+                workspaceId,
+                actorUserId,
+                entityType: 'repository',
+                entityId: repositoryId,
+                meta: { pullNumber: previous.number, replacementNumber: pull.number },
+              });
+            }
+          }
+          return pull;
         },
       );
-      if (result.created) {
-        await this.audit.record({
-          action: 'wud.pull_request_created',
-          workspaceId,
-          actorUserId,
-          entityType: 'repository',
-          entityId: repositoryId,
-          meta: { pullNumber: result.pull.number, fileCount: changes.length },
-        });
-      }
-      return { number: result.pull.number, url: result.pull.url, headSha: result.pull.headSha, repositoryId };
+      return { number: pull.number, url: pull.url, headSha: pull.headSha, repositoryId };
     } catch (error) {
       if (error instanceof GitOperationError) throw new ConflictError(error.message);
       throw error;
+    } finally {
+      this.publishing.delete(repositoryId);
     }
   }
 }

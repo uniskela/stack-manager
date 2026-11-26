@@ -193,6 +193,9 @@ describe('WUD image updates over authenticated routes', () => {
       );
       expect((await call(stackUpdates.GET, base)).json.binding).toBeNull();
 
+      expect((await imageUpdates.queue(workspaceId)).needsSetup).toContainEqual(
+        expect.objectContaining({ id: stackId, unmatched: [] }),
+      );
       const mapping = { stackId, watcher: 'local', project: 'wiki' };
       const save = (mappings: (typeof mapping)[], confirmChoice?: true) =>
         call(wudMappings.POST, { ...request, method: 'POST', body: { mappings, confirmChoice } });
@@ -205,6 +208,9 @@ describe('WUD image updates over authenticated routes', () => {
         { stackId: cache.id, status: 'saved' },
       ]);
       expect((await call(stackUpdates.GET, base)).json.binding).toEqual(manual);
+      expect((await imageUpdates.queue(workspaceId)).needsSetup).toContainEqual(
+        expect.objectContaining({ id: stackId, unmatched: ['app'] }),
+      );
 
       expect((await call(stackUpdates.DELETE, { ...base, method: 'DELETE' })).status).toBe(200);
       const rows = await read();

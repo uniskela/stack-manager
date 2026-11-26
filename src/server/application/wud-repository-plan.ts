@@ -23,14 +23,13 @@ export type WudRepositoryChange = GitFileChange & { content: string; before: str
 export async function planWudRepositoryUpdate(
   readFile: (path: string) => Promise<FileView | null>,
   commitSha: string,
-  groups: WudUpdateGroupPolicy,
+  groups: WudUpdateGroupPolicy | null,
   selected: readonly WudGroupImageChange[],
 ) {
   const paths = [
     ...new Set([
       ...selected.map(({ path }) => path),
-      ...wudGroupPaths(groups, selected),
-      ...WUD_TECH_STACK_PATHS,
+      ...(groups ? [...wudGroupPaths(groups, selected), ...WUD_TECH_STACK_PATHS] : []),
     ]),
   ];
   if (paths.length > 24) throw new ValidationError('This image update includes too many linked files.');
@@ -50,33 +49,38 @@ export async function planWudRepositoryUpdate(
     ),
   );
 
-  const plan = wudGroupPlan(groups, selected, new Map([...files].map(([path, file]) => [path, file.before])));
-  const documented = new Set<string>();
-  const updates = plan.imageChanges.filter(({ path, before, after }) => {
-    const image = imageReference(before);
-    const key = JSON.stringify([
-      path.split('/')[0],
-      image?.repository,
-      image?.tag,
-      imageReference(after)?.tag,
-    ]);
-    if (documented.has(key)) return false;
-    documented.add(key);
-    return true;
-  });
-  const {
-    markdown,
-    json,
-    reviewNotes = [],
-  } = editWudTechStack(
-    {
-      markdown: plan.files.get(MARKDOWN) ?? files.get(MARKDOWN)!.before,
-      json: plan.files.get(INVENTORY) ?? files.get(INVENTORY)!.before,
-    },
-    updates,
+  const plan = wudGroupPlan(
+    groups ?? { version: 1, groups: [] },
+    selected,
+    new Map([...files].map(([path, file]) => [path, file.before])),
   );
-  plan.files.set(MARKDOWN, markdown);
-  plan.files.set(INVENTORY, json);
+  let reviewNotes: string[] = [];
+  if (groups) {
+    const documented = new Set<string>();
+    const updates = plan.imageChanges.filter(({ path, service, before, after }) => {
+      const image = imageReference(before);
+      const key = JSON.stringify([
+        path.split('/')[0],
+        image?.repository,
+        image?.tag,
+        imageReference(after)?.tag,
+      ]);
+      if (documented.has(key) && !selected.some((item) => item.path === path && item.service === service))
+        return false;
+      documented.add(key);
+      return true;
+    });
+    const documents = editWudTechStack(
+      {
+        markdown: plan.files.get(MARKDOWN) ?? files.get(MARKDOWN)!.before,
+        json: plan.files.get(INVENTORY) ?? files.get(INVENTORY)!.before,
+      },
+      updates,
+    );
+    reviewNotes = documents.reviewNotes ?? [];
+    plan.files.set(MARKDOWN, documents.markdown);
+    plan.files.set(INVENTORY, documents.json);
+  }
 
   const changes = [...plan.files]
     .sort(([left], [right]) => left.localeCompare(right))

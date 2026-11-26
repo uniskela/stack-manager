@@ -45,7 +45,7 @@ export class WudImageUpdateReview {
   constructor(
     private readonly connections: Pick<GitRepositoryConnectionRepository, 'list' | 'findById'>,
     private readonly repositories: Pick<GitRepositoryService, 'withGitAccess'>,
-    private readonly pulls: Pick<GiteaImageUpdatePulls, 'list' | 'get' | 'checks' | 'merge'>,
+    private readonly pulls: Pick<GiteaImageUpdatePulls, 'list' | 'get' | 'checks' | 'merge' | 'rebase'>,
     private readonly audit: Pick<AuditService, 'record'>,
   ) {}
 
@@ -76,6 +76,7 @@ export class WudImageUpdateReview {
               url: pull.url,
               headSha: pull.headSha,
               title: scrubString(pull.title, { secrets: [forge.token] }),
+              ...(pull.mergeable === false ? { conflicts: true as const } : {}),
               checkStatus,
               status,
               ready: status === 'ready',
@@ -92,12 +93,12 @@ export class WudImageUpdateReview {
     return result;
   }
 
-  async merge(
+  async update(
     workspaceId: string,
     actorUserId: string,
-    input: { repositoryId: string; number: number; headSha: string },
+    input: { repositoryId: string; number: number; headSha: string; action?: 'merge' | 'rebase' },
     signal?: AbortSignal,
-  ): Promise<{ merged: true }> {
+  ) {
     const { repositoryId, number, headSha } = input;
     const connection = await this.connections.findById(workspaceId, repositoryId);
     if (!connection) throw new NotFoundError('Repository not found.');
@@ -114,6 +115,10 @@ export class WudImageUpdateReview {
           'The Gitea pull request changed. Refresh the pull requests and review it again.',
         );
       }
+      if (input.action === 'rebase') {
+        await this.pulls.rebase({ ...forge, number });
+        return;
+      }
       if (!isReadyForReview(pull)) {
         throw new ConflictError('Mark the pull request ready for review in Gitea before merging it.');
       }
@@ -124,14 +129,14 @@ export class WudImageUpdateReview {
       await this.pulls.merge({ ...forge, number, headSha });
     });
     await this.audit.record({
-      action: 'wud.pull_request_merged',
+      action: input.action === 'rebase' ? 'wud.pull_request_rebased' : 'wud.pull_request_merged',
       workspaceId,
       actorUserId,
       entityType: 'repository',
       entityId: repositoryId,
       meta: { pullNumber: number },
     });
-    return { merged: true };
+    return input.action === 'rebase' ? { rebased: true } : { merged: true };
   }
 
   private withForge<T>(

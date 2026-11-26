@@ -104,15 +104,15 @@ can't be opened or edited.
 
 On a stack’s **Image updates** tab, open **Image update setup guide** to connect WUD, match the running Compose project, and see where to review the update. You can use manual tags without connecting WUD.
 
-1. Open a stack's **Image updates** tab or go to **Stacks → Image updates** for a batch across stacks.
-2. Choose **Review 1 WUD suggestion** (the count varies) to go straight to the preview. To enter your own tag, open **Enter an image tag manually**, pick a service, and choose **Add tag to review**. You can combine manual and suggested tags in one batch.
+1. Choose **Review image updates** on the dashboard or **Image updates** in the workspace navigation. **Updates available** shows services with a newer tag. Use **All linked images** to see current services, stale observations and other statuses. **Stacks needing setup** lists unlinked stacks and names any services missing from a linked WUD project. Open a stack there to check its mapping.
+2. Open **Choose WUD suggestions** to select one, several, or all available tags. Choose **Review … WUD suggestions** to preview the selection (up to 24 updates at a time). Eligible changes in the same repository share one PR, including changes to different stacks. Each repository gets its own diff. To enter your own tag, open **Enter an image tag manually**, pick a service, and choose **Add tag to review**. You can combine manual and suggested tags in one batch.
 3. To change a suggestion, open **Edit selected tags**. Expand **Release notes (optional)** to supply a public HTTPS link for an image. Choose a page that covers the tag saved in Git and the suggested or entered tag. Stack Manager shows relevant excerpts and flags incomplete evidence for review.
 4. After editing a tag or link, choose **Review proposed updates** to refresh the preview. For a Gitea repository with linked update groups, review all changed files and choose **Create update pull request**. Use **Create draft pull request** when the update needs more review.
-5. For Compose-only updates, choose **Save selected drafts**, then open **Changes** to inspect and commit them. Existing drafts stay in place.
+5. For Compose-only updates, choose **Save selected drafts**, then open **Changes** to inspect and commit them. On a credentialed Gitea repository, **Preview as one PR per repository** lets you review and publish the same selection as a PR.
 
 For automatic suggestions, create an API token with the `read` scope in WUD 9.9. Enter the HTTPS base URL and token under **Settings → WUD** and choose **Test and save**. Stack Manager reads WUD's stored results every 15 minutes with the worker enabled. **Refresh from WUD** reads those results on demand, and WUD checks registries on its own schedule.
 
-From **Stacks → Image updates**, choose **Find WUD matches**. Stack Manager compares service names and image references in the fetched Compose files with what WUD sees running. Review and save the suggested matches together. If a stack needs your input, open it from the results, choose **Find WUD matches**, and select the Docker host and deployed Compose project. WUD calls the Docker host a watcher. If WUD offers no matching project, you can still choose **Enter WUD details manually**. Discovery preserves saved matches.
+From **Image updates → Stacks needing setup**, choose **Find WUD matches**. Stack Manager compares service names and image references in the fetched Compose files with what WUD sees running. Review and save the suggested matches together. If a stack needs your input, open it from the results, choose **Find WUD matches**, and select the Docker host and deployed Compose project. WUD calls the Docker host a watcher. If WUD offers no matching project, you can still choose **Enter WUD details manually**. Discovery preserves saved matches.
 
 If the saved data is out of date, follow the link to **WUD settings** and choose **Refresh from WUD** before trying again. If WUD refuses the token, create a new read token in WUD and use **Test and save** to replace it. For other connection failures, check that Stack Manager can reach the configured WUD HTTPS URL.
 
@@ -149,9 +149,13 @@ Stack Manager brings stale documentation tags up to date when it can identify th
 Stack Manager puts the reviewed changes in one commit on a proposal branch. Git stays the source of truth
 and the tracked branch can keep its normal review and deployment rules.
 
-Open **Stacks → Image updates → Update pull requests** to see Gitea’s checks. **Merge update** is available
+Open **Image updates → Update pull requests** to see Gitea’s checks. **Merge update** is available
 for a ready proposal after its current commit passes checks. Gitea still enforces the repository’s review and
 branch protections. Draft pull requests need review and must be marked ready in Gitea first.
+
+If another image-update PR blocks publication, open the existing PR and compare its changes with the preview. **Supersede PR** creates the reviewed replacement, then closes the confirmed predecessor. Include every update you want to keep. The option is available for a single matching same-repository WUD proposal, including recognized legacy update branches.
+
+If a merge leaves a Stack Manager proposal in conflict, choose **Rebase update**. Review the new head and its checks before merging. If Gitea reports overlapping edits, fetch the latest tracked branch, preview the desired updates again, and supersede the conflicted PR with the freshly generated diff.
 
 Use `"automation": { "mode": "report" }` in `.stack-manager/image-updates.json` to check candidates after
 each WUD refresh and record the result in **Activity**. After comparing with your existing update job, set

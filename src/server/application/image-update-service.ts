@@ -293,7 +293,7 @@ export class ImageUpdateService {
       this.stacks.list(workspaceId),
     ]);
     const byStackId = new Map(bindings.map((binding) => [binding.stackId, binding]));
-    const bound = stacks.filter((stack) => byStackId.has(stack.id));
+    const bound = connection ? stacks.filter((stack) => byStackId.has(stack.id)) : [];
     const inventory = await readStacks(bound, (stack) => {
       const binding = byStackId.get(stack.id) ?? null;
       return this.#inventory(stack, binding, connection).catch(() => ({
@@ -304,7 +304,24 @@ export class ImageUpdateService {
         images: [],
       }));
     });
-    return { inventory, unboundCount: stacks.length - bound.length };
+    const unmatchedServices = new Map(
+      inventory.map((stack) => [
+        stack.stackId,
+        stack.images.filter((image) => image.status === 'unmatched').map((image) => image.name),
+      ]),
+    );
+    const allStacks = stacks.map(({ id, name }) => ({ id, name }));
+    const needsSetup = allStacks.flatMap((stack) => {
+      const unmatched = unmatchedServices.get(stack.id);
+      return unmatched?.length === 0 ? [] : [{ ...stack, unmatched: unmatched ?? [] }];
+    });
+    return {
+      connected: Boolean(connection),
+      inventory,
+      allStacks,
+      needsSetup,
+      unboundCount: stacks.length - bound.length,
+    };
   }
 
   async #inventory(

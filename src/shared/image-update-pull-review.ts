@@ -7,6 +7,7 @@ export interface ImageUpdatePullReview extends ImageUpdatePublication {
   title: string;
   checkStatus: ImageUpdatePullCheckStatus;
   status: 'ready' | 'review' | 'blocked';
+  conflicts?: true;
   ready: boolean;
 }
 

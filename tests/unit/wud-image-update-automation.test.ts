@@ -54,6 +54,9 @@ function arrange(stacks: Stack[], policies: Record<string, FileView>) {
     return file;
   });
   const queue = vi.fn<ImageUpdateService['queue']>().mockResolvedValue({
+    connected: true,
+    allStacks: [],
+    needsSetup: [],
     unboundCount: 0,
     inventory: stacks.map(({ id, name }) => ({
       stackId: id,
@@ -133,6 +136,9 @@ describe('WUD image update automation', () => {
     });
     const ready = (await queue(workspaceId)).inventory[0]!;
     queue.mockResolvedValue({
+      connected: true,
+      allStacks: [],
+      needsSetup: [],
       unboundCount: 0,
       inventory: [
         {

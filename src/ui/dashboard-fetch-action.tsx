@@ -7,7 +7,7 @@ import { api, ApiError } from './api';
 import { Alert } from './primitives/alert';
 import { Button } from './primitives/button';
 
-/** Convenience action only for single-repository workspaces; never triggers a deployment. */
+/** Queues a source fetch for one repository. */
 export function DashboardFetchAction({
   workspaceId,
   repositoryId,

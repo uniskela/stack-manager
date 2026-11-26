@@ -15,19 +15,37 @@ export const metadata: Metadata = { title: 'Image updates' };
 
 export default async function WorkspaceImageUpdatesPage({
   params,
+  searchParams,
 }: Readonly<{
+  searchParams: Promise<{ view?: string }>;
   params: Promise<{ workspaceId: string }>;
 }>) {
   const { workspaceId } = await params;
-  const { imageUpdates, stacks, config } = getContainer();
-  const [{ connection, refreshing }, allStacks] = await Promise.all([
+  const { imageUpdates, config } = getContainer();
+  const [{ connection, refreshing }, { inventory, allStacks, needsSetup, unboundCount }] = await Promise.all([
     imageUpdates.settings(workspaceId),
-    stacks.list(workspaceId),
+    imageUpdates.queue(workspaceId),
   ]);
-  const { inventory, unboundCount } = connection
-    ? await imageUpdates.queue(workspaceId)
-    : { inventory: [], unboundCount: 0 };
   const base = `/w/${workspaceId}`;
+  const selected = (await searchParams).view;
+  const view = selected === 'all' || selected === 'setup' ? selected : 'available';
+  const queuePath = `${base}/stacks/image-updates`;
+  const available = inventory
+    .map((stack) => ({ ...stack, images: stack.images.filter((image) => image.status === 'available') }))
+    .filter((stack) => stack.images.length);
+  const tabs = [
+    {
+      value: 'available',
+      label: 'Updates available',
+      count: available.reduce((sum, stack) => sum + stack.images.length, 0),
+    },
+    { value: 'setup', label: 'Stacks needing setup', count: needsSetup.length },
+    {
+      value: 'all',
+      label: 'All linked images',
+      count: inventory.reduce((sum, stack) => sum + stack.images.length, 0),
+    },
+  ];
   return (
     <div className="stack">
       <PageHeader
@@ -36,54 +54,88 @@ export default async function WorkspaceImageUpdatesPage({
           <ButtonLink href={`${base}/settings/wud`}>{connection ? 'WUD settings' : 'Connect WUD'}</ButtonLink>
         }
       />
+      {connection ? (
+        <WudRefresh
+          workspaceId={workspaceId}
+          connection={connection}
+          refreshing={refreshing}
+          workerEnabled={config.workerEnabled}
+        />
+      ) : (
+        <p className="muted">Connect What’s Up Docker to see suggested image tags for this workspace.</p>
+      )}
+      <nav className="actions" aria-label="Image update filters">
+        {tabs.map((tab) => (
+          <ButtonLink
+            key={tab.value}
+            href={tab.value === 'available' ? queuePath : `${queuePath}?view=${tab.value}`}
+            aria-current={tab.value === view ? 'page' : undefined}
+            variant={tab.value === view ? 'primary' : 'secondary'}
+          >
+            {tab.label} ({tab.count})
+          </ButtonLink>
+        ))}
+      </nav>
       <Suspense fallback={null}>
         <OpenImageUpdatePullRequests workspaceId={workspaceId} />
       </Suspense>
-      {connection ? (
-        <>
-          <WudRefresh
-            workspaceId={workspaceId}
-            connection={connection}
-            refreshing={refreshing}
-            workerEnabled={config.workerEnabled}
-          />
-          {unboundCount > 0 ? (
-            <Section id="wud-matches" title="Match stacks to WUD">
-              <p className="muted">
-                {unboundCount} {unboundCount === 1 ? 'stack is' : 'stacks are'} not yet linked. Stack Manager
-                compares the services and images in Git with the projects WUD sees running.
-              </p>
-              <WudMappingDiscovery workspaceId={workspaceId} labelledBy="wud-matches" />
-            </Section>
-          ) : null}
-        </>
-      ) : null}
-      {allStacks.length > 0 ? (
-        <Section id="plan-image-updates" title="Plan image updates">
-          <ImageUpdatePlanner
-            workspaceId={workspaceId}
-            stacks={allStacks.map(({ id, name }) => ({ id, name }))}
-            known={inventory}
-          />
+      {view === 'setup' ? (
+        <Section id="wud-matches" title="Match stacks to WUD">
+          {needsSetup.length ? (
+            <>
+              <ul className="list">
+                {needsSetup.map((stack) => (
+                  <li key={stack.id}>
+                    <Link className="list-row" href={`${base}/stacks/${stack.id}/image-updates/setup`}>
+                      <strong className="grow">{stack.name}</strong>
+                      <span>
+                        {stack.unmatched.length
+                          ? `Missing from WUD: ${stack.unmatched.join(', ')}`
+                          : connection
+                            ? 'Match WUD project'
+                            : 'Set up WUD'}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+              {connection && unboundCount > 0 ? (
+                <WudMappingDiscovery workspaceId={workspaceId} labelledBy="wud-matches" />
+              ) : null}
+            </>
+          ) : (
+            <p>{allStacks.length ? 'All stacks are linked to WUD.' : 'Add a stack to match it to WUD.'}</p>
+          )}
         </Section>
       ) : (
-        <p className="muted">
-          <Link href={`${base}/stacks`}>Add a stack</Link> to plan image updates.
-        </p>
-      )}
-      {inventory.map((stack) => (
-        <section key={stack.stackId} className="stack" aria-labelledby={`images-${stack.stackId}`}>
-          <SectionTitle
-            id={`images-${stack.stackId}`}
-            title={<Link href={`${base}/stacks/${stack.stackId}/image-updates`}>{stack.stackName}</Link>}
-          />
-          {stack.images.length ? (
-            <ImageUpdateTable labelledBy={`images-${stack.stackId}`} images={stack.images} />
+        <>
+          {view === 'available' && connection && !available.length ? (
+            <p>No newer tags reported for linked stacks.</p>
+          ) : null}
+          {allStacks.length > 0 ? (
+            <Section id="plan-image-updates" title="Plan image updates">
+              <ImageUpdatePlanner workspaceId={workspaceId} stacks={allStacks} known={inventory} />
+            </Section>
           ) : (
-            <p className="muted">Open the stack to check its Compose source and mapping.</p>
+            <p className="muted">
+              <Link href={`${base}/stacks`}>Add a stack</Link> to plan image updates.
+            </p>
           )}
-        </section>
-      ))}
+          {(view === 'all' ? inventory : available).map((stack) => (
+            <section key={stack.stackId} className="stack" aria-labelledby={`images-${stack.stackId}`}>
+              <SectionTitle
+                id={`images-${stack.stackId}`}
+                title={<Link href={`${base}/stacks/${stack.stackId}/image-updates`}>{stack.stackName}</Link>}
+              />
+              {stack.images.length ? (
+                <ImageUpdateTable labelledBy={`images-${stack.stackId}`} images={stack.images} />
+              ) : (
+                <p className="muted">Open the stack to check its Compose source and mapping.</p>
+              )}
+            </section>
+          ))}
+        </>
+      )}
     </div>
   );
 }
