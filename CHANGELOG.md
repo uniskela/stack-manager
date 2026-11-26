@@ -10,6 +10,20 @@ check for null before processing HTTP codes and distinguish local rejection from
 Accepted results retain numeric HTTP statuses. No released deployment provider is affected because
 #54 is the first implementation; this note documents compatibility for integrations based on the plan.
 
+## [0.8.0](https://github.com/uniskela/stack-manager/compare/v0.7.2...v0.8.0) (2026-11-26)
+
+
+### Features
+
+* publish native WUD image update pull requests ([#89](https://github.com/uniskela/stack-manager/issues/89)) ([e0e46df](https://github.com/uniskela/stack-manager/commit/e0e46df0fb791416ea6294af358e7cf8466d95d1))
+
+
+### Bug Fixes
+
+* clear published drafts after fetch ([#85](https://github.com/uniskela/stack-manager/issues/85)) ([8afb790](https://github.com/uniskela/stack-manager/commit/8afb790c8a9d7701753abf03ee8818675ec44957))
+* guard draft saves during fetch ([#87](https://github.com/uniskela/stack-manager/issues/87)) ([796bf82](https://github.com/uniskela/stack-manager/commit/796bf8289d0453c862358e90de724a84edfaa7ca))
+* refresh Changes after push without reselecting drafts ([#88](https://github.com/uniskela/stack-manager/issues/88)) ([4a86472](https://github.com/uniskela/stack-manager/commit/4a8647255eb48f5b0f78cd0e6682d58813663769))
+
 ## [0.7.2](https://github.com/uniskela/stack-manager/compare/v0.7.1...v0.7.2) (2026-11-25)
 
 
