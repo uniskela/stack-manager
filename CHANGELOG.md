@@ -10,6 +10,13 @@ check for null before processing HTTP codes and distinguish local rejection from
 Accepted results retain numeric HTTP statuses. No released deployment provider is affected because
 #54 is the first implementation; this note documents compatibility for integrations based on the plan.
 
+## [0.10.0](https://github.com/uniskela/stack-manager/compare/v0.9.0...v0.10.0) (2026-11-26)
+
+
+### Features
+
+* improve WUD update discovery and pull request workflows ([#94](https://github.com/uniskela/stack-manager/issues/94)) ([554c5e6](https://github.com/uniskela/stack-manager/commit/554c5e6270137571b48c4846579a311b9d31be80))
+
 ## [0.9.0](https://github.com/uniskela/stack-manager/compare/v0.8.0...v0.9.0) (2026-11-26)
 
 
